@@ -1,8 +1,6 @@
 defmodule Charms.Defm.Expander do
   @moduledoc false
   require Logger
-  require Beaver.Env
-  alias Beaver.MLIR.Attribute
   use Beaver
   alias MLIR.Dialect.{Func, CF}
   require Func
