@@ -1,7 +1,6 @@
 defmodule ENIFMergeSort do
   @moduledoc false
   use Charms
-  require Beaver.Env
   alias Charms.{Pointer, Term}
 
   defm merge(arr :: Pointer.t(), l :: i32(), m :: i32(), r :: i32()) do
