@@ -67,7 +67,7 @@ defmodule ENIFTimSort do
         right = result_at(right, 0)
 
         struct_if(mid < right) do
-          call ENIFMergeSort, merge(arr, left, mid, right) :: []
+          call ENIFMergeSort.merge(arr, left, mid, right) :: []
         end
 
         Pointer.store(left + 2 * size, left_ptr)

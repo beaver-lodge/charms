@@ -631,41 +631,20 @@ defmodule Charms.Defm.Expander do
     {MLIR.Operation.results(op), state, env}
   end
 
-  defp expand_macro(
-         meta,
-         Charms.Defm,
-         :call,
-         [{:"::", type_meta, [call, types]}],
-         callback,
-         state,
-         env
-       ) do
-    expand_macro(
-      meta,
-      Charms.Defm,
-      :call,
-      [env.module, {:"::", type_meta, [call, types]}],
-      callback,
-      state,
-      env
-    )
-  end
+  defp expand_macro(_, Charms.Defm, :call, [{:"::", _, [call, types]}], _callback, state, env) do
+    {mod, name, args, types} =
+      case Macro.decompose_call(call) do
+        {alias, f, args} ->
+          {mod, _state, _env} = expand(alias, state, env)
+          {mod, f, args, types}
 
-  defp expand_macro(
-         _meta,
-         Charms.Defm,
-         :call,
-         [mod, {:"::", _, [call, types]}],
-         _callback,
-         state,
-         env
-       ) do
-    {mod, state, env} = expand(mod, state, env)
-    {name, args} = Macro.decompose_call(call)
+        {name, args} ->
+          {env.module, name, args, types}
+      end
+
     name = mangling(mod, name)
     {args, state, env} = expand(args, state, env)
-
-    # TODO: flatten should be unnecessary, refactor to support call Mod.fun(args) instead of call Mod, fun(args)
+    # TODO: flatten should be unnecessary
     args = args |> List.flatten()
     {types, state, env} = expand(types, state, env)
 
@@ -685,20 +664,12 @@ defmodule Charms.Defm.Expander do
     {MLIR.Operation.results(op), state, env}
   end
 
-  defp expand_macro(
-         meta,
-         Charms.Defm,
-         :call,
-         [call],
-         callback,
-         state,
-         env
-       ) do
+  defp expand_macro(meta, Charms.Defm, :call, [call], callback, state, env) do
     expand_macro(
       meta,
       Charms.Defm,
       :call,
-      [env.module, {:"::", meta, [call, []]}],
+      [{:"::", meta, [quote(do: unquote(env.module).unquote(call)), []]}],
       callback,
       state,
       env
