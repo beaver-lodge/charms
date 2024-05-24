@@ -119,7 +119,7 @@ defmodule Charms.Defm.Expander do
   ## __aliases__
 
   defp expand({:__aliases__, meta, [head | tail] = list}, state, env) do
-    case Macro.Env.expand_alias(env, meta, list, trace: false) do
+    case Macro.Env.expand_alias(env, meta, list, trace: true) do
       {:alias, alias} ->
         # A compiler may want to emit a :local_function trace in here.
         # Elixir also warns on easy to confuse aliases, such as True/False/Nil.
@@ -173,7 +173,7 @@ defmodule Charms.Defm.Expander do
 
       # An actual compiler would raise if the alias fails.
       _ ->
-        case Macro.Env.define_alias(env, meta, arg, [trace: false] ++ opts) do
+        case Macro.Env.define_alias(env, meta, arg, [trace: true] ++ opts) do
           {:ok, env} -> {arg, state, env}
           {:error, _} -> {arg, state, env}
         end
@@ -185,7 +185,7 @@ defmodule Charms.Defm.Expander do
     {opts, state, env} = expand_directive_opts(opts, state, env)
 
     # An actual compiler would raise if the module is not defined or if the require fails.
-    case Macro.Env.define_require(env, meta, arg, [trace: false] ++ opts) do
+    case Macro.Env.define_require(env, meta, arg, [trace: true] ++ opts) do
       {:ok, env} -> {arg, state, env}
       {:error, _} -> {arg, state, env}
     end
@@ -197,7 +197,7 @@ defmodule Charms.Defm.Expander do
 
     # An actual compiler would raise if the module is not defined or if the import fails.
     with true <- is_atom(arg) and Code.ensure_loaded?(arg),
-         {:ok, env} <- Macro.Env.define_import(env, meta, arg, [trace: false] ++ opts) do
+         {:ok, env} <- Macro.Env.define_import(env, meta, arg, [trace: true] ++ opts) do
       {arg, state, env}
     else
       _ -> {arg, state, env}
@@ -269,7 +269,7 @@ defmodule Charms.Defm.Expander do
 
     if is_atom(module) do
       case Macro.Env.expand_require(env, meta, module, fun, arity,
-             trace: false,
+             trace: true,
              check_deprecations: false
            ) do
         {:macro, module, callback} ->
@@ -713,7 +713,7 @@ defmodule Charms.Defm.Expander do
   defp alias_defmodule(meta, {:__aliases__, _, [h | t]}, _module, env) when is_atom(h) do
     module = Module.concat([env.module, h])
     alias = String.to_atom("Elixir." <> Atom.to_string(h))
-    {:ok, env} = Macro.Env.define_alias(env, meta, module, as: alias, trace: false)
+    {:ok, env} = Macro.Env.define_alias(env, meta, module, as: alias, trace: true)
 
     case t do
       [] -> {module, env}
