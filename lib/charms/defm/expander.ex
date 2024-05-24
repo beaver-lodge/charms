@@ -632,20 +632,17 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_, Charms.Defm, :call, [{:"::", _, [call, types]}], _callback, state, env) do
-    {mod, name, args, types} =
+    {{mod, state, env}, name, args, types} =
       case Macro.decompose_call(call) do
         {alias, f, args} ->
-          {mod, _state, _env} = expand(alias, state, env)
-          {mod, f, args, types}
+          {expand(alias, state, env), f, args, types}
 
         {name, args} ->
-          {env.module, name, args, types}
+          {{env.module, state, env}, name, args, types}
       end
 
     name = mangling(mod, name)
     {args, state, env} = expand(args, state, env)
-    # TODO: flatten should be unnecessary
-    args = args |> List.flatten()
     {types, state, env} = expand(types, state, env)
 
     op =
@@ -769,7 +766,7 @@ defmodule Charms.Defm.Expander do
             meta,
             Charms.Defm,
             :call,
-            [{:"::", meta, [quote(do: unquote(fun)(unquote(args))), []]}],
+            [{:"::", meta, [quote(do: unquote(fun)(unquote_splicing(args))), []]}],
             nil,
             state,
             env
