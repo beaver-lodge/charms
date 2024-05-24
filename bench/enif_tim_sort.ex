@@ -33,7 +33,7 @@ defmodule ENIFTimSort do
       Pointer.store(temp, Pointer.element_ptr(Term.t(), arr, j + 1))
     end
 
-    op func.return() :: []
+    func.return()
   end
 
   defm tim_sort(arr :: Pointer.t(), n :: i32()) do
@@ -76,7 +76,7 @@ defmodule ENIFTimSort do
       Pointer.store(size * 2, size_ptr)
     end
 
-    op func.return() :: []
+    func.return()
   end
 
   defm copy_terms(env :: Env.t(), movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
@@ -101,7 +101,7 @@ defmodule ENIFTimSort do
       Pointer.store(i + 1, i_ptr)
     end
 
-    op func.return() :: []
+    func.return()
   end
 
   defm sort(env, list, err) :: Term.t() do
@@ -112,12 +112,12 @@ defmodule ENIFTimSort do
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
-      call copy_terms(env, movable_list_ptr, arr) :: []
-      call tim_sort(arr, len) :: []
+      copy_terms(env, movable_list_ptr, arr)
+      tim_sort(arr, len)
       ret = enif_make_list_from_array(env, arr, len)
-      op func.return(ret) :: []
+      func.return(ret)
     else
-      op func.return(err) :: []
+      func.return(err)
     end
   end
 end
