@@ -173,7 +173,7 @@ defmodule POCTest do
         end
       end
       |> compile()
-      |> MLIR.dump!()
+      |> tap(fn ir -> assert to_string(ir) =~ "@Elixir.ReturnPassedArg" end)
       |> MLIR.Operation.verify!()
       |> tap(fn m ->
         {:ok, pid} = Charms.JIT.init(m, name: :return_this)
