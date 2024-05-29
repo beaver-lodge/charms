@@ -674,21 +674,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(meta, module, fun, args, callback, state, env) do
-    case {module, fun} do
-      mf when mf in [{Beaver, :block}, {Beaver, :mlir}] ->
-        expand_intrinsic_macro_callback(meta, module, fun, args, callback, state, env)
-
-      {Charms.Defm, _} ->
-        expand_intrinsic_macro_callback(meta, module, fun, args, callback, state, env)
-
-      _ ->
-        expand_macro_callback(meta, module, fun, args, callback, state, env)
-    end
-  end
-
-  defp expand_intrinsic_macro_callback(_meta, module, fun, args, _callback, _state, _env) do
-    raise ArgumentError, "TODO: #{inspect(module)}.#{fun}, #{inspect(args, pretty: true)}"
-    # callback.(meta, args) |> expand(state, env)
+    expand_macro_callback(meta, module, fun, args, callback, state, env)
   end
 
   defp expand_macro_callback(meta, _module, _fun, args, callback, state, env) do
