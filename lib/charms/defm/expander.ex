@@ -298,7 +298,8 @@ defmodule Charms.Defm.Expander do
       op = "#{dialect}.#{op}"
 
       MapSet.member?(state.mlir.available_ops, op) or
-        raise ArgumentError, "Unknown MLIR operation to create: #{op}"
+        raise ArgumentError,
+              "Unknown MLIR operation to create: #{op}, did you mean: #{did_you_mean_op(op)}"
 
       {args, state, env} = expand_list(args, state, env)
 
@@ -373,6 +374,15 @@ defmodule Charms.Defm.Expander do
 
   defp expand(ast, state, env) do
     {get_mlir_var(state, ast) || ast, state, env}
+  end
+
+  defp did_you_mean_op(op) do
+    MLIR.Dialect.Registry.ops(:all)
+    |> Stream.map(&{&1, String.jaro_distance(&1, op)})
+    |> Enum.sort(&(elem(&1, 1) >= elem(&2, 1)))
+    |> Enum.to_list()
+    |> List.first()
+    |> elem(0)
   end
 
   defp mangling(mod, func) do
@@ -674,21 +684,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(meta, module, fun, args, callback, state, env) do
-    case {module, fun} do
-      mf when mf in [{Beaver, :block}, {Beaver, :mlir}] ->
-        expand_intrinsic_macro_callback(meta, module, fun, args, callback, state, env)
-
-      {Charms.Defm, _} ->
-        expand_intrinsic_macro_callback(meta, module, fun, args, callback, state, env)
-
-      _ ->
-        expand_macro_callback(meta, module, fun, args, callback, state, env)
-    end
-  end
-
-  defp expand_intrinsic_macro_callback(_meta, module, fun, args, _callback, _state, _env) do
-    raise ArgumentError, "TODO: #{inspect(module)}.#{fun}, #{inspect(args, pretty: true)}"
-    # callback.(meta, args) |> expand(state, env)
+    expand_macro_callback(meta, module, fun, args, callback, state, env)
   end
 
   defp expand_macro_callback(meta, _module, _fun, args, callback, state, env) do
