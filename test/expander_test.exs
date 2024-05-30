@@ -202,11 +202,13 @@ defmodule POCTest do
                  defmodule ReturnPassedArg do
                    import Charms.Defm
                    alias Charms.Term
-                   def foo(a :: Term.t()) :: Term.t(), do: foo.bar(a)
+                   def foo(a :: Term.t()) :: Term.t(), do: cf.ar(a)
                  end
                end
                |> compile()
-             ) == %ArgumentError{message: "Unknown MLIR operation to create: foo.bar"}
+             ) == %ArgumentError{
+               message: "Unknown MLIR operation to create: cf.ar, did you mean: cf.br"
+             }
     end
   end
 end
