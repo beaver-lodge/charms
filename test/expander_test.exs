@@ -182,5 +182,31 @@ defmodule POCTest do
         :ok = Charms.JIT.destroy(pid)
       end)
     end
+
+    test "intrinsic not found" do
+      assert catch_error(
+               quote do
+                 defmodule ReturnPassedArg do
+                   import Charms.Defm
+                   alias Charms.Term
+                   def foo(a :: Term.t()) :: Term.t(), do: Foo.bar(a)
+                 end
+               end
+               |> compile()
+             ) == %ArgumentError{message: "Unknown intrinsic: Foo.bar"}
+    end
+
+    test "op not found" do
+      assert catch_error(
+               quote do
+                 defmodule ReturnPassedArg do
+                   import Charms.Defm
+                   alias Charms.Term
+                   def foo(a :: Term.t()) :: Term.t(), do: foo.bar(a)
+                 end
+               end
+               |> compile()
+             ) == %ArgumentError{message: "Unknown MLIR operation to create: foo.bar"}
+    end
   end
 end
