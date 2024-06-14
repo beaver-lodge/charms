@@ -119,7 +119,7 @@ defmodule Charms.Defm.Expander do
   ## __aliases__
 
   defp expand({:__aliases__, meta, [head | tail] = list}, state, env) do
-    case Macro.Env.expand_alias(env, meta, list, trace: false) do
+    case Macro.Env.expand_alias(env, meta, list, trace: true) do
       {:alias, alias} ->
         # A compiler may want to emit a :local_function trace in here.
         # Elixir also warns on easy to confuse aliases, such as True/False/Nil.
@@ -173,7 +173,7 @@ defmodule Charms.Defm.Expander do
 
       # An actual compiler would raise if the alias fails.
       _ ->
-        case Macro.Env.define_alias(env, meta, arg, [trace: false] ++ opts) do
+        case Macro.Env.define_alias(env, meta, arg, [trace: true] ++ opts) do
           {:ok, env} -> {arg, state, env}
           {:error, _} -> {arg, state, env}
         end
@@ -185,7 +185,7 @@ defmodule Charms.Defm.Expander do
     {opts, state, env} = expand_directive_opts(opts, state, env)
 
     # An actual compiler would raise if the module is not defined or if the require fails.
-    case Macro.Env.define_require(env, meta, arg, [trace: false] ++ opts) do
+    case Macro.Env.define_require(env, meta, arg, [trace: true] ++ opts) do
       {:ok, env} -> {arg, state, env}
       {:error, _} -> {arg, state, env}
     end
@@ -197,7 +197,7 @@ defmodule Charms.Defm.Expander do
 
     # An actual compiler would raise if the module is not defined or if the import fails.
     with true <- is_atom(arg) and Code.ensure_loaded?(arg),
-         {:ok, env} <- Macro.Env.define_import(env, meta, arg, [trace: false] ++ opts) do
+         {:ok, env} <- Macro.Env.define_import(env, meta, arg, [trace: true] ++ opts) do
       {arg, state, env}
     else
       _ -> {arg, state, env}
@@ -269,7 +269,7 @@ defmodule Charms.Defm.Expander do
 
     if is_atom(module) do
       case Macro.Env.expand_require(env, meta, module, fun, arity,
-             trace: false,
+             trace: true,
              check_deprecations: false
            ) do
         {:macro, module, callback} ->
@@ -298,7 +298,8 @@ defmodule Charms.Defm.Expander do
       op = "#{dialect}.#{op}"
 
       MapSet.member?(state.mlir.available_ops, op) or
-        raise ArgumentError, "Unknown MLIR operation to create: #{op}"
+        raise ArgumentError,
+              "Unknown MLIR operation to create: #{op}, did you mean: #{did_you_mean_op(op)}"
 
       {args, state, env} = expand_list(args, state, env)
 
@@ -373,6 +374,15 @@ defmodule Charms.Defm.Expander do
 
   defp expand(ast, state, env) do
     {get_mlir_var(state, ast) || ast, state, env}
+  end
+
+  defp did_you_mean_op(op) do
+    MLIR.Dialect.Registry.ops(:all)
+    |> Stream.map(&{&1, String.jaro_distance(&1, op)})
+    |> Enum.sort(&(elem(&1, 1) >= elem(&2, 1)))
+    |> Enum.to_list()
+    |> List.first()
+    |> elem(0)
   end
 
   defp mangling(mod, func) do
@@ -631,42 +641,18 @@ defmodule Charms.Defm.Expander do
     {MLIR.Operation.results(op), state, env}
   end
 
-  defp expand_macro(
-         meta,
-         Charms.Defm,
-         :call,
-         [{:"::", type_meta, [call, types]}],
-         callback,
-         state,
-         env
-       ) do
-    expand_macro(
-      meta,
-      Charms.Defm,
-      :call,
-      [env.module, {:"::", type_meta, [call, types]}],
-      callback,
-      state,
-      env
-    )
-  end
+  defp expand_macro(_, Charms.Defm, :call, [{:"::", _, [call, types]}], _callback, state, env) do
+    {{mod, state, env}, name, args, types} =
+      case Macro.decompose_call(call) do
+        {alias, f, args} ->
+          {expand(alias, state, env), f, args, types}
 
-  defp expand_macro(
-         _meta,
-         Charms.Defm,
-         :call,
-         [mod, {:"::", _, [call, types]}],
-         _callback,
-         state,
-         env
-       ) do
-    {mod, state, env} = expand(mod, state, env)
-    {name, args} = Macro.decompose_call(call)
+        {name, args} ->
+          {{env.module, state, env}, name, args, types}
+      end
+
     name = mangling(mod, name)
     {args, state, env} = expand(args, state, env)
-
-    # TODO: flatten should be unnecessary, refactor to support call Mod.fun(args) instead of call Mod, fun(args)
-    args = args |> List.flatten()
     {types, state, env} = expand(types, state, env)
 
     op =
@@ -685,20 +671,12 @@ defmodule Charms.Defm.Expander do
     {MLIR.Operation.results(op), state, env}
   end
 
-  defp expand_macro(
-         meta,
-         Charms.Defm,
-         :call,
-         [call],
-         callback,
-         state,
-         env
-       ) do
+  defp expand_macro(meta, Charms.Defm, :call, [call], callback, state, env) do
     expand_macro(
       meta,
       Charms.Defm,
       :call,
-      [env.module, {:"::", meta, [call, []]}],
+      [{:"::", meta, [quote(do: unquote(env.module).unquote(call)), []]}],
       callback,
       state,
       env
@@ -706,21 +684,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(meta, module, fun, args, callback, state, env) do
-    case {module, fun} do
-      mf when mf in [{Beaver, :block}, {Beaver, :mlir}] ->
-        expand_intrinsic_macro_callback(meta, module, fun, args, callback, state, env)
-
-      {Charms.Defm, _} ->
-        expand_intrinsic_macro_callback(meta, module, fun, args, callback, state, env)
-
-      _ ->
-        expand_macro_callback(meta, module, fun, args, callback, state, env)
-    end
-  end
-
-  defp expand_intrinsic_macro_callback(_meta, module, fun, args, _callback, _state, _env) do
-    raise ArgumentError, "TODO: #{inspect(module)}.#{fun}, #{inspect(args, pretty: true)}"
-    # callback.(meta, args) |> expand(state, env)
+    expand_macro_callback(meta, module, fun, args, callback, state, env)
   end
 
   defp expand_macro_callback(meta, _module, _fun, args, callback, state, env) do
@@ -742,7 +706,7 @@ defmodule Charms.Defm.Expander do
   defp alias_defmodule(meta, {:__aliases__, _, [h | t]}, _module, env) when is_atom(h) do
     module = Module.concat([env.module, h])
     alias = String.to_atom("Elixir." <> Atom.to_string(h))
-    {:ok, env} = Macro.Env.define_alias(env, meta, module, as: alias, trace: false)
+    {:ok, env} = Macro.Env.define_alias(env, meta, module, as: alias, trace: true)
 
     case t do
       [] -> {module, env}
@@ -798,7 +762,7 @@ defmodule Charms.Defm.Expander do
             meta,
             Charms.Defm,
             :call,
-            [{:"::", meta, [quote(do: unquote(fun)(unquote(args))), []]}],
+            [{:"::", meta, [quote(do: unquote(fun)(unquote_splicing(args))), []]}],
             nil,
             state,
             env

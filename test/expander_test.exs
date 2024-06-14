@@ -173,7 +173,7 @@ defmodule POCTest do
         end
       end
       |> compile()
-      |> MLIR.dump!()
+      |> tap(fn ir -> assert to_string(ir) =~ "@Elixir.ReturnPassedArg" end)
       |> MLIR.Operation.verify!()
       |> tap(fn m ->
         {:ok, pid} = Charms.JIT.init(m, name: :return_this)
@@ -181,6 +181,34 @@ defmodule POCTest do
         assert Charms.JIT.invoke(jit, {ReturnPassedArg, :bar, [:identical]}) == :identical
         :ok = Charms.JIT.destroy(pid)
       end)
+    end
+
+    test "intrinsic not found" do
+      assert catch_error(
+               quote do
+                 defmodule ReturnPassedArg do
+                   import Charms.Defm
+                   alias Charms.Term
+                   def foo(a :: Term.t()) :: Term.t(), do: Foo.bar(a)
+                 end
+               end
+               |> compile()
+             ) == %ArgumentError{message: "Unknown intrinsic: Foo.bar"}
+    end
+
+    test "op not found" do
+      assert catch_error(
+               quote do
+                 defmodule ReturnPassedArg do
+                   import Charms.Defm
+                   alias Charms.Term
+                   def foo(a :: Term.t()) :: Term.t(), do: cf.ar(a)
+                 end
+               end
+               |> compile()
+             ) == %ArgumentError{
+               message: "Unknown MLIR operation to create: cf.ar, did you mean: cf.br"
+             }
     end
   end
 end
