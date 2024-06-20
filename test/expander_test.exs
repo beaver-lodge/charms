@@ -38,7 +38,7 @@ defmodule POCTest do
            ]
 
     assert locals("import Charms.Defm; foo(#{one}, call(bar(#{two})::i32()))") == [
-             {:bar, 1},
+             bar: 1,
              foo: 2,
              i32: 0,
              i32: 0,
