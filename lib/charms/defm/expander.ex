@@ -62,6 +62,40 @@ defmodule Charms.Defm.Expander do
     )
   end
 
+  defp create_call(mod, name, args, types, state, env) do
+    op =
+      mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+        %Beaver.SSA{
+          op: "func.call",
+          arguments: args ++ [callee: Attribute.flat_symbol_ref(mangling(mod, name))],
+          ctx: Beaver.Env.context(),
+          block: Beaver.Env.block(),
+          loc: Beaver.MLIR.Location.from_env(env)
+        }
+        |> Beaver.SSA.put_results(types)
+        |> MLIR.Operation.create()
+      end
+
+    {MLIR.Operation.results(op), state, env}
+  end
+
+  defp expand_call_of_types(call, types, state, env) do
+    {mod, name, args, state, env} =
+      case Macro.decompose_call(call) do
+        {alias, f, args} ->
+          {mod, state, env} = expand(alias, state, env)
+          {mod, f, args, state, env}
+
+        {name, args} ->
+          state = update_in(state.locals, &[{name, length(args)} | &1])
+          {env.module, name, args, state, env}
+      end
+
+    {args, state, env} = expand(args, state, env)
+    {types, state, env} = expand(types, state, env)
+    create_call(mod, name, args, types, state, env)
+  end
+
   # The goal of this function is to traverse all of Elixir special
   # forms. The list is actually relatively small and a good reference
   # is the Elixir type checker: https://github.com/elixir-lang/elixir/blob/494a018abbc88901747c32032ec9e2c408f40608/lib/elixir/lib/module/types/expr.ex
@@ -642,45 +676,11 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_, Charms.Defm, :call, [{:"::", _, [call, types]}], _callback, state, env) do
-    {{mod, state, env}, name, args, types} =
-      case Macro.decompose_call(call) do
-        {alias, f, args} ->
-          {expand(alias, state, env), f, args, types}
-
-        {name, args} ->
-          {{env.module, state, env}, name, args, types}
-      end
-
-    name = mangling(mod, name)
-    {args, state, env} = expand(args, state, env)
-    {types, state, env} = expand(types, state, env)
-
-    op =
-      mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        %Beaver.SSA{
-          op: "func.call",
-          arguments: args ++ [callee: Attribute.flat_symbol_ref("#{name}")],
-          ctx: Beaver.Env.context(),
-          block: Beaver.Env.block(),
-          loc: Beaver.MLIR.Location.from_env(env)
-        }
-        |> Beaver.SSA.put_results(types)
-        |> MLIR.Operation.create()
-      end
-
-    {MLIR.Operation.results(op), state, env}
+    expand_call_of_types(call, types, state, env)
   end
 
-  defp expand_macro(meta, Charms.Defm, :call, [call], callback, state, env) do
-    expand_macro(
-      meta,
-      Charms.Defm,
-      :call,
-      [{:"::", meta, [quote(do: unquote(env.module).unquote(call)), []]}],
-      callback,
-      state,
-      env
-    )
+  defp expand_macro(_meta, Charms.Defm, :call, [call], _callback, state, env) do
+    expand_call_of_types(call, [], state, env)
   end
 
   defp expand_macro(meta, module, fun, args, callback, state, env) do
@@ -743,7 +743,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  defp expand_local(meta, fun, args, state, env) do
+  defp expand_local(_meta, fun, args, state, env) do
     # A compiler may want to emit a :local_function trace in here.
     state = update_in(state.locals, &[{fun, length(args)} | &1])
     {args, state, env} = expand_list(args, state, env)
@@ -758,15 +758,7 @@ defmodule Charms.Defm.Expander do
                block: state.mlir.blk
              ) do
         :not_handled ->
-          expand_macro(
-            meta,
-            Charms.Defm,
-            :call,
-            [{:"::", meta, [quote(do: unquote(fun)(unquote_splicing(args))), []]}],
-            nil,
-            state,
-            env
-          )
+          create_call(env.module, fun, args, [], state, env)
 
         _ ->
           {i, state, env}
