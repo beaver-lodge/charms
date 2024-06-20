@@ -67,7 +67,7 @@ defmodule Charms.Defm.Expander do
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
         %Beaver.SSA{
           op: "func.call",
-          arguments: args ++ [callee: Attribute.flat_symbol_ref("#{mangling(mod, name)}")],
+          arguments: args ++ [callee: Attribute.flat_symbol_ref(mangling(mod, name))],
           ctx: Beaver.Env.context(),
           block: Beaver.Env.block(),
           loc: Beaver.MLIR.Location.from_env(env)
