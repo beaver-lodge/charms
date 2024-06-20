@@ -3,7 +3,7 @@
 
 Elixir compiler to compile a subset of Elixir to native targets
 
-- [x] `defm` to define native functions, checkout the [examples](/bench/)
+- [x] `defm` to define native functions, and here are the [examples](/bench/)
 
 - [ ] SIMD support
 
