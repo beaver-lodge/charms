@@ -130,7 +130,8 @@ defmodule Charms.Defm do
             blk: Beaver.Env.block(),
             available_ops: available_ops,
             vars: Map.new(),
-            region: nil
+            region: nil,
+            enif_env: nil
           }
 
           for {env, d} <- definitions do
@@ -153,8 +154,9 @@ defmodule Charms.Defm do
         "func.func",
         Charms.Defm.Pass.CreateAbsentFunc
       )
+      |> Charms.Flag.print_ir_pass()
       |> canonicalize
-      |> MLIR.Pass.Composer.run!(print: System.get_env("DEFM_PRINT_IR") == "1")
+      |> MLIR.Pass.Composer.run!(print: Charms.Flag.step_print?())
       |> MLIR.to_string(bytecode: true)
 
     MLIR.Context.destroy(ctx)

@@ -1,6 +1,8 @@
 defmodule Charms.Defm.Expander do
   @moduledoc false
   require Logger
+  require Beaver.Env
+  alias Beaver.MLIR.Dialect.SCF
   use Beaver
   alias MLIR.Dialect.{Func, CF}
   require Func
@@ -41,7 +43,8 @@ defmodule Charms.Defm.Expander do
       blk: MLIR.Block.create(),
       available_ops: available_ops,
       vars: Map.new(),
-      region: nil
+      region: nil,
+      enif_env: nil
     }
 
     expand(
@@ -94,6 +97,92 @@ defmodule Charms.Defm.Expander do
     {args, state, env} = expand(args, state, env)
     {types, state, env} = expand(types, state, env)
     create_call(mod, name, args, types, state, env)
+  end
+
+  defp has_implemented_inference(op, ctx) when is_bitstring(op) do
+    id = MLIR.CAPI.mlirInferTypeOpInterfaceTypeID()
+
+    op
+    |> MLIR.StringRef.create()
+    |> MLIR.CAPI.mlirOperationImplementsInterfaceStatic(ctx, id)
+    |> Beaver.Native.to_term()
+  end
+
+  defp expand_std(Enum, :reduce, args, state, env) do
+    while =
+      mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+        [l, init, f] = args
+        {l, state, env} = expand(l, state, env)
+        {init, state, env} = expand(init, state, env)
+        result_t = MLIR.Value.type(init)
+        state = put_mlir_var(state, :charms_internal_list, l)
+
+        {_, state, env} =
+          quote do
+            charms_internal_tail_ptr = Charms.Pointer.allocate(Term.t())
+            Pointer.store(charms_internal_list, charms_internal_tail_ptr)
+            charms_internal_head_ptr = Charms.Pointer.allocate(Term.t())
+          end
+          |> expand(state, env)
+
+        # we compile the Enum.reduce/3 to a scf.while in MLIR
+        SCF.while [init] do
+          region do
+            block _(acc >>> result_t) do
+              state = put_in(state.mlir.blk, Beaver.Env.block())
+
+              # getting the BEAM env, assuming it is a regular defm with env as the first argument
+              state =
+                if e = state.mlir.enif_env do
+                  put_mlir_var(state, :charms_internal_env, e)
+                else
+                  raise ArgumentError, "No enif_env found"
+                end
+
+              # the condition of the while loop, consuming the list with enif_get_list_cell
+              {condition, _state, _env} =
+                quote do
+                  enif_get_list_cell(
+                    charms_internal_env,
+                    Pointer.load(Term.t(), charms_internal_tail_ptr),
+                    charms_internal_head_ptr,
+                    charms_internal_tail_ptr
+                  ) > 0
+                end
+                |> expand(state, env)
+
+              SCF.condition(condition, acc) >>> []
+            end
+          end
+
+          # the body of the while loop, compiled from the reducer which is an anonymous function
+          region do
+            block _(acc >>> result_t) do
+              state = put_in(state.mlir.blk, Beaver.Env.block())
+              {:fn, _, [{:->, _, [[arg_element, arg_acc], body]}]} = f
+
+              # inject head and acc before expanding the body
+              state = put_mlir_var(state, arg_acc, acc)
+
+              {head_val, state, env} =
+                quote(do: Charms.Pointer.load(Charms.Term.t(), charms_internal_head_ptr))
+                |> expand(state, env)
+
+              state = put_mlir_var(state, arg_element, head_val)
+
+              # expand the body
+              {body, _state, _env} = expand(body, state, env)
+              SCF.yield(List.last(body)) >>> []
+            end
+          end
+        end >>> result_t
+      end
+
+    {while, state, env}
+  end
+
+  defp expand_std(module, fun, _args, _state, _env) do
+    raise ArgumentError, "Unknown standard function: #{inspect(module)}.#{fun}"
   end
 
   # The goal of this function is to traverse all of Elixir special
@@ -323,6 +412,9 @@ defmodule Charms.Defm.Expander do
               {args, state, env} = args |> expand(state, env)
               {apply(Beaver.MLIR.Attribute, fun, args), state, env}
 
+            [module, fun] == [Enum, :reduce] ->
+              expand_std(Enum, :reduce, args, state, env)
+
             true ->
               raise ArgumentError, "Unknown intrinsic: #{inspect(module)}.#{fun}"
           end
@@ -335,7 +427,7 @@ defmodule Charms.Defm.Expander do
         raise ArgumentError,
               "Unknown MLIR operation to create: #{op}, did you mean: #{did_you_mean_op(op)}"
 
-      {args, state, env} = expand_list(args, state, env)
+      {args, state, env} = expand(args, state, env)
 
       op =
         %Beaver.SSA{
@@ -343,11 +435,28 @@ defmodule Charms.Defm.Expander do
           arguments: args,
           ctx: state.mlir.ctx,
           block: state.mlir.blk,
-          loc: Beaver.MLIR.Location.from_env(env)
+          loc: Beaver.MLIR.Location.from_env(env),
+          results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
         }
         |> MLIR.Operation.create()
 
-      {{MLIR.Operation.results(op), meta, args}, state, env}
+      {MLIR.Operation.results(op), state, env}
+    end
+  end
+
+  # Parameterized function call
+  defp expand(
+         {{:., _parameterized_meta, [parameterized]}, _meta, args},
+         state,
+         env
+       ) do
+    {args, state, env} = expand(args, state, env)
+    {parameterized, state, env} = expand(parameterized, state, env)
+
+    if is_function(parameterized) do
+      {parameterized.(args), state, env}
+    else
+      raise ArgumentError, "Expected a function, got: #{inspect(parameterized)}"
     end
   end
 
@@ -482,6 +591,7 @@ defmodule Charms.Defm.Expander do
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
         {ret_types, state, env} = ret_types |> expand(state, env)
         {arg_types, state, env} = arg_types |> expand(state, env)
+
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
         Func.func _(sym_name: "\"#{name}\"", function_type: ft) do
@@ -498,6 +608,17 @@ defmodule Charms.Defm.Expander do
               state =
                 Enum.zip(args, arg_values)
                 |> Enum.reduce(state, fn {k, v}, state -> put_mlir_var(state, k, v) end)
+
+              state =
+                with [head_arg_type | _] <- arg_types,
+                     [head_arg | _] <- args,
+                     {:env, _, nil} <- head_arg,
+                     MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)) do
+                  a = MLIR.Block.get_arg!(Beaver.Env.block(), 0)
+                  put_in(state.mlir.enif_env, a)
+                else
+                  _ -> state
+                end
 
               state = put_in(state.mlir.blk, Beaver.Env.block())
               expand(body, state, env)
@@ -652,7 +773,16 @@ defmodule Charms.Defm.Expander do
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
     op = "#{dialect}.#{op}"
     {args, state, env} = expand(args, state, env)
-    {[return_types], state, env} = expand(return_types, state, env)
+    {return_types, state, env} = expand(return_types, state, env)
+
+    return_types =
+      case return_types do
+        [] ->
+          [:infer]
+
+        _ ->
+          List.flatten(return_types)
+      end
 
     op =
       %Beaver.SSA{
@@ -815,11 +945,15 @@ defmodule Charms.Defm.Expander do
     {ast, state, env}
   end
 
-  defp put_mlir_var(state, {name, _meta, _ctx} = _ast, val) do
+  defp put_mlir_var(state, name, val) when is_atom(name) do
     update_in(state.mlir.vars, &Map.put(&1, name, val))
   end
 
-  defp get_mlir_var(state, {name, _meta, _ctx} = _ast) do
+  defp put_mlir_var(state, {name, _meta, _ctx}, val) do
+    put_mlir_var(state, name, val)
+  end
+
+  defp get_mlir_var(state, {name, _meta, _ctx}) do
     Map.get(state.mlir.vars, name)
   end
 
