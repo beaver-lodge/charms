@@ -13,9 +13,11 @@ defmodule Charms.JIT do
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
     |> convert_func_to_llvm()
+    |> MLIR.Pass.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> MLIR.Pass.Composer.append("finalize-memref-to-llvm")
     |> reconcile_unrealized_casts
-    |> MLIR.Pass.Composer.run!(print: System.get_env("DEFM_PRINT_IR") == "1")
+    |> Charms.Debug.print_ir_pass()
+    |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
     |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true)
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
   end
