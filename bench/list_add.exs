@@ -7,7 +7,6 @@ Benchee.run(
       Enum.zip_reduce(a, b, [], fn x, y, acc -> [x + y | acc] end) |> Enum.reverse()
     end,
     "AddTwoIntVec.add" => fn {a, b} -> AddTwoIntVec.add(a, b, :err_msg) end,
-    "AddTwoIntVec.dummy_load" => fn {a, b} -> AddTwoIntVec.dummy_load(a, b, :err_msg) end,
     "AddTwoIntVec.dummy_load_no_make" => fn {a, b} -> AddTwoIntVec.dummy_load(a, b, :err_msg) end,
     "AddTwoIntVec.dummy_return" => fn {a, b} -> AddTwoIntVec.dummy_return(a, b, :err_msg) end
   },

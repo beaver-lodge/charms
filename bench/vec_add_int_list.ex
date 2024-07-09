@@ -41,28 +41,6 @@ defmodule AddTwoIntVec do
     func.return(ret)
   end
 
-  defm dummy_load(env, a, b, error) :: Term.t() do
-    v1 = call load_list(env, a) :: SIMD.t(i32(), 8)
-    v2 = call load_list(env, b) :: SIMD.t(i32(), 8)
-    v = v2
-    start = arith.constant(value: Attribute.integer(i32(), 0))
-
-    ret =
-      enif_make_list8(
-        env,
-        enif_make_int(env, vector.extractelement(v, start)),
-        enif_make_int(env, vector.extractelement(v, start + 1)),
-        enif_make_int(env, vector.extractelement(v, start + 2)),
-        enif_make_int(env, vector.extractelement(v, start + 3)),
-        enif_make_int(env, vector.extractelement(v, start + 4)),
-        enif_make_int(env, vector.extractelement(v, start + 5)),
-        enif_make_int(env, vector.extractelement(v, start + 6)),
-        enif_make_int(env, vector.extractelement(v, start + 7))
-      )
-
-    func.return(ret)
-  end
-
   defm dummy_load_no_make(env, a, b, error) :: Term.t() do
     v1 = call load_list(env, a) :: SIMD.t(i32(), 8)
     v2 = call load_list(env, b) :: SIMD.t(i32(), 8)
