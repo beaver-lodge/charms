@@ -22,9 +22,4 @@ defmodule Charms.SIMD do
   def handle_intrinsic(:t, [type, width], _opts) do
     Type.vector([width], type)
   end
-
-  def handle_intrinsic(:shift_right, [_offset], opts) do
-    mlir ctx: opts[:ctx], block: opts[:block] do
-    end
-  end
 end
