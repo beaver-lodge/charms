@@ -1,10 +1,7 @@
 defmodule Charms.Defm.Expander do
   @moduledoc false
-  require Logger
-  require Beaver.Env
-  alias Beaver.MLIR.Dialect.SCF
   use Beaver
-  alias MLIR.Dialect.{Func, CF}
+  alias MLIR.Dialect.{Func, CF, SCF}
   require Func
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
