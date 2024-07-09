@@ -154,9 +154,9 @@ defmodule Charms.Defm do
         "func.func",
         Charms.Defm.Pass.CreateAbsentFunc
       )
-      |> Charms.Flag.print_ir_pass()
+      |> Charms.Debug.print_ir_pass()
       |> canonicalize
-      |> MLIR.Pass.Composer.run!(print: Charms.Flag.step_print?())
+      |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
       |> MLIR.to_string(bytecode: true)
 
     MLIR.Context.destroy(ctx)

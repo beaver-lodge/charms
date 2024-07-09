@@ -1,4 +1,5 @@
-defmodule Charms.Flag do
+defmodule Charms.Debug do
+  @moduledoc false
   alias Beaver.MLIR
 
   def print_ir_pass(op) do

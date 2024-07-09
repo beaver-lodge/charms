@@ -16,8 +16,8 @@ defmodule Charms.JIT do
     |> MLIR.Pass.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> MLIR.Pass.Composer.append("finalize-memref-to-llvm")
     |> reconcile_unrealized_casts
-    |> Charms.Flag.print_ir_pass()
-    |> MLIR.Pass.Composer.run!(print: Charms.Flag.step_print?())
+    |> Charms.Debug.print_ir_pass()
+    |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
     |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true)
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
   end
