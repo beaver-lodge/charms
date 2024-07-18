@@ -1,6 +1,10 @@
 defmodule Charms.Defm do
   @moduledoc """
   Charms.Defm provides a macro for defining functions that can be JIT compiled
+
+  ## Extending the `defm`
+  - use Beaver to define intrinsics which can be called in the function body of a `defm`
+  - use `defm` to define functions that can be JIT-compiled
   """
   use Beaver
   alias MLIR.Dialect.Func
