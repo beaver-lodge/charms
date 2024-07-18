@@ -36,7 +36,7 @@ defmodule Charms.MixProject do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:beaver, "~> 0.3.6"},
+      {:beaver, "~> 0.3.7"},
       {:benchee, "~> 1.0", only: :dev}
     ]
   end

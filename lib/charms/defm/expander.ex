@@ -543,7 +543,7 @@ defmodule Charms.Defm.Expander do
       put_in(
         state.mlir.mod,
         mlir ctx: state.mlir.ctx do
-          module sym_name: Attribute.symbol_name(expanded) do
+          module sym_name: Attribute.string(expanded) do
           end
         end
       )

@@ -1,6 +1,10 @@
 defmodule Charms.Defm do
   @moduledoc """
   Charms.Defm provides a macro for defining functions that can be JIT compiled
+
+  ## Extending the `defm`
+  - use `beaver`'s DSL to define intrinsics which can be called in the function body of a `defm`
+  - use `defm` to define functions that can be JIT-compiled
   """
   use Beaver
   alias MLIR.Dialect.Func
@@ -48,6 +52,12 @@ defmodule Charms.Defm do
 
   @doc """
   define a function that can be JIT compiled
+
+  ## Differences from `Beaver.>>>/2` op expressions
+  - In `Beaver.>>>/2`, MLIR code are expected to mixed with regular Elixir code. While in `defm/2`, there is only Elixir code (a subset of Elixir, to be more precise).
+  - In `defm/2`, the extension of the compiler happens at the function level (define your intrinsics or `defm/2`s), while in `Beaver.>>>/2`, the extension happens at the op level (define your op expression).
+  - In `Beaver.>>>/2` the management of MLIR context and other resources are done by the user, while in `defm/2`, the management of resources are done by the compiler.
+  - In `defm/2`, there is expected to be extra verifications built-in to the compiler (both syntax and types), while in `Beaver.>>>/2`, there is none.
   """
   defmacro defm(call, body \\ []) do
     {call, ret_types} = decompose_call_and_returns(call)
