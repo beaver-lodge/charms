@@ -3,7 +3,7 @@ defmodule Charms.Defm do
   Charms.Defm provides a macro for defining functions that can be JIT compiled
 
   ## Extending the `defm`
-  - use `Beaver` to define intrinsics which can be called in the function body of a `defm`
+  - use `beaver`'s DSL to define intrinsics which can be called in the function body of a `defm`
   - use `defm` to define functions that can be JIT-compiled
   """
   use Beaver
