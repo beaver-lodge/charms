@@ -65,6 +65,10 @@ defmodule Charms.JIT do
 
   def init(module, opts \\ [])
 
+  def init({:module, module, binary, _}, opts) when is_atom(module) and is_binary(binary) do
+    init(module, opts)
+  end
+
   def init(module, opts) when is_atom(module) do
     name = opts[:name] || module
     opts = Keyword.put_new(opts, :name, name)
