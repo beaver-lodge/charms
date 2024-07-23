@@ -6,6 +6,7 @@ defmodule Charms.Defm do
   - use `beaver`'s DSL to define intrinsics which can be called in the function body of a `defm`
   - use `defm` to define functions that can be JIT-compiled
   """
+  require Beaver.Env
   use Beaver
   alias MLIR.Dialect.Func
   require Func
@@ -130,47 +131,36 @@ defmodule Charms.Defm do
   def compile_definitions(definitions) do
     import MLIR.Transforms
     ctx = MLIR.Context.create()
-    available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
+    m = MLIR.Module.create(ctx, "")
 
-    m =
-      mlir ctx: ctx do
-        module do
-          mlir = %{
-            ctx: ctx,
-            blk: Beaver.Env.block(),
-            available_ops: available_ops,
-            vars: Map.new(),
-            region: nil,
-            enif_env: nil
-          }
+    mlir ctx: ctx, block: MLIR.Module.body(m) do
+      mlir = %Charms.Defm.Expander{
+        ctx: ctx,
+        blk: Beaver.Env.block(),
+        available_ops: MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx)),
+        vars: Map.new(),
+        region: nil,
+        enif_env: nil,
+        mod: m
+      }
 
-          for {env, d} <- definitions do
-            {call, ret_types, body} = d
+      for {env, d} <- definitions do
+        {call, ret_types, body} = d
 
-            ast =
-              quote do
-                def(unquote(call) :: unquote(ret_types), unquote(body))
-              end
-
-            Charms.Defm.Expander.expand_with_mlir(
-              ast,
-              mlir,
-              env
-            )
-          end
+        quote do
+          def(unquote(call) :: unquote(ret_types), unquote(body))
         end
+        |> Charms.Defm.Expander.expand_with(env, mlir)
       end
-      |> MLIR.Pass.Composer.nested(
-        "func.func",
-        Charms.Defm.Pass.CreateAbsentFunc
-      )
-      |> Charms.Debug.print_ir_pass()
-      |> canonicalize
-      |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
-      |> MLIR.to_string(bytecode: true)
+    end
 
-    MLIR.Context.destroy(ctx)
     m
+    |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
+    |> Charms.Debug.print_ir_pass()
+    |> canonicalize
+    |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
+    |> MLIR.to_string(bytecode: true)
+    |> tap(fn _ -> MLIR.Context.destroy(ctx) end)
   end
 
   @doc false
