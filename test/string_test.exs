@@ -9,7 +9,6 @@ defmodule StringTest do
       defm get(env) :: Term.t() do
         str = "this is a string"
         str = "this is a string"
-        size = arith.constant(value: Attribute.integer(i32(), 4))
         term_ptr = Pointer.allocate(Term.t())
         d_ptr = enif_make_new_binary(env, String.length(str), term_ptr)
         m = ptr_to_memref(d_ptr)
