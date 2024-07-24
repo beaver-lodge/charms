@@ -4,8 +4,7 @@ defmodule Charms.JIT do
   alias Beaver.MLIR
 
   defp jit_of_mod(m) do
-    import Beaver.MLIR.Conversion
-    import Beaver.MLIR.Transforms
+    import Beaver.MLIR.{Conversion, Transforms}
 
     m
     |> MLIR.Operation.verify!(debug: true)
