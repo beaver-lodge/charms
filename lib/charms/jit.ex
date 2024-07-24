@@ -4,11 +4,12 @@ defmodule Charms.JIT do
   alias Beaver.MLIR
 
   defp jit_of_mod(m) do
-    import Beaver.MLIR.Conversion
+    import Beaver.MLIR.{Conversion, Transforms}
 
     m
     |> MLIR.Operation.verify!(debug: true)
     |> MLIR.Pass.Composer.nested("func.func", "llvm-request-c-wrappers")
+    |> MLIR.Pass.Composer.nested("func.func", loop_invariant_code_motion())
     |> convert_scf_to_cf
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
