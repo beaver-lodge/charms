@@ -1,6 +1,11 @@
 Charms.JIT.init(ENIFQuickSort)
 Charms.JIT.init([ENIFTimSort, ENIFMergeSort])
 
+arr = Enum.to_list(1..10000) |> Enum.shuffle()
+ENIFQuickSort.sort(arr, :arg_err)
+ENIFMergeSort.sort(arr, :arg_err)
+ENIFTimSort.sort(arr, :arg_err)
+
 Benchee.run(
   %{
     "Enum.sort" => &Enum.sort/1,
