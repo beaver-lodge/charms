@@ -8,8 +8,7 @@ defmodule Charms.Prelude do
     @enif_functions ++ [:result_at] ++ @binary_ops
   end
 
-  @doc false
-  def constant_of_same_type(i, v, opts) do
+  defp constant_of_same_type(i, v, opts) do
     mlir ctx: opts[:ctx], block: opts[:block] do
       t = MLIR.CAPI.mlirValueGetType(v)
       Arith.constant(value: Attribute.integer(t, i)) >>> t
