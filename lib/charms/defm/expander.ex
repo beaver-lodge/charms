@@ -570,6 +570,7 @@ defmodule Charms.Defm.Expander do
     Module.concat(mod, func)
   end
 
+  # Expands a nil clause body in an if statement, yielding no value.
   defp expand_if_clause_body(nil, state, _env) do
     mlir ctx: state.mlir.ctx, block: state.mlir.blk do
       SCF.yield() >>> []
@@ -577,6 +578,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
+  # Expands a non-nil clause body in an if statement, yielding the last evaluated value.
   defp expand_if_clause_body(clause_body, state, env) do
     mlir ctx: state.mlir.ctx, block: state.mlir.blk do
       {ret, _, _} = expand(clause_body, state, env)
@@ -734,6 +736,7 @@ defmodule Charms.Defm.Expander do
     {v, state, env}
   end
 
+  # Expands an `if` expression, handling both true and false clause bodies.
   defp expand_macro(_meta, Kernel, :if, [condition, clauses], _callback, state, env) do
     true_body = Keyword.fetch!(clauses, :do)
     false_body = clauses[:else]
