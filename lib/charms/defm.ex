@@ -47,11 +47,6 @@ defmodule Charms.Defm do
   defmacro cond_br(_condition, _clauses), do: :implemented_in_expander
 
   @doc """
-  `if` expression requires identical types for both branches
-  """
-  defmacro struct_if(_condition, _clauses), do: :implemented_in_expander
-
-  @doc """
   define a function that can be JIT compiled
 
   ## Differences from `Beaver.>>>/2` op expressions

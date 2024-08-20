@@ -570,6 +570,31 @@ defmodule Charms.Defm.Expander do
     Module.concat(mod, func)
   end
 
+  # Expands a nil clause body in an if statement, yielding no value.
+  defp expand_if_clause_body(nil, state, _env) do
+    mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      SCF.yield() >>> []
+      []
+    end
+  end
+
+  # Expands a non-nil clause body in an if statement, yielding the last evaluated value.
+  defp expand_if_clause_body(clause_body, state, env) do
+    mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      {ret, _, _} = expand(clause_body, state, env)
+
+      case ret |> List.wrap() |> List.last() do
+        %MLIR.Operation{} ->
+          SCF.yield() >>> []
+          []
+
+        %MLIR.Value{} = last ->
+          SCF.yield(last) >>> []
+          MLIR.Value.type(last)
+      end
+    end
+  end
+
   ## Macro handling
 
   # This is going to be the function where you will intercept expansions
@@ -711,7 +736,8 @@ defmodule Charms.Defm.Expander do
     {v, state, env}
   end
 
-  defp expand_macro(_meta, Charms.Defm, :struct_if, [condition, clauses], _callback, state, env) do
+  # Expands an `if` expression, handling both true and false clause bodies.
+  defp expand_macro(_meta, Kernel, :if, [condition, clauses], _callback, state, env) do
     true_body = Keyword.fetch!(clauses, :do)
     false_body = clauses[:else]
     {condition, state, env} = expand(condition, state, env)
@@ -720,24 +746,24 @@ defmodule Charms.Defm.Expander do
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
         alias Beaver.MLIR.Dialect.SCF
 
+        b =
+          block _true() do
+            ret_t =
+              expand_if_clause_body(true_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
+          end
+
+        # TODO: doc about an expression which is a value and an operation
         SCF.if [condition] do
           region do
-            block _true() do
-              expand(true_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
-              SCF.yield() >>> []
-            end
+            MLIR.CAPI.mlirRegionAppendOwnedBlock(Beaver.Env.region(), b)
           end
 
           region do
             block _false() do
-              if false_body do
-                expand(false_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
-              end
-
-              SCF.yield() >>> []
+              expand_if_clause_body(false_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
             end
           end
-        end >>> []
+        end >>> ret_t
       end
 
     {v, state, env}
