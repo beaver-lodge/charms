@@ -570,6 +570,29 @@ defmodule Charms.Defm.Expander do
     Module.concat(mod, func)
   end
 
+  defp expand_if_clause_body(nil, state, _env) do
+    mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      SCF.yield() >>> []
+      []
+    end
+  end
+
+  defp expand_if_clause_body(clause_body, state, env) do
+    mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      {ret, _, _} = expand(clause_body, state, env)
+
+      case ret |> List.wrap() |> List.last() do
+        %MLIR.Operation{} ->
+          SCF.yield() >>> []
+          []
+
+        %MLIR.Value{} = last ->
+          SCF.yield(last) >>> []
+          MLIR.Value.type(last)
+      end
+    end
+  end
+
   ## Macro handling
 
   # This is going to be the function where you will intercept expansions
@@ -723,21 +746,7 @@ defmodule Charms.Defm.Expander do
         b =
           block _true() do
             ret_t =
-              with {ret, _, _} <-
-                     expand(true_body, put_in(state.mlir.blk, Beaver.Env.block()), env),
-                   %MLIR.Value{} = ret when not is_nil(false_body) <-
-                     ret |> List.wrap() |> List.last() do
-                SCF.yield(ret) >>> []
-                MLIR.Value.type(ret)
-              else
-                %MLIR.Operation{} ->
-                  SCF.yield() >>> []
-                  []
-
-                %MLIR.Value{} = ret ->
-                  SCF.yield(ret) >>> []
-                  MLIR.Value.type(ret)
-              end
+              expand_if_clause_body(true_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
           end
 
         # TODO: doc about an expression which is a value and an operation
@@ -748,19 +757,7 @@ defmodule Charms.Defm.Expander do
 
           region do
             block _false() do
-              with {ret, _, _} <-
-                     unless(is_nil(false_body),
-                       do: expand(false_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
-                     ),
-                   %MLIR.Value{} = ret <- ret |> List.wrap() |> List.last() do
-                SCF.yield(ret) >>> []
-              else
-                %MLIR.Value{} = ret ->
-                  SCF.yield(ret) >>> []
-
-                _ ->
-                  SCF.yield() >>> []
-              end
+              expand_if_clause_body(false_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
             end
           end
         end >>> ret_t
