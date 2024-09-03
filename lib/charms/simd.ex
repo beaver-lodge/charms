@@ -6,9 +6,9 @@ defmodule Charms.SIMD do
   def handle_intrinsic(:new, [type, width], opts) do
     fn literal_values ->
       mlir ctx: opts[:ctx], block: opts[:block] do
-        values = Enum.map(literal_values, &Attribute.integer(type, &1)) |> Enum.to_list()
+        values = Enum.map(literal_values, &Attribute.integer(type, &1))
 
-        if length(values) != width do
+        if Enum.count(values) != width do
           raise ArgumentError, "expected #{width} values, got #{length(values)}"
         end
 

@@ -24,7 +24,7 @@ defmodule Charms.JIT do
   end
 
   defp clone_func_impl(to, from) do
-    ops = MLIR.Module.body(from) |> Beaver.Walker.operations() |> Enum.to_list()
+    ops = MLIR.Module.body(from) |> Beaver.Walker.operations()
     s_table = to |> MLIR.Operation.from_module() |> mlirSymbolTableCreate()
 
     for op <- ops, MLIR.Operation.name(op) == "func.func" do
