@@ -26,6 +26,20 @@ defmodule Charms.Defm.Expander do
   }
   defp env, do: @env
 
+  defp put_env_in_stacktrace(stacktrace, env) do
+    [frame] = Macro.Env.stacktrace(env)
+    idx = stacktrace |> Enum.find_index(&match?({__MODULE__, _, _, _}, &1))
+    List.insert_at(stacktrace, idx, frame)
+  end
+
+  defp put_env_in_stacktrace(stacktrace, env, {m, f, a}) do
+    [{_, _, _, meta}] = Macro.Env.stacktrace(env)
+    frame = {m, f, a, meta}
+
+    idx = stacktrace |> Enum.find_index(&match?({__MODULE__, _, _, _}, &1))
+    List.insert_at(stacktrace, idx, frame)
+  end
+
   # This is a proof of concept of how to build language server
   # tooling or a compiler of a custom language on top of Elixir's
   # building blocks.
@@ -402,62 +416,74 @@ defmodule Charms.Defm.Expander do
 
   ## Remote call
 
-  defp expand({{:., _dot_meta, [module, fun]}, meta, args}, state, env)
+  defp expand({{:., dot_meta, [module, fun]}, meta, args}, state, env)
        when is_atom(fun) and is_list(args) do
+    env = %{env | line: dot_meta[:line] || meta[:line] || env.line}
     {module, state, env} = expand(module, state, env)
     arity = length(args)
 
     if is_atom(module) do
-      case Macro.Env.expand_require(env, meta, module, fun, arity,
-             trace: true,
-             check_deprecations: false
-           ) do
-        {:macro, module, callback} ->
-          expand_macro(meta, module, fun, args, callback, state, env)
+      try do
+        case Macro.Env.expand_require(env, meta, module, fun, arity,
+               trace: true,
+               check_deprecations: false
+             ) do
+          {:macro, module, callback} ->
+            expand_macro(meta, module, fun, args, callback, state, env)
 
-        :error ->
-          Code.ensure_loaded(module)
+          :error ->
+            Code.ensure_loaded(module)
 
-          cond do
-            function_exported?(module, :handle_intrinsic, 3) ->
-              {args, state, env} = expand(args, state, env)
+            cond do
+              function_exported?(module, :handle_intrinsic, 3) ->
+                {args, state, env} = expand(args, state, env)
 
-              {module.handle_intrinsic(fun, args, ctx: state.mlir.ctx, block: state.mlir.blk),
-               state, env}
+                {module.handle_intrinsic(fun, args, ctx: state.mlir.ctx, block: state.mlir.blk),
+                 state, env}
 
-            module == Beaver.MLIR.Attribute ->
-              {args, state, env} = expand(args, state, env)
-              {apply(Beaver.MLIR.Attribute, fun, args), state, env}
+              module == Beaver.MLIR.Attribute ->
+                {args, state, env} = expand(args, state, env)
+                {apply(Beaver.MLIR.Attribute, fun, args), state, env}
 
-            (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
-              res
+              (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
+                res
 
-            true ->
-              raise ArgumentError, "Unknown intrinsic: #{inspect(module)}.#{fun}"
-          end
+              true ->
+                raise ArgumentError, "Unknown intrinsic: #{inspect(module)}.#{fun}"
+            end
+        end
+      rescue
+        e ->
+          reraise e, put_env_in_stacktrace(__STACKTRACE__, env, {module, fun, arity})
       end
     else
       [{dialect, _, _}, op] = [module, fun]
-      op = "#{dialect}.#{op}"
 
-      MapSet.member?(state.mlir.available_ops, op) or
-        raise ArgumentError,
-              "Unknown MLIR operation to create: #{op}, did you mean: #{did_you_mean_op(op)}"
+      try do
+        op = "#{dialect}.#{op}"
 
-      {args, state, env} = expand(args, state, env)
+        MapSet.member?(state.mlir.available_ops, op) or
+          raise ArgumentError,
+                "Unknown MLIR operation to create: #{op}, did you mean: #{did_you_mean_op(op)}"
 
-      op =
-        %Beaver.SSA{
-          op: op,
-          arguments: args,
-          ctx: state.mlir.ctx,
-          block: state.mlir.blk,
-          loc: Beaver.MLIR.Location.from_env(env),
-          results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
-        }
-        |> MLIR.Operation.create()
+        {args, state, env} = expand(args, state, env)
 
-      {MLIR.Operation.results(op), state, env}
+        op =
+          %Beaver.SSA{
+            op: op,
+            arguments: args,
+            ctx: state.mlir.ctx,
+            block: state.mlir.blk,
+            loc: Beaver.MLIR.Location.from_env(env),
+            results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
+          }
+          |> MLIR.Operation.create()
+
+        {MLIR.Operation.results(op), state, env}
+      rescue
+        e ->
+          reraise e, put_env_in_stacktrace(__STACKTRACE__, env)
+      end
     end
   end
 
@@ -480,6 +506,7 @@ defmodule Charms.Defm.Expander do
   ## Imported or local call
 
   defp expand({fun, meta, args}, state, env) when is_atom(fun) and is_list(args) do
+    env = %{env | line: meta[:line] || env.line}
     arity = length(args)
 
     # For language servers, we don't want to emit traces, nor expand local macros,
@@ -490,13 +517,28 @@ defmodule Charms.Defm.Expander do
            check_deprecations: true
          ) do
       {:macro, module, callback} ->
-        expand_macro(meta, module, fun, args, callback, state, env)
+        try do
+          expand_macro(meta, module, fun, args, callback, state, env)
+        rescue
+          e ->
+            reraise e, put_env_in_stacktrace(__STACKTRACE__, env, {module, fun, arity})
+        end
 
       {:function, module, fun} ->
-        expand_remote(meta, module, fun, args, state, env)
+        try do
+          expand_remote(meta, module, fun, args, state, env)
+        rescue
+          e ->
+            reraise e, put_env_in_stacktrace(__STACKTRACE__, env, {module, fun, arity})
+        end
 
       {:error, :not_found} ->
-        expand_local(meta, fun, args, state, env)
+        try do
+          expand_local(meta, fun, args, state, env)
+        rescue
+          e ->
+            reraise e, put_env_in_stacktrace(__STACKTRACE__, env)
+        end
     end
   end
 
