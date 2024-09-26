@@ -1006,15 +1006,12 @@ defmodule Charms.Defm.Expander do
     {args, state, env} = expand_list(args, state, env)
 
     if module in [MLIR.Type] do
-      args =
-        args ++
-          if fun in [:unranked_tensor, :complex, :vector] do
-            []
-          else
-            [[ctx: state.mlir.ctx]]
-          end
-
-      {apply(module, fun, args), state, env}
+      if fun in [:unranked_tensor, :complex, :vector] do
+        args
+      else
+        args ++ [[ctx: state.mlir.ctx]]
+      end
+      |> then(&{apply(module, fun, &1), state, env})
     else
       {{{:., meta, [module, fun]}, meta, args}, state, env}
     end
