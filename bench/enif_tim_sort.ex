@@ -37,11 +37,9 @@ defmodule ENIFTimSort do
   end
 
   defm tim_sort(arr :: Pointer.t(), n :: i32()) do
-    run_const = op arith.constant(value: Attribute.integer(i32(), 32)) :: i32()
-    run = result_at(run_const, 0)
+    run = const 32 :: i32()
     i_ptr = Pointer.allocate(i32())
-    zero_const = op arith.constant(value: Attribute.integer(i32(), 0)) :: i32()
-    zero = result_at(zero_const, 0)
+    zero = const 0 :: i32()
     Pointer.store(zero, i_ptr)
 
     while_loop(Pointer.load(i32(), i_ptr) < n) do
@@ -81,8 +79,7 @@ defmodule ENIFTimSort do
 
   defm copy_terms(env :: Env.t(), movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
     head = Pointer.allocate(Term.t())
-    zero_const = op arith.constant(value: Attribute.integer(i32(), 0)) :: i32()
-    zero = result_at(zero_const, 0)
+    zero = const 0 :: i32()
     i_ptr = Pointer.allocate(i32())
     Pointer.store(zero, i_ptr)
 

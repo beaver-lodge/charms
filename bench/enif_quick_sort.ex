@@ -51,8 +51,7 @@ defmodule ENIFQuickSort do
 
   defm copy_terms(env :: Env.t(), movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
     head = Pointer.allocate(Term.t())
-    zero_const = op arith.constant(value: Attribute.integer(i32(), 0)) :: i32()
-    zero = result_at(zero_const, 0)
+    zero = const 0 :: i32()
     i_ptr = Pointer.allocate(i32())
     Pointer.store(zero, i_ptr)
 
@@ -83,8 +82,7 @@ defmodule ENIFQuickSort do
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
       copy_terms(env, movable_list_ptr, arr)
-      zero_const = op arith.constant(value: Attribute.integer(i32(), 0)) :: i32()
-      zero = result_at(zero_const, 0)
+      zero = const 0 :: i32()
       call do_sort(arr, zero, len - 1)
       ret = enif_make_list_from_array(env, arr, len)
       func.return(ret)

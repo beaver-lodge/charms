@@ -2,7 +2,7 @@ defmodule Charms.Defm.Expander do
   @moduledoc false
   alias Beaver.MLIR.Attribute
   use Beaver
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith}
   require Func
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -919,6 +919,39 @@ defmodule Charms.Defm.Expander do
     expand_call_of_types(call, [], state, env)
   end
 
+  defp expand_macro(
+         meta,
+         Charms.Defm,
+         :const,
+         [{:"::", type_meta, [value, type]}],
+         _callback,
+         state,
+         env
+       ) do
+    env = %{env | line: type_meta[:line] || meta[:line] || env.line}
+
+    {value, state, env} = expand(value, state, env)
+    {type, state, env} = expand(type, state, env)
+
+    value =
+      mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+        loc = MLIR.Location.from_env(env)
+
+        cond do
+          MLIR.CAPI.mlirTypeIsAInteger(type) |> Beaver.Native.to_term() ->
+            Arith.constant(value: Attribute.integer(type, value), loc: loc) >>> type
+
+          MLIR.CAPI.mlirTypeIsAFloat(type) |> Beaver.Native.to_term() ->
+            Arith.constant(value: Attribute.float(type, value), loc: loc) >>> type
+
+          true ->
+            raise ArgumentError, "Unsupported type for const macro: #{to_string(type)}"
+        end
+      end
+
+    {value, state, env}
+  end
+
   defp expand_macro(meta, module, fun, args, callback, state, env) do
     expand_macro_callback(meta, module, fun, args, callback, state, env)
   end
@@ -973,7 +1006,12 @@ defmodule Charms.Defm.Expander do
     {args, state, env} = expand_list(args, state, env)
 
     if module in [MLIR.Type] do
-      {apply(module, fun, [[ctx: state.mlir.ctx]]), state, env}
+      if fun in [:unranked_tensor, :complex, :vector] do
+        args
+      else
+        args ++ [[ctx: state.mlir.ctx]]
+      end
+      |> then(&{apply(module, fun, &1), state, env})
     else
       {{{:., meta, [module, fun]}, meta, args}, state, env}
     end

@@ -26,8 +26,7 @@ defmodule ENIFMergeSort do
     j_ptr = Pointer.allocate(i32())
     k_ptr = Pointer.allocate(i32())
 
-    zero_const = op arith.constant(value: Attribute.integer(i32(), 0)) :: i32()
-    zero = result_at(zero_const, 0)
+    zero = const 0 :: i32()
     Pointer.store(zero, i_ptr)
     Pointer.store(zero, j_ptr)
     Pointer.store(l, k_ptr)
@@ -90,8 +89,7 @@ defmodule ENIFMergeSort do
 
   defm do_sort(arr :: Pointer.t(), l :: i32(), r :: i32()) do
     if l < r do
-      two_const = op arith.constant(value: Attribute.integer(i32(), 2)) :: i32()
-      two = result_at(two_const, 0)
+      two = const 2 :: i32()
       m = op arith.divsi(l + r, two) :: i32()
       m = result_at(m, 0)
 
@@ -112,8 +110,7 @@ defmodule ENIFMergeSort do
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
       call ENIFTimSort.copy_terms(env, movable_list_ptr, arr) :: []
-      zero_const = op arith.constant(value: Attribute.integer(i32(), 0)) :: i32()
-      zero = result_at(zero_const, 0)
+      zero = const 0 :: i32()
       call do_sort(arr, zero, len - 1) :: []
       ret = enif_make_list_from_array(env, arr, len)
       op func.return(ret) :: []
