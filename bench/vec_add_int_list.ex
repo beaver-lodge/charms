@@ -4,7 +4,7 @@ defmodule AddTwoIntVec do
 
   defm load_list(env, l :: Term.t()) :: SIMD.t(i32(), 8) do
     i_ptr = Pointer.allocate(i32())
-    Pointer.store(arith.constant(value: Attribute.integer(i32(), 0)), i_ptr)
+    Pointer.store(const(0 :: i32()), i_ptr)
     init = SIMD.new(i32(), 8).(0, 0, 0, 0, 0, 0, 0, 0)
 
     Enum.reduce(l, init, fn x, acc ->
