@@ -7,9 +7,8 @@ defmodule IfTest do
       alias Charms.{Pointer, Term}
 
       defm get(env, i) :: Term.t() do
-        zero = const 1 :: i32()
-        zero = arith.constant(value: Attribute.integer(i32(), 0))
-        one = arith.constant(value: Attribute.integer(i32(), 1))
+        zero = const 0 :: i32()
+        one = const 1 :: i32()
         i_ptr = Pointer.allocate(i32())
         enif_get_int(env, i, i_ptr)
         i = Pointer.load(i32(), i_ptr)

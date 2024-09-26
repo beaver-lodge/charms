@@ -2,7 +2,7 @@ defmodule Charms.Defm.Expander do
   @moduledoc false
   alias Beaver.MLIR.Attribute
   use Beaver
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith}
   require Func
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -917,6 +917,32 @@ defmodule Charms.Defm.Expander do
 
   defp expand_macro(_meta, Charms.Defm, :call, [call], _callback, state, env) do
     expand_call_of_types(call, [], state, env)
+  end
+
+  defp expand_macro(
+         _meta,
+         Charms.Defm,
+         :const,
+         [{:"::", _, [value, type]}],
+         _callback,
+         state,
+         env
+       ) do
+    {value, state, env} = expand(value, state, env)
+    {type, state, env} = expand(type, state, env)
+
+    value =
+      mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+        cond do
+          MLIR.CAPI.mlirTypeIsAInteger(type) ->
+            Arith.constant(value: Attribute.integer(type, value)) >>> type
+
+          MLIR.CAPI.mlirTypeIsAFloat(type) ->
+            Arith.constant(value: Attribute.float(type, value)) >>> type
+        end
+      end
+
+    {value, state, env}
   end
 
   defp expand_macro(meta, module, fun, args, callback, state, env) do
