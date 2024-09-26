@@ -920,25 +920,31 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(
-         _meta,
+         meta,
          Charms.Defm,
          :const,
-         [{:"::", _, [value, type]}],
+         [{:"::", type_meta, [value, type]}],
          _callback,
          state,
          env
        ) do
+    env = %{env | line: type_meta[:line] || meta[:line] || env.line}
     {value, state, env} = expand(value, state, env)
     {type, state, env} = expand(type, state, env)
 
     value =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+        loc = MLIR.Location.from_env(env)
+
         cond do
           MLIR.CAPI.mlirTypeIsAInteger(type) ->
-            Arith.constant(value: Attribute.integer(type, value)) >>> type
+            Arith.constant(value: Attribute.integer(type, value), loc: loc) >>> type
 
           MLIR.CAPI.mlirTypeIsAFloat(type) ->
-            Arith.constant(value: Attribute.float(type, value)) >>> type
+            Arith.constant(value: Attribute.float(type, value), loc: loc) >>> type
+
+          true ->
+            raise ArgumentError, "Unsupported type for const macro: #{to_string(type)}"
         end
       end
 
