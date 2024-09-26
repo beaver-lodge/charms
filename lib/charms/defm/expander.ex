@@ -929,6 +929,7 @@ defmodule Charms.Defm.Expander do
          env
        ) do
     env = %{env | line: type_meta[:line] || meta[:line] || env.line}
+
     {value, state, env} = expand(value, state, env)
     {type, state, env} = expand(type, state, env)
 
@@ -937,10 +938,10 @@ defmodule Charms.Defm.Expander do
         loc = MLIR.Location.from_env(env)
 
         cond do
-          MLIR.CAPI.mlirTypeIsAInteger(type) ->
+          MLIR.CAPI.mlirTypeIsAInteger(type) |> Beaver.Native.to_term() ->
             Arith.constant(value: Attribute.integer(type, value), loc: loc) >>> type
 
-          MLIR.CAPI.mlirTypeIsAFloat(type) ->
+          MLIR.CAPI.mlirTypeIsAFloat(type) |> Beaver.Native.to_term() ->
             Arith.constant(value: Attribute.float(type, value), loc: loc) >>> type
 
           true ->
@@ -1005,7 +1006,16 @@ defmodule Charms.Defm.Expander do
     {args, state, env} = expand_list(args, state, env)
 
     if module in [MLIR.Type] do
-      {apply(module, fun, [[ctx: state.mlir.ctx]]), state, env}
+      {apply(
+         module,
+         fun,
+         args ++
+           if fun in [:unranked_tensor] do
+             []
+           else
+             [[ctx: state.mlir.ctx]]
+           end
+       ), state, env}
     else
       {{{:., meta, [module, fun]}, meta, args}, state, env}
     end
