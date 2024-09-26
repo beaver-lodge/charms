@@ -14,7 +14,7 @@ defmodule IfTest do
         i = Pointer.load(i32(), i_ptr)
 
         ret =
-          if(i > 0) do
+          if i > 0 do
             one
           else
             zero
