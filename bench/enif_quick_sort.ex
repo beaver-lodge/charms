@@ -22,7 +22,7 @@ defmodule ENIFQuickSort do
     start = Pointer.element_ptr(Term.t(), arr, low)
 
     for_loop {element, j} <- {Term.t(), start, high - low} do
-      if(enif_compare(element, pivot) < 0) do
+      if enif_compare(element, pivot) < 0 do
         i = Pointer.load(i32(), i_ptr) + 1
         Pointer.store(i, i_ptr)
         j = value index.casts(j) :: i32()
@@ -40,7 +40,7 @@ defmodule ENIFQuickSort do
   end
 
   defm do_sort(arr :: Pointer.t(), low :: i32(), high :: i32()) do
-    if(low < high) do
+    if low < high do
       pi = call partition(arr, low, high) :: i32()
       do_sort(arr, low, pi - 1)
       do_sort(arr, pi + 1, high)

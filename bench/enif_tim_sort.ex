@@ -66,7 +66,7 @@ defmodule ENIFTimSort do
         right = op arith.minsi(left + 2 * size - 1, n - 1) :: i32()
         right = result_at(right, 0)
 
-        if(mid < right) do
+        if mid < right do
           call ENIFMergeSort.merge(arr, left, mid, right)
         end
 

@@ -40,7 +40,7 @@ defmodule ENIFMergeSort do
       left_term = Pointer.load(Term.t(), Pointer.element_ptr(Term.t(), left_temp, i))
       right_term = Pointer.load(Term.t(), Pointer.element_ptr(Term.t(), right_temp, j))
 
-      if(enif_compare(left_term, right_term) <= 0) do
+      if enif_compare(left_term, right_term) <= 0 do
         Pointer.store(
           Pointer.load(Term.t(), Pointer.element_ptr(Term.t(), left_temp, i)),
           Pointer.element_ptr(Term.t(), arr, k)
@@ -89,7 +89,7 @@ defmodule ENIFMergeSort do
   end
 
   defm do_sort(arr :: Pointer.t(), l :: i32(), r :: i32()) do
-    if(l < r) do
+    if l < r do
       two_const = op arith.constant(value: Attribute.integer(i32(), 2)) :: i32()
       two = result_at(two_const, 0)
       m = op arith.divsi(l + r, two) :: i32()
