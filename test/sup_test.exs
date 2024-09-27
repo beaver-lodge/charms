@@ -3,9 +3,7 @@ defmodule ChildMod do
   alias Charms.Term
 
   defm get(env, i) :: Term.t() do
-    one = const 1 :: i32()
-    one = enif_make_int(env, one)
-    func.return(one)
+    func.return(i)
   end
 end
 
@@ -14,6 +12,6 @@ defmodule SupervisorTest do
 
   test "init module with supervisor" do
     {:ok, _} = DynamicSupervisor.start_child(Charms.TestDynamicSupervisor, {ChildMod, []})
-    assert ChildMod.get(100) == 1
+    assert ChildMod.get(100) == 100
   end
 end
