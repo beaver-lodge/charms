@@ -81,7 +81,6 @@ defmodule Charms.JIT do
   def init(modules, opts) do
     ctx = MLIR.Context.create()
     Beaver.Diagnostic.attach(ctx)
-    name = opts[:name]
     modules = modules |> List.wrap()
 
     jit =
@@ -93,26 +92,25 @@ defmodule Charms.JIT do
       end)
       |> merge_modules()
       |> jit_of_mod
+      |> then(&%__MODULE__{ctx: ctx, jit: &1})
 
-    case {name, modules} do
+    case {opts[:name], modules} do
       {name, [_]} when not is_nil(name) ->
-        Agent.start_link(fn -> %__MODULE__{ctx: ctx, jit: jit} end, name: name)
+        Agent.start_link(fn -> jit end, name: name)
 
       {nil, modules} ->
         for {module, index} <- Enum.with_index(modules) do
-          Agent.start_link(fn -> %__MODULE__{ctx: ctx, jit: jit, owner: index == 0} end,
-            name: module
-          )
+          Agent.start_link(fn -> %__MODULE__{jit | owner: index == 0} end, name: module)
         end
 
       {name, modules} when not is_nil(name) and is_list(modules) ->
-        Agent.start_link(fn -> %__MODULE__{ctx: ctx, jit: jit, owner: true} end, name: name)
+        Agent.start_link(fn -> jit end, name: name)
     end
   end
 
   def get(module) do
     if Process.whereis(module) do
-      %{jit: jit} = Agent.get(module, & &1)
+      %__MODULE__{jit: jit} = Agent.get(module, & &1)
       jit
     end
   end
