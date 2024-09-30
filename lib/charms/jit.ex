@@ -3,6 +3,8 @@ defmodule Charms.JIT do
   import Beaver.MLIR.CAPI
   alias Beaver.MLIR
 
+  defstruct ctx: nil, jit: nil, owner: true
+
   defp jit_of_mod(m) do
     import Beaver.MLIR.{Conversion, Transforms}
 
@@ -94,15 +96,17 @@ defmodule Charms.JIT do
 
     case {name, modules} do
       {name, [_]} when not is_nil(name) ->
-        Agent.start_link(fn -> %{ctx: ctx, jit: jit} end, name: name)
+        Agent.start_link(fn -> %__MODULE__{ctx: ctx, jit: jit} end, name: name)
 
       {nil, modules} ->
         for {module, index} <- Enum.with_index(modules) do
-          Agent.start_link(fn -> %{ctx: ctx, jit: jit, owner: index == 0} end, name: module)
+          Agent.start_link(fn -> %__MODULE__{ctx: ctx, jit: jit, owner: index == 0} end,
+            name: module
+          )
         end
 
       {name, modules} when not is_nil(name) and is_list(modules) ->
-        Agent.start_link(fn -> %{ctx: ctx, jit: jit, owner: true} end, name: name)
+        Agent.start_link(fn -> %__MODULE__{ctx: ctx, jit: jit, owner: true} end, name: name)
     end
   end
 
@@ -126,7 +130,7 @@ defmodule Charms.JIT do
   end
 
   def destroy(module) do
-    with %{ctx: ctx, jit: jit, owner: true} <- Agent.get(module, & &1) do
+    with %__MODULE__{ctx: ctx, jit: jit, owner: true} <- Agent.get(module, & &1) do
       MLIR.ExecutionEngine.destroy(jit)
       MLIR.Context.destroy(ctx)
     end
