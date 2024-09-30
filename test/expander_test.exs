@@ -184,8 +184,8 @@ defmodule POCTest do
       |> MLIR.Operation.verify!()
       |> tap(fn m ->
         {:ok, pid} = Charms.JIT.init(m, name: :return_this)
-        jit = Charms.JIT.engine(:return_this)
-        assert Charms.JIT.invoke(jit, {ReturnPassedArg, :bar, [:identical]}) == :identical
+        engine = Charms.JIT.engine(:return_this)
+        assert Charms.JIT.invoke(engine, {ReturnPassedArg, :bar, [:identical]}) == :identical
         :ok = Charms.JIT.destroy(pid)
       end)
     end
