@@ -3,7 +3,7 @@ defmodule Charms.JIT do
   import Beaver.MLIR.CAPI
   alias Beaver.MLIR
 
-  defstruct ctx: nil, jit: nil, owner: true
+  defstruct ctx: nil, engine: nil, owner: true
 
   defp jit_of_mod(m) do
     import Beaver.MLIR.{Conversion, Transforms}
@@ -92,7 +92,7 @@ defmodule Charms.JIT do
       end)
       |> merge_modules()
       |> jit_of_mod
-      |> then(&%__MODULE__{ctx: ctx, jit: &1})
+      |> then(&%__MODULE__{ctx: ctx, engine: &1})
 
     case {opts[:name], modules} do
       {name, [_]} when not is_nil(name) ->
@@ -110,26 +110,23 @@ defmodule Charms.JIT do
 
   def get(module) do
     if Process.whereis(module) do
-      %__MODULE__{jit: jit} = Agent.get(module, & &1)
+      %__MODULE__{engine: jit} = Agent.get(module, & &1)
       jit
     end
   end
 
-  def invoke(jit, {mod, func, args}) do
-    beaver_raw_jit_invoke_with_terms(
-      jit.ref,
-      to_string(Charms.Defm.mangling(mod, func)),
-      args
-    )
+  def invoke(%MLIR.ExecutionEngine{ref: ref}, {mod, func, args}) do
+    beaver_raw_jit_invoke_with_terms(ref, to_string(Charms.Defm.mangling(mod, func)), args)
   end
 
-  def invoke(jit, f, args) when is_function(f, length(args)) do
-    apply(f, args).(jit)
+  def invoke(%MLIR.ExecutionEngine{} = engine, f, args)
+      when is_function(f, length(args)) do
+    apply(f, args).(engine)
   end
 
   def destroy(module) do
-    with %__MODULE__{ctx: ctx, jit: jit, owner: true} <- Agent.get(module, & &1) do
-      MLIR.ExecutionEngine.destroy(jit)
+    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- Agent.get(module, & &1) do
+      MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
     end
 
