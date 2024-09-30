@@ -2,7 +2,7 @@ defmodule ChildMod do
   use Charms
   alias Charms.Term
 
-  defm get(env, i) :: Term.t() do
+  defm term_roundtrip(env, i) :: Term.t() do
     func.return(i)
   end
 end
@@ -14,6 +14,6 @@ defmodule SupervisorTest do
     {:ok, _} =
       DynamicSupervisor.start_child(Charms.TestDynamicSupervisor, Charms.child_spec(ChildMod))
 
-    assert ChildMod.get(100) == 100
+    assert ChildMod.term_roundtrip(100) == 100
   end
 end
