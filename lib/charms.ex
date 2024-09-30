@@ -25,4 +25,14 @@ defmodule Charms do
       end
     end
   end
+
+  def child_spec(mod, opts \\ [])
+
+  def child_spec(mods, opts) when is_list(mods) do
+    %{id: Module.concat(mods), start: {Charms.JIT, :init, [mods, opts]}}
+  end
+
+  def child_spec(mod, opts) do
+    %{id: mod, start: {Charms.JIT, :init, [mod, opts]}}
+  end
 end

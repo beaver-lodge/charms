@@ -3,6 +3,8 @@ defmodule Charms.JIT do
   import Beaver.MLIR.CAPI
   alias Beaver.MLIR
 
+  defstruct ctx: nil, engine: nil, owner: true
+
   defp jit_of_mod(m) do
     import Beaver.MLIR.{Conversion, Transforms}
 
@@ -79,52 +81,54 @@ defmodule Charms.JIT do
   def init(modules, opts) do
     ctx = MLIR.Context.create()
     Beaver.Diagnostic.attach(ctx)
-    name = opts[:name]
     modules = modules |> List.wrap()
 
-    jit =
-      modules
-      |> Enum.map(fn
-        m when is_atom(m) -> m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
-        s when is_binary(s) -> s |> then(&MLIR.Module.create(ctx, &1))
-        %MLIR.Module{} = m -> m
-      end)
-      |> merge_modules()
-      |> jit_of_mod
+    modules
+    |> Enum.map(fn
+      m when is_atom(m) -> m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
+      s when is_binary(s) -> s |> then(&MLIR.Module.create(ctx, &1))
+      %MLIR.Module{} = m -> m
+    end)
+    |> merge_modules()
+    |> jit_of_mod
+    |> then(&%__MODULE__{ctx: ctx, engine: &1})
+    |> then(
+      &case {opts[:name], modules} do
+        {name, [_]} when not is_nil(name) ->
+          Agent.start_link(fn -> &1 end, name: name)
 
-    case {name, modules} do
-      {name, [_]} when not is_nil(name) ->
-        Agent.start_link(fn -> %{ctx: ctx, jit: jit} end, name: name)
+        {nil, modules} ->
+          for {module, index} <- Enum.with_index(modules) do
+            Agent.start_link(fn -> %__MODULE__{&1 | owner: index == 0} end, name: module)
+          end
 
-      {nil, modules} ->
-        for {module, index} <- Enum.with_index(modules) do
-          Agent.start_link(fn -> %{ctx: ctx, jit: jit, owner: index == 0} end, name: module)
-        end
-    end
-  end
-
-  def get(module) do
-    if Process.whereis(module) do
-      %{jit: jit} = Agent.get(module, & &1)
-      jit
-    end
-  end
-
-  def invoke(jit, {mod, func, args}) do
-    beaver_raw_jit_invoke_with_terms(
-      jit.ref,
-      to_string(Charms.Defm.mangling(mod, func)),
-      args
+        {name, modules} when not is_nil(name) and is_list(modules) ->
+          Agent.start_link(fn -> &1 end, name: name)
+      end
     )
   end
 
-  def invoke(jit, f, args) when is_function(f, length(args)) do
-    apply(f, args).(jit)
+  @doc """
+  Returns the JIT engine for the given module.
+  """
+  def engine(module) do
+    if pid = Process.whereis(module) do
+      Agent.get(pid, & &1).engine
+    end
+  end
+
+  def invoke(%MLIR.ExecutionEngine{ref: ref}, {mod, func, args}) do
+    beaver_raw_jit_invoke_with_terms(ref, to_string(Charms.Defm.mangling(mod, func)), args)
+  end
+
+  def invoke(%MLIR.ExecutionEngine{} = engine, f, args)
+      when is_function(f, length(args)) do
+    apply(f, args).(engine)
   end
 
   def destroy(module) do
-    with %{ctx: ctx, jit: jit, owner: true} <- Agent.get(module, & &1) do
-      MLIR.ExecutionEngine.destroy(jit)
+    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- Agent.get(module, & &1) do
+      MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
     end
 
