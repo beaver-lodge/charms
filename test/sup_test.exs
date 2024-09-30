@@ -11,7 +11,9 @@ defmodule SupervisorTest do
   use ExUnit.Case
 
   test "init module with supervisor" do
-    {:ok, _} = DynamicSupervisor.start_child(Charms.TestDynamicSupervisor, {ChildMod, []})
+    {:ok, _} =
+      DynamicSupervisor.start_child(Charms.TestDynamicSupervisor, Charms.child_spec(ChildMod))
+
     assert ChildMod.get(100) == 100
   end
 end

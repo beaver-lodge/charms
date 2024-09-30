@@ -14,16 +14,6 @@ defmodule Charms do
 
       @before_compile Charms
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
-
-      def child_spec(opts) do
-        %{
-          id: __MODULE__,
-          start: {Charms.JIT, :init, [__MODULE__, opts]},
-          type: :worker,
-          restart: :permanent,
-          shutdown: 500
-        }
-      end
     end
   end
 
@@ -34,5 +24,15 @@ defmodule Charms do
         @ir
       end
     end
+  end
+
+  def child_spec(mod, opts \\ []) do
+    %{
+      id: mod,
+      start: {Charms.JIT, :init, [mod, opts]},
+      type: :worker,
+      restart: :permanent,
+      shutdown: 500
+    }
   end
 end
