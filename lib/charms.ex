@@ -27,12 +27,6 @@ defmodule Charms do
   end
 
   def child_spec(mod, opts \\ []) do
-    %{
-      id: mod,
-      start: {Charms.JIT, :init, [mod, opts]},
-      type: :worker,
-      restart: :permanent,
-      shutdown: 500
-    }
+    %{id: mod, start: {Charms.JIT, :init, [mod, opts]}}
   end
 end
