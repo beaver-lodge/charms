@@ -83,29 +83,29 @@ defmodule Charms.JIT do
     Beaver.Diagnostic.attach(ctx)
     modules = modules |> List.wrap()
 
-    jit =
-      modules
-      |> Enum.map(fn
-        m when is_atom(m) -> m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
-        s when is_binary(s) -> s |> then(&MLIR.Module.create(ctx, &1))
-        %MLIR.Module{} = m -> m
-      end)
-      |> merge_modules()
-      |> jit_of_mod
-      |> then(&%__MODULE__{ctx: ctx, engine: &1})
+    modules
+    |> Enum.map(fn
+      m when is_atom(m) -> m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
+      s when is_binary(s) -> s |> then(&MLIR.Module.create(ctx, &1))
+      %MLIR.Module{} = m -> m
+    end)
+    |> merge_modules()
+    |> jit_of_mod
+    |> then(&%__MODULE__{ctx: ctx, engine: &1})
+    |> then(
+      &case {opts[:name], modules} do
+        {name, [_]} when not is_nil(name) ->
+          Agent.start_link(fn -> &1 end, name: name)
 
-    case {opts[:name], modules} do
-      {name, [_]} when not is_nil(name) ->
-        Agent.start_link(fn -> jit end, name: name)
+        {nil, modules} ->
+          for {module, index} <- Enum.with_index(modules) do
+            Agent.start_link(fn -> %__MODULE__{&1 | owner: index == 0} end, name: module)
+          end
 
-      {nil, modules} ->
-        for {module, index} <- Enum.with_index(modules) do
-          Agent.start_link(fn -> %__MODULE__{jit | owner: index == 0} end, name: module)
-        end
-
-      {name, modules} when not is_nil(name) and is_list(modules) ->
-        Agent.start_link(fn -> jit end, name: name)
-    end
+        {name, modules} when not is_nil(name) and is_list(modules) ->
+          Agent.start_link(fn -> &1 end, name: name)
+      end
+    )
   end
 
   @doc """
