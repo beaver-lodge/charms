@@ -108,10 +108,12 @@ defmodule Charms.JIT do
     end
   end
 
-  def get(module) do
-    if Process.whereis(module) do
-      %__MODULE__{engine: jit} = Agent.get(module, & &1)
-      jit
+  @doc """
+  Returns the JIT engine for the given module.
+  """
+  def engine(module) do
+    if pid = Process.whereis(module) do
+      Agent.get(pid, & &1).engine
     end
   end
 

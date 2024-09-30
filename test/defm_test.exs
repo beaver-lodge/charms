@@ -32,7 +32,7 @@ defmodule DefmTest do
     end
 
     {:ok, pid} = Charms.JIT.init(AddTwoInt, name: :add_int)
-    jit = Charms.JIT.get(:add_int)
+    jit = Charms.JIT.engine(:add_int)
     assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
     assert Charms.JIT.invoke(jit, {AddTwoInt, :add, [1, 2, :arg_err]}) == 3
     assert Charms.JIT.invoke(jit, {AddTwoInt, :add, [1, "", :arg_err]}) == :arg_err

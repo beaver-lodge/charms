@@ -79,7 +79,7 @@ defmodule Charms.Defm do
         f =
           &Charms.JIT.invoke(&1, {unquote(env.module), unquote(name), unquote(invoke_args)})
 
-        if jit = Charms.JIT.get(__MODULE__) do
+        if jit = Charms.JIT.engine(__MODULE__) do
           f.(jit)
         else
           f
