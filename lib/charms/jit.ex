@@ -100,6 +100,9 @@ defmodule Charms.JIT do
         for {module, index} <- Enum.with_index(modules) do
           Agent.start_link(fn -> %{ctx: ctx, jit: jit, owner: index == 0} end, name: module)
         end
+
+      {name, modules} when not is_nil(name) and is_list(modules) ->
+        Agent.start_link(fn -> %{ctx: ctx, jit: jit, owner: true} end, name: name)
     end
   end
 
