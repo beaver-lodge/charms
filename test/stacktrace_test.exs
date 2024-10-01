@@ -1,5 +1,5 @@
 defmodule StackTraceTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   test "insert frame into stacktrace" do
     res =

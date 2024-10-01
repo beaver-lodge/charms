@@ -1,5 +1,5 @@
 defmodule SupervisorTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   test "init module with supervisor" do
     {:ok, pid} =

@@ -1,5 +1,5 @@
 defmodule IfTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   test "if with value" do
     defmodule GetIntIf do

@@ -1,5 +1,5 @@
 defmodule VecAddTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   test "vec add" do
     {:ok, _} = Charms.JIT.init(AddTwoIntVec)
