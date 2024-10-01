@@ -1,5 +1,5 @@
 defmodule MacroTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   test "expand macro" do
     Charms.JIT.init(CallMacroMod)

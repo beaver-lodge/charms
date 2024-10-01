@@ -1,5 +1,5 @@
 defmodule StringTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   test "create str" do
     defmodule SomeString do
