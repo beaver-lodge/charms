@@ -54,7 +54,7 @@ defmodule Charms.JIT.LockedCache do
 
   ## ETS functions
 
-  defp init(), do: :ets.new(@name, [:public, :set, :named_table, read_concurrency: true])
+  defp init_table(), do: :ets.new(@name, [:public, :set, :named_table, read_concurrency: true])
 
   defp write(key, value), do: :ets.insert(@name, {key, value})
 
@@ -79,7 +79,7 @@ defmodule Charms.JIT.LockedCache do
 
   @impl true
   def init(:ok) do
-    init()
+    init_table()
     {:ok, %{keys: %{}, ref_to_key: %{}}}
   end
 
