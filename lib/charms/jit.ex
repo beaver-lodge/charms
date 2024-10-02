@@ -143,12 +143,16 @@ defmodule Charms.JIT do
   end
 
   def destroy(module) do
-    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- __MODULE__.LockedCache.get(module) do
+    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <-
+           __MODULE__.LockedCache.get(module) do
       MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
-    end
+    else
+      nil ->
+        :not_found
 
-    # TODO: clear cache
-    :ok
+      _ ->
+        :noop
+    end
   end
 end
