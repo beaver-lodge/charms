@@ -99,17 +99,18 @@ defmodule Charms.JIT do
 
     case {opts[:name], modules} do
       {name, [_]} when not is_nil(name) ->
-        __MODULE__.Cache.run(name, fn -> do_init(modules) end)
+        __MODULE__.LockedCache.run(name, fn -> do_init(modules) end)
 
       {nil, modules} when modules != [] ->
         [key | tail] = modules
-        {:ok, jit} = __MODULE__.Cache.run(key, fn -> do_init(modules) end)
+        {:ok, jit} = __MODULE__.LockedCache.run(key, fn -> do_init(modules) end)
 
         for module <- tail,
-            do: __MODULE__.Cache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+            do:
+              __MODULE__.LockedCache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
 
       {name, modules} when not is_nil(name) and is_list(modules) ->
-        __MODULE__.Cache.run(name, fn -> do_init(modules) end)
+        __MODULE__.LockedCache.run(name, fn -> do_init(modules) end)
     end
   end
 
@@ -117,7 +118,7 @@ defmodule Charms.JIT do
   Returns the JIT engine for the given module.
   """
   def engine(module) do
-    if jit = Charms.JIT.Cache.get(module) do
+    if jit = Charms.JIT.LockedCache.get(module) do
       jit.engine
     else
       nil
@@ -134,7 +135,7 @@ defmodule Charms.JIT do
   end
 
   def destroy(module) do
-    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- __MODULE__.Cache.get(module) do
+    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- __MODULE__.LockedCache.get(module) do
       MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
     end

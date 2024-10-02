@@ -1,5 +1,5 @@
 # Copy-pasted from EXLA
-defmodule Charms.JIT.Cache do
+defmodule Charms.JIT.LockedCache do
   @moduledoc false
 
   # EXLA has many expensive singleton resources such as
