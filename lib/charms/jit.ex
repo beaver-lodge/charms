@@ -66,6 +66,22 @@ defmodule Charms.JIT do
     head
   end
 
+  defp do_init(modules) when is_list(modules) do
+    ctx = MLIR.Context.create()
+    Beaver.Diagnostic.attach(ctx)
+
+    modules
+    |> Enum.map(fn
+      m when is_atom(m) -> m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
+      s when is_binary(s) -> s |> then(&MLIR.Module.create(ctx, &1))
+      %MLIR.Module{} = m -> m
+    end)
+    |> merge_modules()
+    |> jit_of_mod
+    |> then(&%__MODULE__{ctx: ctx, engine: &1})
+    |> then(&{:ok, &1})
+  end
+
   def init(module, opts \\ [])
 
   def init({:module, module, binary, _}, opts) when is_atom(module) and is_binary(binary) do
@@ -79,41 +95,32 @@ defmodule Charms.JIT do
   end
 
   def init(modules, opts) do
-    ctx = MLIR.Context.create()
-    Beaver.Diagnostic.attach(ctx)
     modules = modules |> List.wrap()
 
-    modules
-    |> Enum.map(fn
-      m when is_atom(m) -> m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
-      s when is_binary(s) -> s |> then(&MLIR.Module.create(ctx, &1))
-      %MLIR.Module{} = m -> m
-    end)
-    |> merge_modules()
-    |> jit_of_mod
-    |> then(&%__MODULE__{ctx: ctx, engine: &1})
-    |> then(
-      &case {opts[:name], modules} do
-        {name, [_]} when not is_nil(name) ->
-          Agent.start_link(fn -> &1 end, name: name)
+    case {opts[:name], modules} do
+      {name, [_]} when not is_nil(name) ->
+        __MODULE__.Cache.run(name, fn -> do_init(modules) end)
 
-        {nil, modules} ->
-          for {module, index} <- Enum.with_index(modules) do
-            Agent.start_link(fn -> %__MODULE__{&1 | owner: index == 0} end, name: module)
-          end
+      {nil, modules} when modules != [] ->
+        [key | tail] = modules
+        {:ok, jit} = __MODULE__.Cache.run(key, fn -> do_init(modules) end)
 
-        {name, modules} when not is_nil(name) and is_list(modules) ->
-          Agent.start_link(fn -> &1 end, name: name)
-      end
-    )
+        for module <- tail,
+            do: __MODULE__.Cache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+
+      {name, modules} when not is_nil(name) and is_list(modules) ->
+        __MODULE__.Cache.run(name, fn -> do_init(modules) end)
+    end
   end
 
   @doc """
   Returns the JIT engine for the given module.
   """
   def engine(module) do
-    if pid = Process.whereis(module) do
-      Agent.get(pid, & &1).engine
+    if jit = Charms.JIT.Cache.get(module) do
+      jit.engine
+    else
+      nil
     end
   end
 
@@ -127,11 +134,12 @@ defmodule Charms.JIT do
   end
 
   def destroy(module) do
-    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- Agent.get(module, & &1) do
+    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- __MODULE__.Cache.get(module) do
       MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
     end
 
-    Agent.stop(module)
+    # TODO: clear cache
+    :ok
   end
 end

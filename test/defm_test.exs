@@ -31,14 +31,14 @@ defmodule DefmTest do
       end
     end
 
-    {:ok, pid} = Charms.JIT.init(AddTwoInt, name: :add_int)
+    {:ok, jit} = Charms.JIT.init(AddTwoInt, name: :add_int)
     engine = Charms.JIT.engine(:add_int)
     assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
     assert Charms.JIT.invoke(engine, {AddTwoInt, :add, [1, 2, :arg_err]}) == 3
     assert Charms.JIT.invoke(engine, {AddTwoInt, :add, [1, "", :arg_err]}) == :arg_err
     assert Charms.JIT.invoke(engine, &AddTwoInt.add/3, [1, 2, :arg_err]) == 3
     assert Charms.JIT.invoke(engine, &AddTwoInt.add/3, [1, "", :arg_err]) == :arg_err
-    :ok = Charms.JIT.destroy(pid)
+    :ok = Charms.JIT.destroy(jit)
 
     Charms.JIT.init(AddTwoInt)
     assert AddTwoInt.add(1, 2, :arg_err) == 3
