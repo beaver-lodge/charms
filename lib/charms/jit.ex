@@ -72,9 +72,17 @@ defmodule Charms.JIT do
 
     modules
     |> Enum.map(fn
-      m when is_atom(m) -> m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
-      s when is_binary(s) -> s |> then(&MLIR.Module.create(ctx, &1))
-      %MLIR.Module{} = m -> m
+      m when is_atom(m) ->
+        m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
+
+      s when is_binary(s) ->
+        s |> then(&MLIR.Module.create(ctx, &1))
+
+      %MLIR.Module{} = m ->
+        m
+
+      other ->
+        raise ArgumentError, "Unexpected module type: #{inspect(other)}"
     end)
     |> merge_modules()
     |> jit_of_mod
