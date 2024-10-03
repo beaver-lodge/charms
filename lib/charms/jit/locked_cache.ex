@@ -1,4 +1,6 @@
-# Copy-pasted from EXLA
+# Originally from EXLA
+# https://github.com/elixir-nx/nx/blob/main/exla/lib/exla/defn/locked_cache.ex
+
 defmodule Charms.JIT.LockedCache do
   @moduledoc false
 
