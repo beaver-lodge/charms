@@ -1,8 +1,9 @@
 defmodule Charms.Defm.Expander do
   @moduledoc false
+  require Logger
   alias Beaver.MLIR.Attribute
   use Beaver
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, Ub}
   require Func
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -100,6 +101,15 @@ defmodule Charms.Defm.Expander do
       end
 
     {MLIR.Operation.results(op), state, env}
+  end
+
+  defp create_poison(msg, state, env) do
+    mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      # filter out ops to ignore function call if the return type is not infer
+      Ub.poison(msg: MLIR.Attribute.string(msg), loc: Beaver.MLIR.Location.from_env(env)) >>>
+        ~t{i8}
+    end
+    |> then(&{&1, state, env})
   end
 
   defp expand_call_of_types(call, types, state, env) do
@@ -457,6 +467,7 @@ defmodule Charms.Defm.Expander do
     env = %{env | line: dot_meta[:line] || meta[:line] || env.line}
     {module, state, env} = expand(module, state, env)
     arity = length(args)
+    state = update_in(state.remotes, &[{module, fun, arity} | &1])
 
     if is_atom(module) do
       try do
@@ -485,7 +496,12 @@ defmodule Charms.Defm.Expander do
                 res
 
               true ->
-                raise ArgumentError, "Unknown intrinsic: #{inspect(module)}.#{fun}"
+                # By elixir's evaluation order, we should expand the arguments first even if the function is not found.
+                {_, state, env} = expand(args, state, env)
+                msg = "Unknown intrinsic: #{inspect(module)}.#{fun}/#{arity}"
+
+                create_poison(msg, state, env)
+                |> then(&{&1, state, env})
             end
         end
       rescue
