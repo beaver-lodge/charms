@@ -114,6 +114,7 @@ defmodule Charms.Defm.Expander do
           {env.module, name, args, state, env}
       end
 
+    state = update_in(state.remotes, &[{mod, name, length(args)} | &1])
     {args, state, env} = expand(args, state, env)
     {types, state, env} = expand(types, state, env)
     create_call(mod, name, args, types, state, env)
@@ -214,6 +215,41 @@ defmodule Charms.Defm.Expander do
 
   defp expand_std(_module, _fun, _args, _state, _env) do
     :not_implemented
+  end
+
+  defp expand_body(body, args, arg_types, state, env) do
+    mlir ctx: state.mlir.ctx do
+      b =
+        block do
+          MLIR.Block.add_args!(Beaver.Env.block(), arg_types, ctx: Beaver.Env.context())
+
+          arg_values =
+            Range.new(0, length(args) - 1)
+            |> Enum.map(&MLIR.Block.get_arg!(Beaver.Env.block(), &1))
+
+          state =
+            Enum.zip(args, arg_values)
+            |> Enum.reduce(state, fn {k, v}, state -> put_mlir_var(state, k, v) end)
+
+          state =
+            with [head_arg_type | _] <- arg_types,
+                 [head_arg | _] <- args,
+                 {:env, _, nil} <- head_arg,
+                 MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)) do
+              a = MLIR.Block.get_arg!(Beaver.Env.block(), 0)
+              put_in(state.mlir.enif_env, a)
+            else
+              _ -> state
+            end
+
+          state = put_in(state.mlir.blk, Beaver.Env.block())
+
+          {_, state, env} =
+            expand(body, state, env)
+        end
+
+      {b, state, env}
+    end
   end
 
   # The goal of this function is to traverse all of Elixir special
@@ -692,46 +728,34 @@ defmodule Charms.Defm.Expander do
       end
       |> Enum.unzip()
 
+    parent_block = state.mlir.blk
+
     f =
-      mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      mlir ctx: state.mlir.ctx, block: parent_block do
         {ret_types, state, env} = ret_types |> expand(state, env)
         {arg_types, state, env} = arg_types |> expand(state, env)
 
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
-        Func.func _(sym_name: "\"#{name}\"", function_type: ft) do
+        Func.func _(
+                    sym_name: "\"#{name}\"",
+                    function_type: ft,
+                    loc: Beaver.MLIR.Location.from_env(env)
+                  ) do
           region do
-            state = put_in(state.mlir.region, Beaver.Env.region())
-
-            block _entry() do
-              MLIR.Block.add_args!(Beaver.Env.block(), arg_types, ctx: Beaver.Env.context())
-
-              arg_values =
-                Range.new(0, length(args) - 1)
-                |> Enum.map(&MLIR.Block.get_arg!(Beaver.Env.block(), &1))
-
-              state =
-                Enum.zip(args, arg_values)
-                |> Enum.reduce(state, fn {k, v}, state -> put_mlir_var(state, k, v) end)
-
-              state =
-                with [head_arg_type | _] <- arg_types,
-                     [head_arg | _] <- args,
-                     {:env, _, nil} <- head_arg,
-                     MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)) do
-                  a = MLIR.Block.get_arg!(Beaver.Env.block(), 0)
-                  put_in(state.mlir.enif_env, a)
-                else
-                  _ -> state
-                end
-
-              state = put_in(state.mlir.blk, Beaver.Env.block())
-              expand(body, state, env)
-            end
           end
         end
       end
 
+    r0 = Beaver.Walker.regions(f) |> Enum.at(0)
+    state = put_in(state.mlir.region, r0)
+
+    # create and insert the entry block to expose the state variable
+    {blk_entry, state, env} = expand_body(body, args, arg_types, state, env)
+    # restore the block back to parent, otherwise consecutive functions will be created nested
+    state = put_in(state.mlir.blk, parent_block)
+
+    MLIR.CAPI.mlirRegionInsertOwnedBlock(r0, 0, blk_entry)
     {f, state, env}
   end
 
