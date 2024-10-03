@@ -105,9 +105,8 @@ defmodule Charms.Defm.Expander do
 
   defp create_poison(msg, state, env) do
     mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-      # filter out ops to ignore function call if the return type is not infer
       Ub.poison(msg: MLIR.Attribute.string(msg), loc: Beaver.MLIR.Location.from_env(env)) >>>
-        ~t{i8}
+        ~t{none}
     end
     |> then(&{&1, state, env})
   end
