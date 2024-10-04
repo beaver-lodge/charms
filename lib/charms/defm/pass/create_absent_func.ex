@@ -1,8 +1,8 @@
 defmodule Charms.Defm.Pass.CreateAbsentFunc do
   @moduledoc false
-  use Beaver.MLIR.Pass, on: "func.func"
   use Beaver
-  alias Beaver.MLIR.Dialect.Func
+  use MLIR.Pass, on: "func.func"
+  alias MLIR.Dialect.Func
   require Func
   import MLIR.CAPI
 

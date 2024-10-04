@@ -1,8 +1,8 @@
 defmodule Charms.Defm.Expander do
   @moduledoc false
-  alias Beaver.MLIR.Attribute
   use Beaver
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith}
+  alias MLIR.Attribute
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, Ub, LLVM}
   require Func
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -93,13 +93,21 @@ defmodule Charms.Defm.Expander do
           arguments: args ++ [callee: Attribute.flat_symbol_ref(mangling(mod, name))],
           ctx: Beaver.Env.context(),
           block: Beaver.Env.block(),
-          loc: Beaver.MLIR.Location.from_env(env)
+          loc: MLIR.Location.from_env(env)
         }
         |> Beaver.SSA.put_results(types)
         |> MLIR.Operation.create()
       end
 
     {MLIR.Operation.results(op), state, env}
+  end
+
+  defp create_poison(msg, state, env) do
+    mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      Ub.poison(msg: MLIR.Attribute.string(msg), loc: MLIR.Location.from_env(env)) >>>
+        ~t{none}
+    end
+    |> then(&{&1, state, env})
   end
 
   defp expand_call_of_types(call, types, state, env) do
@@ -114,6 +122,7 @@ defmodule Charms.Defm.Expander do
           {env.module, name, args, state, env}
       end
 
+    state = update_in(state.remotes, &[{mod, name, length(args)} | &1])
     {args, state, env} = expand(args, state, env)
     {types, state, env} = expand(types, state, env)
     create_call(mod, name, args, types, state, env)
@@ -214,6 +223,40 @@ defmodule Charms.Defm.Expander do
 
   defp expand_std(_module, _fun, _args, _state, _env) do
     :not_implemented
+  end
+
+  defp expand_body(body, args, arg_types, state, env) do
+    mlir ctx: state.mlir.ctx do
+      b =
+        block do
+          MLIR.Block.add_args!(Beaver.Env.block(), arg_types, ctx: Beaver.Env.context())
+
+          arg_values =
+            Range.new(0, length(args) - 1)
+            |> Enum.map(&MLIR.Block.get_arg!(Beaver.Env.block(), &1))
+
+          state =
+            Enum.zip(args, arg_values)
+            |> Enum.reduce(state, fn {k, v}, state -> put_mlir_var(state, k, v) end)
+
+          state =
+            with [head_arg_type | _] <- arg_types,
+                 [{:env, _, nil} | _] <- args,
+                 MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)) do
+              a = MLIR.Block.get_arg!(Beaver.Env.block(), 0)
+              put_in(state.mlir.enif_env, a)
+            else
+              _ -> state
+            end
+
+          state = put_in(state.mlir.blk, Beaver.Env.block())
+
+          {_, state, env} =
+            expand(body, state, env)
+        end
+
+      {b, state, env}
+    end
   end
 
   # The goal of this function is to traverse all of Elixir special
@@ -421,6 +464,7 @@ defmodule Charms.Defm.Expander do
     env = %{env | line: dot_meta[:line] || meta[:line] || env.line}
     {module, state, env} = expand(module, state, env)
     arity = length(args)
+    state = update_in(state.remotes, &[{module, fun, arity} | &1])
 
     if is_atom(module) do
       try do
@@ -441,15 +485,20 @@ defmodule Charms.Defm.Expander do
                 {module.handle_intrinsic(fun, args, ctx: state.mlir.ctx, block: state.mlir.blk),
                  state, env}
 
-              module == Beaver.MLIR.Attribute ->
+              module == MLIR.Attribute ->
                 {args, state, env} = expand(args, state, env)
-                {apply(Beaver.MLIR.Attribute, fun, args), state, env}
+                {apply(MLIR.Attribute, fun, args), state, env}
 
               (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
                 res
 
               true ->
-                raise ArgumentError, "Unknown intrinsic: #{inspect(module)}.#{fun}"
+                # By elixir's evaluation order, we should expand the arguments first even if the function is not found.
+                {_, state, env} = expand(args, state, env)
+
+                "Unknown intrinsic: #{inspect(module)}.#{fun}/#{arity}"
+                |> create_poison(state, env)
+                |> then(&{&1, state, env})
             end
         end
       rescue
@@ -474,7 +523,7 @@ defmodule Charms.Defm.Expander do
             arguments: args,
             ctx: state.mlir.ctx,
             block: state.mlir.blk,
-            loc: Beaver.MLIR.Location.from_env(env),
+            loc: MLIR.Location.from_env(env),
             results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
           }
           |> MLIR.Operation.create()
@@ -692,46 +741,29 @@ defmodule Charms.Defm.Expander do
       end
       |> Enum.unzip()
 
+    parent_block = state.mlir.blk
+
     f =
-      mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+      mlir ctx: state.mlir.ctx, block: parent_block do
         {ret_types, state, env} = ret_types |> expand(state, env)
         {arg_types, state, env} = arg_types |> expand(state, env)
-
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
-        Func.func _(sym_name: "\"#{name}\"", function_type: ft) do
+        Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
           region do
-            state = put_in(state.mlir.region, Beaver.Env.region())
-
-            block _entry() do
-              MLIR.Block.add_args!(Beaver.Env.block(), arg_types, ctx: Beaver.Env.context())
-
-              arg_values =
-                Range.new(0, length(args) - 1)
-                |> Enum.map(&MLIR.Block.get_arg!(Beaver.Env.block(), &1))
-
-              state =
-                Enum.zip(args, arg_values)
-                |> Enum.reduce(state, fn {k, v}, state -> put_mlir_var(state, k, v) end)
-
-              state =
-                with [head_arg_type | _] <- arg_types,
-                     [head_arg | _] <- args,
-                     {:env, _, nil} <- head_arg,
-                     MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)) do
-                  a = MLIR.Block.get_arg!(Beaver.Env.block(), 0)
-                  put_in(state.mlir.enif_env, a)
-                else
-                  _ -> state
-                end
-
-              state = put_in(state.mlir.blk, Beaver.Env.block())
-              expand(body, state, env)
-            end
           end
         end
       end
 
+    r0 = Beaver.Walker.regions(f) |> Enum.at(0)
+    state = put_in(state.mlir.region, r0)
+
+    # create and insert the entry block to expose the state variable
+    {blk_entry, state, env} = expand_body(body, args, arg_types, state, env)
+    # restore the block back to parent, otherwise consecutive functions will be created nested
+    state = put_in(state.mlir.blk, parent_block)
+
+    MLIR.CAPI.mlirRegionInsertOwnedBlock(r0, 0, blk_entry)
     {f, state, env}
   end
 
@@ -771,7 +803,7 @@ defmodule Charms.Defm.Expander do
           condition,
           true_body,
           false_body,
-          loc: Beaver.MLIR.Location.from_env(env)
+          loc: MLIR.Location.from_env(env)
         ) >>> []
       end
 
@@ -786,8 +818,6 @@ defmodule Charms.Defm.Expander do
 
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        alias Beaver.MLIR.Dialect.SCF
-
         b =
           block _true() do
             ret_t =
@@ -814,20 +844,20 @@ defmodule Charms.Defm.Expander do
   defp expand_macro(_meta, Charms.Defm, :while_loop, [expr, [do: body]], _callback, state, env) do
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        Beaver.MLIR.Dialect.SCF.while [] do
+        SCF.while [] do
           region do
             block _() do
               {condition, _state, _env} =
                 expand(expr, put_in(state.mlir.blk, Beaver.Env.block()), env)
 
-              Beaver.MLIR.Dialect.SCF.condition(condition) >>> []
+              SCF.condition(condition) >>> []
             end
           end
 
           region do
             block _() do
               expand(body, put_in(state.mlir.blk, Beaver.Env.block()), env)
-              Beaver.MLIR.Dialect.SCF.yield() >>> []
+              SCF.yield() >>> []
             end
           end
         end >>> []
@@ -844,7 +874,6 @@ defmodule Charms.Defm.Expander do
 
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        alias Beaver.MLIR.Dialect.{Index, SCF, LLVM}
         zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
         lower_bound = zero
         upper_bound = Index.casts(len) >>> Type.index()
@@ -865,7 +894,7 @@ defmodule Charms.Defm.Expander do
               state = put_mlir_var(state, element, element_val)
               state = put_mlir_var(state, index, index_val)
               expand(body, put_in(state.mlir.blk, Beaver.Env.block()), env)
-              Beaver.MLIR.Dialect.SCF.yield() >>> []
+              SCF.yield() >>> []
             end
           end
         end >>> []
@@ -896,7 +925,7 @@ defmodule Charms.Defm.Expander do
         arguments: args,
         ctx: state.mlir.ctx,
         block: state.mlir.blk,
-        loc: Beaver.MLIR.Location.from_env(env)
+        loc: MLIR.Location.from_env(env)
       }
       |> Beaver.SSA.put_results(return_types)
       |> MLIR.Operation.create()

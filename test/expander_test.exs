@@ -76,13 +76,8 @@ defmodule POCTest do
   end
 
   test "remotes" do
-    assert catch_error(remotes(":lists.flatten([])")) == %ArgumentError{
-             __exception__: true,
-             message: "Unknown intrinsic: :lists.flatten"
-           }
-
-    # assert remotes(":lists.flatten([])") == [{:lists, :flatten, 1}]
-    # assert remotes("List.flatten([])") == [{List, :flatten, 1}]
+    assert remotes(":lists.flatten([])") == [{:lists, :flatten, 1}]
+    assert remotes("List.flatten([])") == [{List, :flatten, 1}]
   end
 
   describe "defmodule" do
@@ -99,31 +94,19 @@ defmodule POCTest do
     end
 
     test "alias module" do
-      assert catch_error(remotes("defmodule Foo do defmodule Bar do Bar.flatten([]) end end")) ==
-               %ArgumentError{
-                 __exception__: true,
-                 message: "Unknown intrinsic: Foo.Bar.flatten"
-               }
+      assert {Foo.Bar, :flatten, 1} in remotes(
+               "defmodule Foo do defmodule Bar do Bar.flatten([]) end end"
+             )
 
-      # assert {Foo.Bar, :flatten, 1} in remotes(
-      #          "defmodule Foo do defmodule Bar do Bar.flatten([]) end end"
-      #        )
-
-      # assert {Bar, :flatten, 1} in remotes(
-      #          "defmodule Foo do defmodule Elixir.Bar do Bar.flatten([]) end end"
-      #        )
+      assert {Bar, :flatten, 1} in remotes(
+               "defmodule Foo do defmodule Elixir.Bar do Bar.flatten([]) end end"
+             )
     end
   end
 
   describe "alias/2" do
     test "defines aliases" do
-      assert catch_error(remotes("alias List, as: L; L.flatten([])")) ==
-               %ArgumentError{
-                 __exception__: true,
-                 message: "Unknown intrinsic: List.flatten"
-               }
-
-      # assert remotes("alias List, as: L; L.flatten([])") == [{List, :flatten, 1}]
+      assert remotes("alias List, as: L; L.flatten([])") == [{List, :flatten, 1}]
     end
   end
 
@@ -131,15 +114,9 @@ defmodule POCTest do
     defmacro discard_require(_discard), do: :ok
 
     test "requires modules" do
-      assert catch_error(remotes("POCTest.discard_require(foo())")) ==
-               %ArgumentError{
-                 __exception__: true,
-                 message: "Unknown intrinsic: POCTest.discard_require"
-               }
-
       # The macro discards the content, so if the module is required,
       # the macro is invoked and contents are discarded
-      # assert locals("POCTest.discard_require(foo())") == [foo: 0]
+      assert locals("POCTest.discard_require(foo())") == [foo: 0]
       assert locals("require POCTest; POCTest.discard_require(foo())") == []
     end
   end
@@ -151,7 +128,7 @@ defmodule POCTest do
       # The macro discards the content, so if the module is imported,
       # the macro is invoked and contents are discarded
       assert %FunctionClauseError{
-               module: Beaver.MLIR.Operation.Changeset,
+               module: MLIR.Operation.Changeset,
                function: :add_argument,
                arity: 2,
                kind: nil,
@@ -191,16 +168,22 @@ defmodule POCTest do
     end
 
     test "intrinsic not found" do
-      assert catch_error(
-               quote do
-                 defmodule ReturnPassedArg do
-                   import Charms.Defm
-                   alias Charms.Term
-                   def foo(a :: Term.t()) :: Term.t(), do: Foo.bar(a)
-                 end
-               end
-               |> compile()
-             ) == %ArgumentError{message: "Unknown intrinsic: Foo.bar"}
+      quote do
+        defmodule InvalidRemoteCall do
+          import Charms.Defm
+          alias Charms.Term
+
+          def foo(a :: Term.t()) :: Term.t() do
+            Foo.bar(a)
+            func.return(a)
+          end
+        end
+      end
+      |> compile()
+      |> tap(fn m ->
+        assert to_string(m) =~ "Unknown intrinsic: Foo.bar/1"
+      end)
+      |> MLIR.Operation.verify!()
     end
 
     test "op not found" do
