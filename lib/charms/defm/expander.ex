@@ -508,9 +508,7 @@ defmodule Charms.Defm.Expander do
                   charms_internal_attr = unquote(attr)
                   charms_internal_term_ptr = Pointer.allocate(Term.t())
                   charms_internal_size = String.length(charms_internal_attr)
-
-                  charms_internal_buffer_ptr =
-                    Pointer.allocate(i8(), value(index.casts(charms_internal_size) :: i32()))
+                  charms_internal_buffer_ptr = Pointer.allocate(i8(), charms_internal_size)
 
                   charms_internal_buffer = ptr_to_memref(charms_internal_buffer_ptr)
                   memref.copy(charms_internal_attr, charms_internal_buffer)
