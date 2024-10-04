@@ -521,7 +521,9 @@ defmodule Charms.Defm.Expander do
           case name = MLIR.Operation.name(op) do
             "func.call" ->
               callee = Beaver.Walker.attributes(op)["callee"]
-              raise ArgumentError, "#{name} #{to_string(callee)} doesn't return a value"
+
+              raise ArgumentError,
+                    "#{name} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
 
             _ ->
               raise ArgumentError, "#{name} doesn't return a value"
