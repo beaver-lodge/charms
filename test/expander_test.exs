@@ -200,5 +200,29 @@ defmodule POCTest do
                message: "Unknown MLIR operation to create: cf.ar, did you mean: cf.br"
              }
     end
+
+    test "no return" do
+      quote do
+        defmodule ReturnPassedArg do
+          import Charms.Defm
+          alias Charms.Term
+          def foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
+        end
+      end
+      |> compile()
+
+      # assert catch_error(
+      #          quote do
+      #            defmodule ReturnPassedArg do
+      #              import Charms.Defm
+      #              alias Charms.Term
+      #              def foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
+      #            end
+      #          end
+      #          |> compile()
+      #        ) == %ArgumentError{
+      #          message: "Unknown MLIR operation to create: cf.ar, did you mean: cf.br"
+      #        }
+    end
   end
 end
