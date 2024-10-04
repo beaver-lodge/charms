@@ -4,7 +4,13 @@ defmodule Charms.Debug do
 
   def print_ir_pass(op) do
     if System.get_env("DEFM_PRINT_IR") == "1" do
-      MLIR.Transforms.print_ir(op)
+      case op do
+        %MLIR.Operation{} ->
+          MLIR.dump!(op)
+
+        _ ->
+          MLIR.Transforms.print_ir(op)
+      end
     else
       op
     end

@@ -498,7 +498,6 @@ defmodule Charms.Defm.Expander do
 
                 "Unknown intrinsic: #{inspect(module)}.#{fun}/#{arity}"
                 |> create_poison(state, env)
-                |> then(&{&1, state, env})
             end
         end
       rescue

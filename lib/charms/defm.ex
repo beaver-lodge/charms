@@ -155,8 +155,8 @@ defmodule Charms.Defm do
     end
 
     m
-    |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
     |> Charms.Debug.print_ir_pass()
+    |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
     |> canonicalize
     |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
     |> MLIR.to_string(bytecode: true)
