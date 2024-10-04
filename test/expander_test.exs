@@ -128,7 +128,7 @@ defmodule POCTest do
       # The macro discards the content, so if the module is imported,
       # the macro is invoked and contents are discarded
       assert %FunctionClauseError{
-               module: Beaver.MLIR.Operation.Changeset,
+               module: MLIR.Operation.Changeset,
                function: :add_argument,
                arity: 2,
                kind: nil,

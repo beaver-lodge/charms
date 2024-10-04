@@ -1,8 +1,8 @@
 defmodule Charms.Defm.Expander do
   @moduledoc false
-  alias Beaver.MLIR.Attribute
   use Beaver
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, Ub}
+  alias MLIR.Attribute
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, Ub, LLVM}
   require Func
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -485,9 +485,9 @@ defmodule Charms.Defm.Expander do
                 {module.handle_intrinsic(fun, args, ctx: state.mlir.ctx, block: state.mlir.blk),
                  state, env}
 
-              module == Beaver.MLIR.Attribute ->
+              module == MLIR.Attribute ->
                 {args, state, env} = expand(args, state, env)
-                {apply(Beaver.MLIR.Attribute, fun, args), state, env}
+                {apply(MLIR.Attribute, fun, args), state, env}
 
               (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
                 res
@@ -818,8 +818,6 @@ defmodule Charms.Defm.Expander do
 
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        alias Beaver.MLIR.Dialect.SCF
-
         b =
           block _true() do
             ret_t =
@@ -846,20 +844,20 @@ defmodule Charms.Defm.Expander do
   defp expand_macro(_meta, Charms.Defm, :while_loop, [expr, [do: body]], _callback, state, env) do
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        Beaver.MLIR.Dialect.SCF.while [] do
+        SCF.while [] do
           region do
             block _() do
               {condition, _state, _env} =
                 expand(expr, put_in(state.mlir.blk, Beaver.Env.block()), env)
 
-              Beaver.MLIR.Dialect.SCF.condition(condition) >>> []
+              SCF.condition(condition) >>> []
             end
           end
 
           region do
             block _() do
               expand(body, put_in(state.mlir.blk, Beaver.Env.block()), env)
-              Beaver.MLIR.Dialect.SCF.yield() >>> []
+              SCF.yield() >>> []
             end
           end
         end >>> []
@@ -876,7 +874,6 @@ defmodule Charms.Defm.Expander do
 
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        alias Beaver.MLIR.Dialect.{Index, SCF, LLVM}
         zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
         lower_bound = zero
         upper_bound = Index.casts(len) >>> Type.index()
@@ -897,7 +894,7 @@ defmodule Charms.Defm.Expander do
               state = put_mlir_var(state, element, element_val)
               state = put_mlir_var(state, index, index_val)
               expand(body, put_in(state.mlir.blk, Beaver.Env.block()), env)
-              Beaver.MLIR.Dialect.SCF.yield() >>> []
+              SCF.yield() >>> []
             end
           end
         end >>> []
