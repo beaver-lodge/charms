@@ -94,7 +94,7 @@ defmodule Charms.Defm.Expander do
           arguments: args ++ [callee: Attribute.flat_symbol_ref(mangling(mod, name))],
           ctx: Beaver.Env.context(),
           block: Beaver.Env.block(),
-          loc: Beaver.MLIR.Location.from_env(env)
+          loc: MLIR.Location.from_env(env)
         }
         |> Beaver.SSA.put_results(types)
         |> MLIR.Operation.create()
@@ -105,7 +105,7 @@ defmodule Charms.Defm.Expander do
 
   defp create_poison(msg, state, env) do
     mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-      Ub.poison(msg: MLIR.Attribute.string(msg), loc: Beaver.MLIR.Location.from_env(env)) >>>
+      Ub.poison(msg: MLIR.Attribute.string(msg), loc: MLIR.Location.from_env(env)) >>>
         ~t{none}
     end
     |> then(&{&1, state, env})
@@ -242,8 +242,7 @@ defmodule Charms.Defm.Expander do
 
           state =
             with [head_arg_type | _] <- arg_types,
-                 [head_arg | _] <- args,
-                 {:env, _, nil} <- head_arg,
+                 [{:env, _, nil} | _] <- args,
                  MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)) do
               a = MLIR.Block.get_arg!(Beaver.Env.block(), 0)
               put_in(state.mlir.enif_env, a)
@@ -497,9 +496,9 @@ defmodule Charms.Defm.Expander do
               true ->
                 # By elixir's evaluation order, we should expand the arguments first even if the function is not found.
                 {_, state, env} = expand(args, state, env)
-                msg = "Unknown intrinsic: #{inspect(module)}.#{fun}/#{arity}"
 
-                create_poison(msg, state, env)
+                "Unknown intrinsic: #{inspect(module)}.#{fun}/#{arity}"
+                |> create_poison(state, env)
                 |> then(&{&1, state, env})
             end
         end
@@ -525,7 +524,7 @@ defmodule Charms.Defm.Expander do
             arguments: args,
             ctx: state.mlir.ctx,
             block: state.mlir.blk,
-            loc: Beaver.MLIR.Location.from_env(env),
+            loc: MLIR.Location.from_env(env),
             results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
           }
           |> MLIR.Operation.create()
@@ -749,14 +748,9 @@ defmodule Charms.Defm.Expander do
       mlir ctx: state.mlir.ctx, block: parent_block do
         {ret_types, state, env} = ret_types |> expand(state, env)
         {arg_types, state, env} = arg_types |> expand(state, env)
-
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
-        Func.func _(
-                    sym_name: "\"#{name}\"",
-                    function_type: ft,
-                    loc: Beaver.MLIR.Location.from_env(env)
-                  ) do
+        Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
           region do
           end
         end
@@ -810,7 +804,7 @@ defmodule Charms.Defm.Expander do
           condition,
           true_body,
           false_body,
-          loc: Beaver.MLIR.Location.from_env(env)
+          loc: MLIR.Location.from_env(env)
         ) >>> []
       end
 
@@ -935,7 +929,7 @@ defmodule Charms.Defm.Expander do
         arguments: args,
         ctx: state.mlir.ctx,
         block: state.mlir.blk,
-        loc: Beaver.MLIR.Location.from_env(env)
+        loc: MLIR.Location.from_env(env)
       }
       |> Beaver.SSA.put_results(return_types)
       |> MLIR.Operation.create()
