@@ -501,33 +501,31 @@ defmodule Charms.Defm.Expander do
                     raise ArgumentError, "No enif_env found"
                   end
 
-                {block_expanded, state, env} =
-                  quote do
-                    alias Charms.Pointer
-                    alias Charms.Term
-                    charms_internal_attr = unquote(attr)
-                    charms_internal_term_ptr = Pointer.allocate(Term.t())
-                    charms_internal_size = String.length(charms_internal_attr)
+                quote do
+                  alias Charms.Pointer
+                  alias Charms.Term
+                  charms_internal_attr = unquote(attr)
+                  charms_internal_term_ptr = Pointer.allocate(Term.t())
+                  charms_internal_size = String.length(charms_internal_attr)
 
-                    charms_internal_buffer_ptr =
-                      Pointer.allocate(i8(), value(index.casts(charms_internal_size) :: i32()))
+                  charms_internal_buffer_ptr =
+                    Pointer.allocate(i8(), value(index.casts(charms_internal_size) :: i32()))
 
-                    charms_internal_buffer = ptr_to_memref(charms_internal_buffer_ptr)
-                    memref.copy(charms_internal_attr, charms_internal_buffer)
+                  charms_internal_buffer = ptr_to_memref(charms_internal_buffer_ptr)
+                  memref.copy(charms_internal_attr, charms_internal_buffer)
 
-                    enif_binary_to_term(
-                      charms_internal_env,
-                      charms_internal_buffer_ptr,
-                      charms_internal_size,
-                      charms_internal_term_ptr,
-                      const(0 :: i32())
-                    )
+                  enif_binary_to_term(
+                    charms_internal_env,
+                    charms_internal_buffer_ptr,
+                    charms_internal_size,
+                    charms_internal_term_ptr,
+                    const(0 :: i32())
+                  )
 
-                    Pointer.load(Term.t(), charms_internal_term_ptr)
-                  end
-                  |> expand(state, env)
-
-                {List.last(block_expanded), state, env}
+                  Pointer.load(Term.t(), charms_internal_term_ptr)
+                end
+                |> expand(state, env)
+                |> then(&{List.last(elem(&1, 0)), elem(&1, 1), elem(&1, 2)})
 
               (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
                 res
