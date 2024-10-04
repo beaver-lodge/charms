@@ -169,7 +169,7 @@ defmodule POCTest do
 
     test "intrinsic not found" do
       quote do
-        defmodule ReturnPassedArg do
+        defmodule InvalidRemoteCall do
           import Charms.Defm
           alias Charms.Term
 
