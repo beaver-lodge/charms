@@ -505,25 +505,25 @@ defmodule Charms.Defm.Expander do
                   quote do
                     alias Charms.Pointer
                     alias Charms.Term
-                    charm_internal_attr = unquote(attr)
-                    charm_internal_term_ptr = Pointer.allocate(Term.t())
-                    charm_internal_size = String.length(charm_internal_attr)
+                    charms_internal_attr = unquote(attr)
+                    charms_internal_term_ptr = Pointer.allocate(Term.t())
+                    charms_internal_size = String.length(charms_internal_attr)
 
-                    charm_internal_buffer_ptr =
-                      Pointer.allocate(i8(), value(index.casts(charm_internal_size) :: i32()))
+                    charms_internal_buffer_ptr =
+                      Pointer.allocate(i8(), value(index.casts(charms_internal_size) :: i32()))
 
-                    charm_internal_buffer = ptr_to_memref(charm_internal_buffer_ptr)
-                    memref.copy(charm_internal_attr, charm_internal_buffer)
+                    charms_internal_buffer = ptr_to_memref(charms_internal_buffer_ptr)
+                    memref.copy(charms_internal_attr, charms_internal_buffer)
 
                     enif_binary_to_term(
                       charms_internal_env,
-                      charm_internal_buffer_ptr,
-                      charm_internal_size,
-                      charm_internal_term_ptr,
+                      charms_internal_buffer_ptr,
+                      charms_internal_size,
+                      charms_internal_term_ptr,
                       const(0 :: i32())
                     )
 
-                    Pointer.load(Term.t(), charm_internal_term_ptr)
+                    Pointer.load(Term.t(), charms_internal_term_ptr)
                   end
                   |> expand(state, env)
 
