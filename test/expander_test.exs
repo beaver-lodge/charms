@@ -202,27 +202,18 @@ defmodule POCTest do
     end
 
     test "no return" do
+      err = %ArgumentError{
+        message: "func.call @Elixir.InvalidLocalCall.dummy doesn't return a value"
+      }
+
       quote do
-        defmodule ReturnPassedArg do
+        defmodule InvalidLocalCall do
           import Charms.Defm
           alias Charms.Term
           def foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
         end
       end
-      |> compile()
-
-      # assert catch_error(
-      #          quote do
-      #            defmodule ReturnPassedArg do
-      #              import Charms.Defm
-      #              alias Charms.Term
-      #              def foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
-      #            end
-      #          end
-      #          |> compile()
-      #        ) == %ArgumentError{
-      #          message: "Unknown MLIR operation to create: cf.ar, did you mean: cf.br"
-      #        }
+      |> then(&assert catch_error(compile(&1)) == err)
     end
   end
 end
