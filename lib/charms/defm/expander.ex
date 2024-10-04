@@ -517,10 +517,10 @@ defmodule Charms.Defm.Expander do
 
         {args, state, env} = expand(args, state, env)
 
-        if op = Enum.find(args, &is_struct(&1, MLIR.Operation)) do
-          case name = MLIR.Operation.name(op) do
+        if arg_op = Enum.find(args, &is_struct(&1, MLIR.Operation)) do
+          case name = MLIR.Operation.name(arg_op) do
             "func.call" ->
-              callee = Beaver.Walker.attributes(op)["callee"]
+              callee = Beaver.Walker.attributes(arg_op)["callee"]
 
               raise ArgumentError,
                     "#{name} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
