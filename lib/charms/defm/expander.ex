@@ -518,7 +518,14 @@ defmodule Charms.Defm.Expander do
         {args, state, env} = expand(args, state, env)
 
         for %MLIR.Operation{} = op <- args do
-          raise ArgumentError, "#{MLIR.Operation.name(op)} doesn't return a value"
+          case name = MLIR.Operation.name(op) do
+            "func.call" ->
+              callee = Beaver.Walker.attributes(op)["callee"]
+              raise ArgumentError, "#{name} #{to_string(callee)} doesn't return a value"
+
+            _ ->
+              raise ArgumentError, "#{name} doesn't return a value"
+          end
         end
 
         op =
