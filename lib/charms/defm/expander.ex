@@ -1,6 +1,5 @@
 defmodule Charms.Defm.Expander do
   @moduledoc false
-  require Logger
   alias Beaver.MLIR.Attribute
   use Beaver
   alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, Ub}
