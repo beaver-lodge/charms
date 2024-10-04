@@ -1,7 +1,7 @@
 defmodule Charms.Pointer do
   use Beaver
   alias Beaver.MLIR.{Type, Attribute}
-  alias Beaver.MLIR.Dialect.{Arith, LLVM}
+  alias Beaver.MLIR.Dialect.{Arith, LLVM, Index}
 
   def handle_intrinsic(:allocate, [elem_type], opts) do
     handle_intrinsic(:allocate, [elem_type, 1], opts)
@@ -16,6 +16,13 @@ defmodule Charms.Pointer do
 
   def handle_intrinsic(:allocate, [elem_type, size = %MLIR.Value{}], opts) do
     mlir ctx: opts[:ctx], block: opts[:block] do
+      size =
+        if MLIR.CAPI.mlirTypeIsAIndex(MLIR.Value.type(size)) |> Beaver.Native.to_term() do
+          Index.casts(size) >>> Type.i64()
+        else
+          size
+        end
+
       LLVM.alloca(size, elem_type: elem_type) >>> ~t{!llvm.ptr}
     end
   end

@@ -464,7 +464,8 @@ defmodule Charms.Defm.Expander do
     env = %{env | line: dot_meta[:line] || meta[:line] || env.line}
     {module, state, env} = expand(module, state, env)
     arity = length(args)
-    state = update_in(state.remotes, &[{module, fun, arity} | &1])
+    mfa = {module, fun, arity}
+    state = update_in(state.remotes, &[mfa | &1])
 
     if is_atom(module) do
       try do
@@ -489,6 +490,42 @@ defmodule Charms.Defm.Expander do
                 {args, state, env} = expand(args, state, env)
                 {apply(MLIR.Attribute, fun, args), state, env}
 
+              mfa == {Module, :__get_attribute__, 4} ->
+                {args, state, env} = expand(args, state, env)
+                attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
+
+                state =
+                  if e = state.mlir.enif_env do
+                    put_mlir_var(state, :charms_internal_env, e)
+                  else
+                    raise ArgumentError,
+                          "to access module attribute in defm, it must be an function with env as the first argument"
+                  end
+
+                quote do
+                  alias Charms.Pointer
+                  alias Charms.Term
+                  charms_internal_attr = unquote(attr)
+                  charms_internal_term_ptr = Pointer.allocate(Term.t())
+                  charms_internal_size = String.length(charms_internal_attr)
+                  charms_internal_buffer_ptr = Pointer.allocate(i8(), charms_internal_size)
+
+                  charms_internal_buffer = ptr_to_memref(charms_internal_buffer_ptr)
+                  memref.copy(charms_internal_attr, charms_internal_buffer)
+
+                  enif_binary_to_term(
+                    charms_internal_env,
+                    charms_internal_buffer_ptr,
+                    charms_internal_size,
+                    charms_internal_term_ptr,
+                    const(0 :: i32())
+                  )
+
+                  Pointer.load(Term.t(), charms_internal_term_ptr)
+                end
+                |> expand(state, env)
+                |> then(&{List.last(elem(&1, 0)), elem(&1, 1), elem(&1, 2)})
+
               (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
                 res
 
@@ -496,14 +533,13 @@ defmodule Charms.Defm.Expander do
                 # By elixir's evaluation order, we should expand the arguments first even if the function is not found.
                 {_, state, env} = expand(args, state, env)
 
-                "Unknown intrinsic: #{inspect(module)}.#{fun}/#{arity}"
+                "Unknown intrinsic: #{Exception.format_mfa(module, fun, arity)}"
                 |> create_poison(state, env)
-                |> then(&{&1, state, env})
             end
         end
       rescue
         e ->
-          reraise e, put_env_in_stacktrace(__STACKTRACE__, env, {module, fun, arity})
+          reraise e, put_env_in_stacktrace(__STACKTRACE__, env, mfa)
       end
     else
       [{dialect, _, _}, op] = [module, fun]
@@ -517,16 +553,22 @@ defmodule Charms.Defm.Expander do
 
         {args, state, env} = expand(args, state, env)
 
-        if arg_op = Enum.find(args, &is_struct(&1, MLIR.Operation)) do
-          case name = MLIR.Operation.name(arg_op) do
-            "func.call" ->
-              callee = Beaver.Walker.attributes(arg_op)["callee"]
+        if invalid_arg = Enum.find(args, &(not is_struct(&1, MLIR.Value))) do
+          case invalid_arg do
+            %MLIR.Operation{} = arg_op ->
+              case name = MLIR.Operation.name(arg_op) do
+                "func.call" ->
+                  callee = Beaver.Walker.attributes(arg_op)["callee"]
 
-              raise ArgumentError,
-                    "#{name} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
+                  raise ArgumentError,
+                        "#{name} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
+
+                _ ->
+                  raise ArgumentError, "#{name} doesn't return a value"
+              end
 
             _ ->
-              raise ArgumentError, "#{name} doesn't return a value"
+              raise ArgumentError, "Invalid operand: #{inspect(invalid_arg)}"
           end
         end
 
