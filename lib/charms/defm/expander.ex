@@ -498,7 +498,8 @@ defmodule Charms.Defm.Expander do
                   if e = state.mlir.enif_env do
                     put_mlir_var(state, :charms_internal_env, e)
                   else
-                    raise ArgumentError, "No enif_env found"
+                    raise ArgumentError,
+                          "to access module attribute in defm, it must be an function with env as the first argument"
                   end
 
                 quote do
