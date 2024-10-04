@@ -517,18 +517,29 @@ defmodule Charms.Defm.Expander do
 
         {args, state, env} = expand(args, state, env)
 
-        op =
-          %Beaver.SSA{
-            op: op,
-            arguments: args,
-            ctx: state.mlir.ctx,
-            block: state.mlir.blk,
-            loc: MLIR.Location.from_env(env),
-            results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
-          }
-          |> MLIR.Operation.create()
+        if arg_op = Enum.find(args, &is_struct(&1, MLIR.Operation)) do
+          case name = MLIR.Operation.name(arg_op) do
+            "func.call" ->
+              callee = Beaver.Walker.attributes(arg_op)["callee"]
 
-        {MLIR.Operation.results(op), state, env}
+              raise ArgumentError,
+                    "#{name} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
+
+            _ ->
+              raise ArgumentError, "#{name} doesn't return a value"
+          end
+        end
+
+        %Beaver.SSA{
+          op: op,
+          arguments: args,
+          ctx: state.mlir.ctx,
+          block: state.mlir.blk,
+          loc: MLIR.Location.from_env(env),
+          results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
+        }
+        |> MLIR.Operation.create()
+        |> then(&{MLIR.Operation.results(&1), state, env})
       rescue
         e ->
           reraise e, put_env_in_stacktrace(__STACKTRACE__, env)
