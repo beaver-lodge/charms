@@ -517,6 +517,10 @@ defmodule Charms.Defm.Expander do
 
         {args, state, env} = expand(args, state, env)
 
+        for %MLIR.Operation{} = op <- args do
+          raise ArgumentError, "#{MLIR.Operation.name(op)} doesn't return a value"
+        end
+
         op =
           %Beaver.SSA{
             op: op,
