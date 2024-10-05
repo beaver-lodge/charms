@@ -3,7 +3,7 @@ defmodule Charms do
   Documentation for `Charms`.
   """
 
-  defmacro __using__(_opts) do
+  defmacro __using__(opts) do
     quote do
       import Charms.Defm
       use Beaver
@@ -14,6 +14,8 @@ defmodule Charms do
 
       @before_compile Charms
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
+      Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
+      @init_at_fun_call Keyword.get(unquote(opts), :init, true)
     end
   end
 

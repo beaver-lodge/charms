@@ -24,7 +24,6 @@ defmodule IfTest do
         func.return(ret)
       end
     end
-    |> Charms.JIT.init()
 
     assert GetIntIf.get(100) == 1
     assert GetIntIf.get(-100) == 0

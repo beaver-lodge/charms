@@ -11,7 +11,6 @@ defmodule ModAttrTest do
         func.return(@a)
       end
     end
-    |> Charms.JIT.init()
 
     assert SomeAttr.get() == :some_attr
   end

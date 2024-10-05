@@ -1,6 +1,6 @@
 defmodule ENIFTimSort do
   @moduledoc false
-  use Charms
+  use Charms, init: false
   alias Charms.{Pointer, Term, Env}
 
   defm insertion_sort(arr :: Pointer.t(), left :: i32(), right :: i32()) do

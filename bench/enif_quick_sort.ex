@@ -1,6 +1,6 @@
 defmodule ENIFQuickSort do
   @moduledoc false
-  use Charms
+  use Charms, init: false
   alias Charms.{Pointer, Term, Env}
 
   defm swap(a :: Pointer.t(), b :: Pointer.t()) do

@@ -1,5 +1,5 @@
 defmodule AddTwoIntVec do
-  use Charms
+  use Charms, init: false
   alias Charms.{SIMD, Term, Pointer}
 
   defm load_list(env, l :: Term.t()) :: SIMD.t(i32(), 8) do

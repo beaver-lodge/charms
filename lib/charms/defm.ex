@@ -76,6 +76,10 @@ defmodule Charms.Defm do
     quote do
       @defm unquote(Macro.escape({env, {call, ret_types, body}}))
       def unquote(name)(unquote_splicing(invoke_args)) do
+        if @init_at_fun_call do
+          {_, %Charms.JIT{}} = Charms.JIT.init(__MODULE__)
+        end
+
         f =
           &Charms.JIT.invoke(&1, {unquote(env.module), unquote(name), unquote(invoke_args)})
 
