@@ -92,10 +92,9 @@ defmodule ENIFMergeSort do
       two = const 2 :: i32()
       m = op arith.divsi(l + r, two) :: i32()
       m = result_at(m, 0)
-
-      call do_sort(arr, l, m) :: []
-      call do_sort(arr, m + 1, r) :: []
-      call merge(arr, l, m, r) :: []
+      do_sort(arr, l, m)
+      do_sort(arr, m + 1, r)
+      merge(arr, l, m, r)
     end
 
     func.return
@@ -111,7 +110,7 @@ defmodule ENIFMergeSort do
       arr = Pointer.allocate(Term.t(), len)
       call ENIFTimSort.copy_terms(env, movable_list_ptr, arr) :: []
       zero = const 0 :: i32()
-      call do_sort(arr, zero, len - 1) :: []
+      do_sort(arr, zero, len - 1)
       ret = enif_make_list_from_array(env, arr, len)
       func.return(ret)
     else
