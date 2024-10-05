@@ -492,7 +492,7 @@ defmodule Charms.Defm.Expander do
                 attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
                 {env_var, state} = env_from_defm!(state)
 
-                # there is no nested do-block to expand, so it is safe to use regular variable names, as long as the updated state and env is not leaked
+                # there is no nested do-block to expand, so it is safe to use regular variable names, as long as the updated state and env are not leaked
                 quote do
                   alias Charms.Pointer
                   alias Charms.Term
@@ -1174,7 +1174,7 @@ defmodule Charms.Defm.Expander do
     if e = state.mlir.enif_env do
       uniq_mlir_var(state, e)
     else
-      raise ArgumentError, "must be an defm with beam env as the first argument"
+      raise ArgumentError, "must be a defm with beam env as the first argument"
     end
   end
 
