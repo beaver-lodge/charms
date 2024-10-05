@@ -1178,16 +1178,11 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  def uniq_name() do
-    :"chv#{System.unique_integer([:positive])}"
-  end
-
   defp uniq_mlir_var() do
-    Macro.var(uniq_name(), nil)
+    Macro.var(:"chv#{System.unique_integer([:positive])}", nil)
   end
 
   defp uniq_mlir_var(state, val) do
-    name = uniq_name()
-    {Macro.var(name, nil), update_in(state.mlir.vars, &Map.put(&1, name, val))}
+    uniq_mlir_var() |> then(&{&1, put_mlir_var(state, &1, val)})
   end
 end
