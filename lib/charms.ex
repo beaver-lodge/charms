@@ -15,7 +15,7 @@ defmodule Charms do
       @before_compile Charms
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
       Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
-      @init_at_fun_call Keyword.get(unquote(opts), :init, true) |> dbg
+      @init_at_fun_call Keyword.get(unquote(opts), :init, true)
     end
   end
 

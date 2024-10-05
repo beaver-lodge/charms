@@ -17,7 +17,6 @@ defmodule StringTest do
         func.return(t)
       end
     end
-    |> Charms.JIT.init()
 
     assert SomeString.get() == "this is a string"
   end
