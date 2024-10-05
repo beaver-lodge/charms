@@ -2,6 +2,7 @@ defmodule VecAddTest do
   use ExUnit.Case, async: true
 
   test "vec add" do
+    {:ok, _} = Charms.JIT.init(AddTwoIntVec)
     a = 1..8 |> Enum.to_list()
     b = List.duplicate(1, 8)
     assert AddTwoIntVec.add(a, b, :err) == Enum.to_list(2..9)
