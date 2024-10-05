@@ -26,17 +26,13 @@ defmodule ENIFQuickSort do
         i = Pointer.load(i32(), i_ptr) + 1
         Pointer.store(i, i_ptr)
         j = value index.casts(j) :: i32()
-
-        call swap(
-               Pointer.element_ptr(Term.t(), arr, i),
-               Pointer.element_ptr(Term.t(), start, j)
-             ) :: []
+        swap(Pointer.element_ptr(Term.t(), arr, i), Pointer.element_ptr(Term.t(), start, j))
       end
     end
 
     i = Pointer.load(i32(), i_ptr)
-    call swap(Pointer.element_ptr(Term.t(), arr, i + 1), Pointer.element_ptr(Term.t(), arr, high))
-    op func.return(i + 1) :: []
+    swap(Pointer.element_ptr(Term.t(), arr, i + 1), Pointer.element_ptr(Term.t(), arr, high))
+    func.return(i + 1)
   end
 
   defm do_sort(arr :: Pointer.t(), low :: i32(), high :: i32()) do
@@ -83,7 +79,7 @@ defmodule ENIFQuickSort do
       arr = Pointer.allocate(Term.t(), len)
       copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
-      call do_sort(arr, zero, len - 1)
+      do_sort(arr, zero, len - 1)
       ret = enif_make_list_from_array(env, arr, len)
       func.return(ret)
     else

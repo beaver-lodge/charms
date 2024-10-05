@@ -3,7 +3,9 @@
 
 Elixir compiler to compile a subset of Elixir to native targets
 
-- [x] `defm` to define native functions, and here are the [examples](/bench/)
+- [x] `defm` to define native functions, some examples
+  - [quick sort](/bench/enif_quick_sort.ex)
+  - [vector add](/bench/vec_add_int_list.ex)
 
 - [ ] SIMD support
 
