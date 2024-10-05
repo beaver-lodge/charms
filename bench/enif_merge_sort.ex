@@ -84,7 +84,7 @@ defmodule ENIFMergeSort do
       Pointer.store(k + 1, k_ptr)
     end
 
-    op func.return() :: []
+    func.return
   end
 
   defm do_sort(arr :: Pointer.t(), l :: i32(), r :: i32()) do
@@ -98,7 +98,7 @@ defmodule ENIFMergeSort do
       call merge(arr, l, m, r) :: []
     end
 
-    op func.return() :: []
+    func.return
   end
 
   defm sort(env, list, err) :: Term.t() do
