@@ -90,6 +90,21 @@ defmodule Charms.JIT do
     |> then(&{:ok, &1})
   end
 
+  defp collect_modules(module, acc \\ [])
+
+  defp collect_modules(module, acc) when is_atom(module) do
+    acc = [module | acc]
+
+    for m <- module.__referenced_modules__(), m not in acc do
+      collect_modules(m, acc)
+    end
+    |> List.flatten()
+    |> Enum.concat(acc)
+    |> Enum.uniq()
+  end
+
+  defp collect_modules(module, _acc), do: module
+
   def init(module, opts \\ [])
 
   def init({:module, module, binary, _}, opts) when is_atom(module) and is_binary(binary) do
@@ -106,8 +121,8 @@ defmodule Charms.JIT do
     modules = modules |> List.wrap()
 
     case {opts[:name], modules} do
-      {name, [_]} when not is_nil(name) ->
-        __MODULE__.LockedCache.run(name, fn -> do_init(modules) end)
+      {name, [m]} when not is_nil(name) ->
+        __MODULE__.LockedCache.run(name, fn -> do_init(collect_modules(m)) end)
 
       {nil, modules} when modules != [] ->
         [key | tail] = modules

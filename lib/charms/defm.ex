@@ -153,6 +153,33 @@ defmodule Charms.Defm do
     :ok
   end
 
+  defp referenced_modules(module) do
+    Beaver.Walker.postwalk(module, MapSet.new(), fn
+      %MLIR.Operation{} = op, acc ->
+        if MLIR.Operation.name(op) == "func.call" do
+          callee = Beaver.Walker.attributes(op)["callee"]
+
+          acc =
+            case callee |> to_string do
+              "@Elixir." <> name ->
+                [m, _f] = name |> String.split(".")
+                acc |> MapSet.put(String.to_atom("Elixir.#{m}"))
+
+              _ ->
+                acc
+            end
+
+          {op, acc}
+        else
+          {op, acc}
+        end
+
+      ir, acc ->
+        {ir, acc}
+    end)
+    |> then(fn {_, acc} -> MapSet.to_list(acc) end)
+  end
+
   @doc false
   def compile_definitions(definitions) do
     import MLIR.Transforms
@@ -186,7 +213,7 @@ defmodule Charms.Defm do
     |> MLIR.Pass.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> canonicalize
     |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
-    |> MLIR.to_string(bytecode: true)
+    |> then(&{MLIR.to_string(&1, bytecode: true), referenced_modules(&1)})
     |> tap(fn _ -> MLIR.Context.destroy(ctx) end)
   end
 
