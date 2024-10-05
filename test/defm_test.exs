@@ -3,7 +3,7 @@ defmodule DefmTest do
 
   test "add two integers" do
     defmodule AddTwoInt do
-      use Charms
+      use Charms, init: false
       alias Charms.{Pointer, Term}
 
       defm add(env, a, b, error) :: Term.t() do
