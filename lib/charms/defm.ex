@@ -131,6 +131,28 @@ defmodule Charms.Defm do
     end
   end
 
+  defp check_poison!(op) do
+    Beaver.Walker.postwalk(op, fn
+      %MLIR.Operation{} = op ->
+        if MLIR.Operation.name(op) == "ub.poison" do
+          if msg = Beaver.Walker.attributes(op)["msg"] do
+            msg = MLIR.CAPI.mlirStringAttrGetValue(msg) |> MLIR.StringRef.to_string()
+            msg <> ", " <> to_string(MLIR.Operation.location(op))
+          else
+            "Poison operation detected in the IR. #{to_string(op)}"
+          end
+          |> raise
+        else
+          op
+        end
+
+      ir ->
+        ir
+    end)
+
+    :ok
+  end
+
   @doc false
   def compile_definitions(definitions) do
     import MLIR.Transforms
@@ -161,6 +183,7 @@ defmodule Charms.Defm do
     m
     |> Charms.Debug.print_ir_pass()
     |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
+    |> MLIR.Pass.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> canonicalize
     |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
     |> MLIR.to_string(bytecode: true)
