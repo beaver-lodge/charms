@@ -494,37 +494,25 @@ defmodule Charms.Defm.Expander do
                 {args, state, env} = expand(args, state, env)
                 attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
 
-                state =
-                  if e = state.mlir.enif_env do
-                    put_mlir_var(state, :charms_internal_env, e)
-                  else
-                    raise ArgumentError,
-                          "to access module attribute in defm, it must be an function with env as the first argument"
-                  end
+                unless state.mlir.enif_env do
+                  raise ArgumentError,
+                        "to access module attribute in defm, it must be an function with env as the first argument"
+                end
 
                 quote do
                   alias Charms.Pointer
                   alias Charms.Term
-                  charms_internal_attr = unquote(attr)
-                  charms_internal_term_ptr = Pointer.allocate(Term.t())
-                  charms_internal_size = String.length(charms_internal_attr)
-                  charms_internal_buffer_ptr = Pointer.allocate(i8(), charms_internal_size)
-
-                  charms_internal_buffer = ptr_to_memref(charms_internal_buffer_ptr)
-                  memref.copy(charms_internal_attr, charms_internal_buffer)
-
-                  enif_binary_to_term(
-                    charms_internal_env,
-                    charms_internal_buffer_ptr,
-                    charms_internal_size,
-                    charms_internal_term_ptr,
-                    const(0 :: i32())
-                  )
-
-                  Pointer.load(Term.t(), charms_internal_term_ptr)
+                  attr = unquote(attr)
+                  term_ptr = Pointer.allocate(Term.t())
+                  size = String.length(attr)
+                  buffer_ptr = Pointer.allocate(i8(), size)
+                  buffer = ptr_to_memref(buffer_ptr)
+                  memref.copy(attr, buffer)
+                  enif_binary_to_term(env, buffer_ptr, size, term_ptr, const(0 :: i32()))
+                  Pointer.load(Term.t(), term_ptr)
                 end
                 |> expand(state, env)
-                |> then(&{List.last(elem(&1, 0)), elem(&1, 1), elem(&1, 2)})
+                |> then(&{List.last(elem(&1, 0)), state, env})
 
               (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
                 res
