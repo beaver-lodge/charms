@@ -113,9 +113,9 @@ defmodule ENIFMergeSort do
       zero = const 0 :: i32()
       call do_sort(arr, zero, len - 1) :: []
       ret = enif_make_list_from_array(env, arr, len)
-      op func.return(ret) :: []
+      func.return(ret)
     else
-      op func.return(err) :: []
+      func.return(err)
     end
   end
 end
