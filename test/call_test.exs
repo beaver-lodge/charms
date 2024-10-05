@@ -21,6 +21,6 @@ defmodule CallTest do
       end)
 
     assert log =~ "Unknown intrinsic: AbsentMod.absent_fun/2"
-    assert log =~ "test/call_test.exs:#{line}"
+    assert log =~ "#{__ENV__.file}:#{line}"
   end
 end
