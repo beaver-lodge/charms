@@ -46,8 +46,6 @@ defmodule DefmTest do
   end
 
   test "quick sort" do
-    Charms.JIT.init(ENIFQuickSort)
-    Charms.JIT.init([ENIFTimSort, ENIFMergeSort])
     assert ENIFQuickSort.sort(:what, :arg_err) == :arg_err
     arr = [5, 4, 3, 2, 1]
     assert ENIFQuickSort.sort(arr, :arg_err) == Enum.sort(arr)

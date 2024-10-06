@@ -103,7 +103,7 @@ defmodule Charms.JIT do
     |> Enum.uniq()
   end
 
-  defp collect_modules(module, _acc), do: module
+  defp collect_modules(module, _acc), do: [module]
 
   def init(module, opts \\ [])
 
@@ -122,15 +122,30 @@ defmodule Charms.JIT do
 
     case {opts[:name], modules} do
       {name, [m]} when not is_nil(name) ->
-        __MODULE__.LockedCache.run(name, fn -> do_init(collect_modules(m)) end)
+        {modules, jit} =
+          __MODULE__.LockedCache.run(name, fn ->
+            modules = collect_modules(m)
+            {:ok, jit} = do_init(modules)
+            {modules, jit}
+          end)
+
+        # modules will be nil if cache is hit
+        modules = modules || []
+
+        for module when is_atom(module) <- modules,
+            module != m do
+          __MODULE__.LockedCache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+        end
+
+        {:ok, jit}
 
       {nil, modules} when modules != [] ->
         [key | tail] = modules
         {:ok, jit} = __MODULE__.LockedCache.run(key, fn -> do_init(modules) end)
 
-        for module <- tail,
-            do:
-              __MODULE__.LockedCache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+        for module <- tail do
+          __MODULE__.LockedCache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+        end
 
       {name, modules} when not is_nil(name) and is_list(modules) ->
         __MODULE__.LockedCache.run(name, fn -> do_init(modules) end)

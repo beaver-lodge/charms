@@ -1,6 +1,3 @@
-mod = AddTwoIntVec
-Charms.JIT.init(mod)
-
 a = b = Enum.to_list(1..10)
 AddTwoIntVec.add(a, b, :err_msg)
 AddTwoIntVec.dummy_load_no_make(a, b, :err_msg)
@@ -26,5 +23,3 @@ Benchee.run(
     {a, b}
   end
 )
-
-Charms.JIT.destroy(mod)
