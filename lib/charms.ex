@@ -25,10 +25,12 @@ defmodule Charms do
       @ir ir
       @referenced_modules referenced_modules
 
+      @doc false
       def __ir__ do
         @ir
       end
 
+      @doc false
       def referenced_modules do
         @referenced_modules
       end
