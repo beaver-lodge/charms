@@ -51,47 +51,6 @@ defmodule Charms.Defm do
   """
   defmacro cond_br(_condition, _clauses), do: :implemented_in_expander
 
-  @doc """
-  define a function that can be JIT compiled
-
-  ## Differences from `Beaver.>>>/2` op expressions
-  - In `Beaver.>>>/2`, MLIR code are expected to mixed with regular Elixir code. While in `defm/2`, there is only Elixir code (a subset of Elixir, to be more precise).
-  - In `defm/2`, the extension of the compiler happens at the function level (define your intrinsics or `defm/2`s), while in `Beaver.>>>/2`, the extension happens at the op level (define your op expression).
-  - In `Beaver.>>>/2` the management of MLIR context and other resources are done by the user, while in `defm/2`, the management of resources are done by the compiler.
-  - In `defm/2`, there is expected to be extra verifications built-in to the compiler (both syntax and types), while in `Beaver.>>>/2`, there is none.
-  """
-  defmacro defm(call, body \\ []) do
-    {call, ret_types} = decompose_call_and_returns(call)
-
-    call = normalize_call(call)
-    {name, args} = Macro.decompose_call(call)
-    env = __CALLER__
-    [_enif_env | invoke_args] = args
-
-    invoke_args =
-      for {:"::", _, [a, _t]} <- invoke_args do
-        a
-      end
-
-    quote do
-      @defm unquote(Macro.escape({env, {call, ret_types, body}}))
-      def unquote(name)(unquote_splicing(invoke_args)) do
-        if @init_at_fun_call do
-          {_, %Charms.JIT{}} = Charms.JIT.init(__MODULE__)
-        end
-
-        f =
-          &Charms.JIT.invoke(&1, {unquote(env.module), unquote(name), unquote(invoke_args)})
-
-        if engine = Charms.JIT.engine(__MODULE__) do
-          f.(engine)
-        else
-          f
-        end
-      end
-    end
-  end
-
   @doc false
   def decompose_call_and_returns(call) do
     case call do
@@ -101,7 +60,7 @@ defmodule Charms.Defm do
   end
 
   @doc false
-  defp normalize_call(call) do
+  def normalize_call(call) do
     {name, args} = Macro.decompose_call(call)
 
     args =

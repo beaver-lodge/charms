@@ -1,4 +1,5 @@
 defmodule AddTwoIntVec do
+  @moduledoc false
   use Charms
   alias Charms.{SIMD, Term, Pointer}
 
