@@ -1,4 +1,7 @@
 defmodule Charms.Prelude do
+  @moduledoc """
+  Intrinsic module to define essential functions provided by Charms.
+  """
   use Charms.Intrinsic
   alias Beaver.MLIR.Dialect.{Arith, Func}
   @enif_functions Beaver.ENIF.functions()

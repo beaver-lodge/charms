@@ -1,4 +1,7 @@
 defmodule Charms.Env do
+  @moduledoc """
+  Intrinsic module for BEAM's types.
+  """
   use Charms.Intrinsic
 
   @impl true

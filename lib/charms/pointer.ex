@@ -1,4 +1,7 @@
 defmodule Charms.Pointer do
+  @moduledoc """
+  Intrinsic module to work with pointers.
+  """
   use Charms.Intrinsic
   alias Beaver.MLIR.{Type, Attribute}
   alias Beaver.MLIR.Dialect.{Arith, LLVM, Index}

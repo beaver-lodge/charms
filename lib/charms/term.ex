@@ -1,4 +1,7 @@
 defmodule Charms.Term do
+  @moduledoc """
+  Intrinsic module for SIMD type.
+  """
   use Charms.Intrinsic
 
   @impl true

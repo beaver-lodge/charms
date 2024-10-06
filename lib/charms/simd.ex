@@ -1,4 +1,7 @@
 defmodule Charms.SIMD do
+  @moduledoc """
+  Intrinsic module for SIMD types.
+  """
   use Charms.Intrinsic
   alias MLIR.Dialect.Arith
   alias MLIR.Type
