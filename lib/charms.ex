@@ -20,7 +20,8 @@ defmodule Charms do
 
   ## Caveats and limitations
 
-  We need a explicit `call` in function call because the `::` special form has a parser priority  that is too low so a `call` macro is introduced to ensure proper scope.
+  - We need a explicit `call` in function call because the `::` special form has a parser priority  that is too low so a `call` macro is introduced to ensure proper scope.
+  - Being variadic, intrinsic must be called with the module name. `import` doesn't work with intrinsic functions while `alias` is supported.
   """
 
   defmacro __using__(opts) do
