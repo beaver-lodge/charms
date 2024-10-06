@@ -1,11 +1,9 @@
 defmodule Charms.Pointer do
   use Charms.Intrinsic
-  @impl true
-
-  use Beaver
   alias Beaver.MLIR.{Type, Attribute}
   alias Beaver.MLIR.Dialect.{Arith, LLVM, Index}
 
+  @impl true
   def handle_intrinsic(:allocate, [elem_type], opts) do
     handle_intrinsic(:allocate, [elem_type, 1], opts)
   end
