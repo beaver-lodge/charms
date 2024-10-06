@@ -34,11 +34,6 @@ defmodule Charms.Prelude do
     v
   end
 
-  @impl true
-  def handle_intrinsic(:result_at, [%MLIR.Value{} = v, i], _opts) when is_integer(i) do
-    v
-  end
-
   def handle_intrinsic(:result_at, [l, i], _opts) when is_list(l) do
     l |> Enum.at(i)
   end
