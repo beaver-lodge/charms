@@ -1,5 +1,5 @@
 defmodule Charms.Prelude do
-  use Beaver
+  use Charms.Intrinsic
   alias Beaver.MLIR.Dialect.{Arith, Func}
   @enif_functions Beaver.ENIF.functions()
   @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :&&, :*]
@@ -31,6 +31,7 @@ defmodule Charms.Prelude do
     v
   end
 
+  @impl true
   def handle_intrinsic(:result_at, [%MLIR.Value{} = v, i], _opts) when is_integer(i) do
     v
   end
