@@ -38,11 +38,11 @@ defmodule DefmTest do
     assert Charms.JIT.invoke(engine, {AddTwoInt, :add, [1, "", :arg_err]}) == :arg_err
     assert Charms.JIT.invoke(engine, &AddTwoInt.add/3, [1, 2, :arg_err]) == 3
     assert Charms.JIT.invoke(engine, &AddTwoInt.add/3, [1, "", :arg_err]) == :arg_err
-    :ok = Charms.JIT.destroy(:add_int)
+    assert :ok = Charms.JIT.destroy(:add_int)
 
     Charms.JIT.init(AddTwoInt)
     assert AddTwoInt.add(1, 2, :arg_err) == 3
-    Charms.JIT.destroy(AddTwoInt)
+    assert :ok = Charms.JIT.destroy(AddTwoInt)
   end
 
   test "quick sort" do
@@ -57,8 +57,8 @@ defmodule DefmTest do
       assert ENIFMergeSort.sort(arr, :arg_err) == Enum.sort(arr)
     end
 
-    :ok = Charms.JIT.destroy(ENIFQuickSort)
-    :noop = Charms.JIT.destroy(ENIFMergeSort)
-    :ok = Charms.JIT.destroy(ENIFTimSort)
+    assert :ok = Charms.JIT.destroy(ENIFQuickSort)
+    assert :noop = Charms.JIT.destroy(ENIFMergeSort)
+    assert :ok = Charms.JIT.destroy(ENIFTimSort)
   end
 end

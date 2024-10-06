@@ -20,7 +20,3 @@ Benchee.run(
     Enum.to_list(1..i) |> Enum.shuffle()
   end
 )
-
-Charms.JIT.destroy(ENIFMergeSort)
-Charms.JIT.destroy(ENIFQuickSort)
-Charms.JIT.destroy(ENIFTimSort)
