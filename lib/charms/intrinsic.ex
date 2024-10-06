@@ -5,7 +5,19 @@ defmodule Charms.Intrinsic do
   alias Beaver
   @type opt :: {:ctx, MLIR.Context.t()} | {:block, MLIR.Block.t()}
   @type opts :: [opt | {atom(), term()}]
-  @callback handle_intrinsic(atom(), [term()], opts()) :: term()
+  @type ir_return :: MLIR.Value.t() | MLIR.Operation.t()
+  @type intrinsic_return :: ir_return() | (any() -> ir_return())
+  @doc """
+  Callback to implement an intrinsic.
+
+  Having different return types, there are two kinds of intrinsic functions:
+  - Regular: returns a MLIR value or operation.
+  - Higher-order: returns a function that returns a MLIR value or operation.
+
+  ## More on higher-order intrinsic
+  Higher-order intrinsic function can be variadic, which means it a list will be passed as arguments.
+  """
+  @callback handle_intrinsic(atom(), [term()], opts()) :: intrinsic_return()
   Module.register_attribute(__MODULE__, :defintrinsic, accumulate: true)
 
   @doc false
