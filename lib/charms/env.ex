@@ -1,6 +1,6 @@
 defmodule Charms.Env do
   @moduledoc """
-  Intrinsic module for BEAM's types.
+  Intrinsic module for BEAM environment's type.
   """
   use Charms.Intrinsic
 
