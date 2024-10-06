@@ -26,7 +26,7 @@ end
 
 ## Development
 
-- run the benchmarks of sorting algorithms
+- run the benchmarks
   ```sh
   mix run bench/sort_benchmark.exs
   mix run bench/list_add_benchmark.exs
