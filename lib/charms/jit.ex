@@ -93,17 +93,19 @@ defmodule Charms.JIT do
   defp collect_modules(module, acc \\ [])
 
   defp collect_modules(module, acc) when is_atom(module) do
-    acc = [module | acc]
+    if module in acc do
+      acc
+    else
+      acc = [module | acc]
 
-    for m <- module.__referenced_modules__(), m not in acc do
-      collect_modules(m, acc)
+      module.__referenced_modules__()
+      |> Enum.reduce(acc, fn m, acc ->
+        collect_modules(m, acc)
+      end)
     end
-    |> List.flatten()
-    |> Enum.concat(acc)
-    |> Enum.uniq()
   end
 
-  defp collect_modules(module, _acc), do: [module]
+  defp collect_modules(module, acc), do: [module | acc]
 
   def init(module, opts \\ [])
 

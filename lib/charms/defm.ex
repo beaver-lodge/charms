@@ -156,22 +156,19 @@ defmodule Charms.Defm do
   defp referenced_modules(module) do
     Beaver.Walker.postwalk(module, MapSet.new(), fn
       %MLIR.Operation{} = op, acc ->
-        if MLIR.Operation.name(op) == "func.call" do
-          callee = Beaver.Walker.attributes(op)["callee"]
+        with "func.call" <- MLIR.Operation.name(op),
+             callee when not is_nil(callee) <- Beaver.Walker.attributes(op)["callee"] do
+          case callee |> to_string do
+            "@Elixir." <> _ = name ->
+              acc |> MapSet.put(extract_mangled_mod(name))
 
-          acc =
-            case callee |> to_string do
-              "@Elixir." <> name ->
-                [m, _f] = name |> String.split(".")
-                acc |> MapSet.put(String.to_atom("Elixir.#{m}"))
-
-              _ ->
-                acc
-            end
-
-          {op, acc}
+            _ ->
+              acc
+          end
+          |> then(&{op, &1})
         else
-          {op, acc}
+          _ ->
+            {op, acc}
         end
 
       ir, acc ->
@@ -220,5 +217,13 @@ defmodule Charms.Defm do
   @doc false
   def mangling(mod, func) do
     Module.concat(mod, func)
+  end
+
+  defp extract_mangled_mod("@" <> name) do
+    name
+    |> String.split(".")
+    |> then(&Enum.take(&1, length(&1) - 1))
+    |> Enum.join(".")
+    |> String.to_atom()
   end
 end
