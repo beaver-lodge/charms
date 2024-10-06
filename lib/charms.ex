@@ -28,10 +28,7 @@ defmodule Charms do
     quote do
       import Charms
       use Beaver
-      require Beaver.MLIR.Dialect.Func
-      alias Beaver.MLIR.Dialect.{Func, Arith, LLVM, CF}
-      alias Beaver.MLIR.{Type, Attribute}
-      import Type
+      import Beaver.MLIR.Type
 
       @before_compile Charms
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
