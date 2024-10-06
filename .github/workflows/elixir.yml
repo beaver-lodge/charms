@@ -45,3 +45,9 @@ jobs:
       - name: Benchmark sort
         run: |
             mix run bench/sort_benchmark.exs
+      - name: Document
+        run: |
+            mix docs
+      - name: Package
+        run: |
+            mix archive.build
