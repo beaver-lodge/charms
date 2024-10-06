@@ -26,8 +26,8 @@ end
 
 ## Development
 
-- run the benchmarks
-  ```sh
-  mix run bench/sort_benchmark.exs
-  mix run bench/list_add_benchmark.exs
-  ```
+To run the benchmarks:
+```sh
+mix run bench/sort_benchmark.exs
+mix run bench/list_add_benchmark.exs
+```
