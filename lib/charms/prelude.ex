@@ -7,10 +7,6 @@ defmodule Charms.Prelude do
   @enif_functions Beaver.ENIF.functions()
   @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :&&, :*]
 
-  def intrinsics() do
-    @enif_functions ++ [:result_at] ++ @binary_ops
-  end
-
   defp constant_of_same_type(i, v, opts) do
     mlir ctx: opts[:ctx], block: opts[:block] do
       t = MLIR.CAPI.mlirValueGetType(v)
@@ -111,5 +107,5 @@ defmodule Charms.Prelude do
     :not_handled
   end
 
-  defintrinsic [:result_at, :!=, :-, :+, :<, :>, :<=, :>=, :==, :&&, :*]
+  defintrinsic @enif_functions ++ [:result_at] ++ @binary_ops
 end

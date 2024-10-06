@@ -398,7 +398,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  @intrinsics Charms.Prelude.intrinsics()
+  @intrinsics Charms.Prelude.__intrinsics__()
   defp expand({fun, _meta, [left, right]}, state, env) when fun in @intrinsics do
     {left, state, env} = expand(left, state, env)
     {right, state, env} = expand(right, state, env)
@@ -1055,7 +1055,6 @@ defmodule Charms.Defm.Expander do
 
   ## Helpers
 
-  @intrinsics Charms.Prelude.intrinsics()
   defp expand_remote(_meta, Kernel, fun, args, state, env) when fun in @intrinsics do
     {args, state, env} = expand(args, state, env)
 
