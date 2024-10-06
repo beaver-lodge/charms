@@ -98,7 +98,7 @@ defmodule Charms.JIT do
     else
       acc = [module | acc]
 
-      module.__referenced_modules__()
+      module.referenced_modules()
       |> Enum.reduce(acc, fn m, acc ->
         collect_modules(m, acc)
       end)
@@ -113,45 +113,23 @@ defmodule Charms.JIT do
     init(module, opts)
   end
 
-  def init(module, opts) when is_atom(module) do
+  def init(module, opts) do
     name = opts[:name] || module
-    opts = Keyword.put_new(opts, :name, name)
-    init([module], opts)
-  end
 
-  def init(modules, opts) do
-    modules = modules |> List.wrap()
+    {modules, jit} =
+      __MODULE__.LockedCache.run(name, fn ->
+        modules = collect_modules(module)
+        {:ok, jit} = do_init(modules)
+        {modules, jit}
+      end)
 
-    case {opts[:name], modules} do
-      {name, [m]} when not is_nil(name) ->
-        {modules, jit} =
-          __MODULE__.LockedCache.run(name, fn ->
-            modules = collect_modules(m)
-            {:ok, jit} = do_init(modules)
-            {modules, jit}
-          end)
-
-        # modules will be nil if cache is hit
-        modules = modules || []
-
-        for module when is_atom(module) <- modules,
-            module != m do
-          __MODULE__.LockedCache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
-        end
-
-        {:ok, jit}
-
-      {nil, modules} when modules != [] ->
-        [key | tail] = modules
-        {:ok, jit} = __MODULE__.LockedCache.run(key, fn -> do_init(modules) end)
-
-        for module <- tail do
-          __MODULE__.LockedCache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
-        end
-
-      {name, modules} when not is_nil(name) and is_list(modules) ->
-        __MODULE__.LockedCache.run(name, fn -> do_init(modules) end)
+    # modules will be nil if cache is hit
+    for m when is_atom(module) <- modules || [],
+        module != m do
+      __MODULE__.LockedCache.run(m, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
     end
+
+    {:ok, jit}
   end
 
   @doc """

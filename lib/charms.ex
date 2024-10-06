@@ -29,9 +29,11 @@ defmodule Charms do
         @ir
       end
 
-      def __referenced_modules__ do
+      def referenced_modules do
         @referenced_modules
       end
+
+      defoverridable referenced_modules: 0
     end
   end
 
