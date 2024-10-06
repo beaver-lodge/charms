@@ -477,7 +477,7 @@ defmodule Charms.Defm.Expander do
             Code.ensure_loaded(module)
 
             cond do
-              function_exported?(module, :handle_intrinsic, 3) ->
+              function_exported?(module, :__intrinsics__, 0) and fun in module.__intrinsics__() ->
                 {args, state, env} = expand(args, state, env)
 
                 {module.handle_intrinsic(fun, args, ctx: state.mlir.ctx, block: state.mlir.blk),

@@ -26,4 +26,6 @@ defmodule Charms.SIMD do
   def handle_intrinsic(:t, [type, width], _opts) do
     Type.vector([width], type)
   end
+
+  defintrinsic [:new, :t]
 end

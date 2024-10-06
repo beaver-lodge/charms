@@ -8,4 +8,6 @@ defmodule Charms.Term do
   def handle_intrinsic(:t, [], opts) do
     Beaver.ENIF.Type.term(opts)
   end
+
+  defintrinsic [:t]
 end

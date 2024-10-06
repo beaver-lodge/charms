@@ -55,4 +55,6 @@ defmodule Charms.Pointer do
   def handle_intrinsic(:t, [], opts) do
     Beaver.Deferred.from_opts(opts, ~t{!llvm.ptr})
   end
+
+  defintrinsic [:t, :allocate, :load, :store, :element_ptr]
 end

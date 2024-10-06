@@ -110,4 +110,6 @@ defmodule Charms.Prelude do
   def handle_intrinsic(_name, _args, _opts) do
     :not_handled
   end
+
+  defintrinsic [:result_at, :!=, :-, :+, :<, :>, :<=, :>=, :==, :&&, :*]
 end
