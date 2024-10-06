@@ -21,10 +21,21 @@ defmodule Charms do
 
   defmacro __before_compile__(_env) do
     quote do
-      @ir @defm |> Enum.reverse() |> Charms.Defm.compile_definitions()
+      {ir, referenced_modules} = @defm |> Enum.reverse() |> Charms.Defm.compile_definitions()
+      @ir ir
+      @referenced_modules referenced_modules
+
+      @doc false
       def __ir__ do
         @ir
       end
+
+      @doc false
+      def referenced_modules do
+        @referenced_modules
+      end
+
+      defoverridable referenced_modules: 0
     end
   end
 

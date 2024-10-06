@@ -153,6 +153,30 @@ defmodule Charms.Defm do
     :ok
   end
 
+  defp referenced_modules(module) do
+    Beaver.Walker.postwalk(module, MapSet.new(), fn
+      %MLIR.Operation{} = op, acc ->
+        with "func.call" <- MLIR.Operation.name(op),
+             callee when not is_nil(callee) <- Beaver.Walker.attributes(op)["callee"] do
+          case callee |> to_string do
+            "@Elixir." <> _ = name ->
+              acc |> MapSet.put(extract_mangled_mod(name))
+
+            _ ->
+              acc
+          end
+          |> then(&{op, &1})
+        else
+          _ ->
+            {op, acc}
+        end
+
+      ir, acc ->
+        {ir, acc}
+    end)
+    |> then(fn {_, acc} -> MapSet.to_list(acc) end)
+  end
+
   @doc false
   def compile_definitions(definitions) do
     import MLIR.Transforms
@@ -186,12 +210,20 @@ defmodule Charms.Defm do
     |> MLIR.Pass.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> canonicalize
     |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
-    |> MLIR.to_string(bytecode: true)
+    |> then(&{MLIR.to_string(&1, bytecode: true), referenced_modules(&1)})
     |> tap(fn _ -> MLIR.Context.destroy(ctx) end)
   end
 
   @doc false
   def mangling(mod, func) do
     Module.concat(mod, func)
+  end
+
+  defp extract_mangled_mod("@" <> name) do
+    name
+    |> String.split(".")
+    |> then(&Enum.take(&1, length(&1) - 1))
+    |> Enum.join(".")
+    |> String.to_atom()
   end
 end

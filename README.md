@@ -28,5 +28,6 @@ end
 
 - run the benchmarks of sorting algorithms
   ```sh
-  mix run bench/sort.exs
+  mix run bench/sort_benchmark.exs
+  mix run bench/list_add_benchmark.exs
   ```

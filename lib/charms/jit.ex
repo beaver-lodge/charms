@@ -90,36 +90,46 @@ defmodule Charms.JIT do
     |> then(&{:ok, &1})
   end
 
+  defp collect_modules(module, acc \\ [])
+
+  defp collect_modules(module, acc) when is_atom(module) do
+    if module in acc do
+      acc
+    else
+      acc = [module | acc]
+
+      module.referenced_modules()
+      |> Enum.reduce(acc, fn m, acc ->
+        collect_modules(m, acc)
+      end)
+    end
+  end
+
+  defp collect_modules(module, acc), do: [module | acc]
+
   def init(module, opts \\ [])
 
   def init({:module, module, binary, _}, opts) when is_atom(module) and is_binary(binary) do
     init(module, opts)
   end
 
-  def init(module, opts) when is_atom(module) do
+  def init(module, opts) do
     name = opts[:name] || module
-    opts = Keyword.put_new(opts, :name, name)
-    init([module], opts)
-  end
 
-  def init(modules, opts) do
-    modules = modules |> List.wrap()
+    {modules, jit} =
+      __MODULE__.LockedCache.run(name, fn ->
+        modules = collect_modules(module)
+        {:ok, jit} = do_init(modules)
+        {modules, jit}
+      end)
 
-    case {opts[:name], modules} do
-      {name, [_]} when not is_nil(name) ->
-        __MODULE__.LockedCache.run(name, fn -> do_init(modules) end)
-
-      {nil, modules} when modules != [] ->
-        [key | tail] = modules
-        {:ok, jit} = __MODULE__.LockedCache.run(key, fn -> do_init(modules) end)
-
-        for module <- tail,
-            do:
-              __MODULE__.LockedCache.run(module, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
-
-      {name, modules} when not is_nil(name) and is_list(modules) ->
-        __MODULE__.LockedCache.run(name, fn -> do_init(modules) end)
+    # modules will be nil if cache is hit
+    for m when is_atom(module) <- modules || [],
+        module != m do
+      __MODULE__.LockedCache.run(m, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
     end
+
+    {:ok, jit}
   end
 
   @doc """

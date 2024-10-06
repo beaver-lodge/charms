@@ -1,6 +1,3 @@
-Charms.JIT.init(ENIFQuickSort)
-Charms.JIT.init([ENIFTimSort, ENIFMergeSort])
-
 arr = Enum.to_list(1..10000) |> Enum.shuffle()
 ENIFQuickSort.sort(arr, :arg_err)
 ENIFMergeSort.sort(arr, :arg_err)
@@ -23,7 +20,3 @@ Benchee.run(
     Enum.to_list(1..i) |> Enum.shuffle()
   end
 )
-
-Charms.JIT.destroy(ENIFMergeSort)
-Charms.JIT.destroy(ENIFQuickSort)
-Charms.JIT.destroy(ENIFTimSort)

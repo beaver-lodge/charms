@@ -13,7 +13,6 @@ defmodule ConstTest do
           one = const 1.0 :: unranked_tensor(f64())
         end
       end
-      |> Charms.JIT.init()
     end
   end
 end
