@@ -79,17 +79,18 @@ defmodule Charms do
     quote do
       @defm unquote(Macro.escape({env, {call, ret_types, body}}))
       def unquote(name)(unquote_splicing(invoke_args)) do
-        if @init_at_fun_call do
-          {_, %Charms.JIT{}} = Charms.JIT.init(__MODULE__)
-        end
+        mfa = {unquote(env.module), unquote(name), unquote(invoke_args)}
 
-        f =
-          &Charms.JIT.invoke(&1, {unquote(env.module), unquote(name), unquote(invoke_args)})
+        cond do
+          @init_at_fun_call ->
+            {_, %Charms.JIT{engine: engine} = jit} = Charms.JIT.init(__MODULE__)
+            Charms.JIT.invoke(engine, mfa)
 
-        if engine = Charms.JIT.engine(__MODULE__) do
-          f.(engine)
-        else
-          f
+          (engine = Charms.JIT.engine(__MODULE__)) != nil ->
+            Charms.JIT.invoke(engine, mfa)
+
+          true ->
+            &Charms.JIT.invoke(&1, mfa)
         end
       end
     end
