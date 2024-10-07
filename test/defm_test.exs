@@ -34,10 +34,8 @@ defmodule DefmTest do
     {:ok, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
     engine = Charms.JIT.engine(:add_int)
     assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
-    assert Charms.JIT.invoke(engine, {AddTwoInt, :add, [1, 2, :arg_err]}) == 3
-    assert Charms.JIT.invoke(engine, {AddTwoInt, :add, [1, "", :arg_err]}) == :arg_err
-    assert Charms.JIT.invoke(engine, &AddTwoInt.add/3, [1, 2, :arg_err]) == 3
-    assert Charms.JIT.invoke(engine, &AddTwoInt.add/3, [1, "", :arg_err]) == :arg_err
+    assert AddTwoInt.add(1, 2, :arg_err).(engine) == 3
+    assert AddTwoInt.add(1, "", :arg_err).(engine) == :arg_err
     assert :ok = Charms.JIT.destroy(:add_int)
 
     Charms.JIT.init(AddTwoInt)

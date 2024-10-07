@@ -147,11 +147,6 @@ defmodule Charms.JIT do
     beaver_raw_jit_invoke_with_terms(ref, to_string(Charms.Defm.mangling(mod, func)), args)
   end
 
-  def invoke(%MLIR.ExecutionEngine{} = engine, f, args)
-      when is_function(f, length(args)) do
-    apply(f, args).(engine)
-  end
-
   def destroy(module) do
     with %__MODULE__{ctx: ctx, engine: engine, owner: true} <-
            __MODULE__.LockedCache.get(module) do
