@@ -61,7 +61,7 @@ defmodule Charms do
   define a function that can be JIT compiled
   """
   defmacro defm(call, body \\ []) do
-    {call, ret_types} = Charms.Defm.decompose_call_and_returns(call)
+    {call, ret_types} = Charms.Defm.decompose_call_with_return_type(call)
 
     call = Charms.Defm.normalize_call(call)
     {name, args} = Macro.decompose_call(call)

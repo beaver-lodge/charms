@@ -52,11 +52,12 @@ defmodule Charms.Defm do
   defmacro cond_br(_condition, _clauses), do: :implemented_in_expander
 
   @doc false
-  def decompose_call_and_returns(call) do
-    case call do
-      {:"::", _, [call, ret_type]} -> {call, [ret_type]}
-      call -> {call, []}
-    end
+  def decompose_call_with_return_type({:"::", _, [call, ret_type]}) do
+    {call, [ret_type]}
+  end
+
+  def decompose_call_with_return_type(call) do
+    {call, []}
   end
 
   @doc false

@@ -940,7 +940,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms.Defm, :op, [call], _callback, state, env) do
-    {call, return_types} = Charms.Defm.decompose_call_and_returns(call)
+    {call, return_types} = Charms.Defm.decompose_call_with_return_type(call)
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
     op = "#{dialect}.#{op}"
     {args, state, env} = expand(args, state, env)
