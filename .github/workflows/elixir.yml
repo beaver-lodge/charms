@@ -37,11 +37,12 @@ jobs:
       - name: Run tests
         run: mix test
       - name: Run dev build
-        run: |
-          mix
+        run: mix
+      - name: Document
+        run: mix docs
+      - name: Package
+        run: mix archive.build
       - name: Benchmark add
-        run: |
-            mix run bench/list_add_benchmark.exs
+        run: mix run bench/list_add_benchmark.exs
       - name: Benchmark sort
-        run: |
-            mix run bench/sort_benchmark.exs
+        run: mix run bench/sort_benchmark.exs

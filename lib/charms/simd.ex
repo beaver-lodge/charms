@@ -1,8 +1,12 @@
 defmodule Charms.SIMD do
-  use Beaver
+  @moduledoc """
+  Intrinsic module for SIMD types.
+  """
+  use Charms.Intrinsic
   alias MLIR.Dialect.Arith
   alias MLIR.Type
 
+  @impl true
   def handle_intrinsic(:new, [type, width], opts) do
     fn literal_values ->
       mlir ctx: opts[:ctx], block: opts[:block] do
@@ -22,4 +26,6 @@ defmodule Charms.SIMD do
   def handle_intrinsic(:t, [type, width], _opts) do
     Type.vector([width], type)
   end
+
+  defintrinsic [:new, :t]
 end

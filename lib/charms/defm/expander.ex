@@ -398,7 +398,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  @intrinsics Charms.Prelude.intrinsics()
+  @intrinsics Charms.Prelude.__intrinsics__()
   defp expand({fun, _meta, [left, right]}, state, env) when fun in @intrinsics do
     {left, state, env} = expand(left, state, env)
     {right, state, env} = expand(right, state, env)
@@ -477,7 +477,7 @@ defmodule Charms.Defm.Expander do
             Code.ensure_loaded(module)
 
             cond do
-              function_exported?(module, :handle_intrinsic, 3) ->
+              function_exported?(module, :__intrinsics__, 0) and fun in module.__intrinsics__() ->
                 {args, state, env} = expand(args, state, env)
 
                 {module.handle_intrinsic(fun, args, ctx: state.mlir.ctx, block: state.mlir.blk),
@@ -940,7 +940,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms.Defm, :op, [call], _callback, state, env) do
-    {call, return_types} = Charms.Defm.decompose_call_and_returns(call)
+    {call, return_types} = Charms.Defm.decompose_call_with_return_type(call)
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
     op = "#{dialect}.#{op}"
     {args, state, env} = expand(args, state, env)
@@ -1055,7 +1055,6 @@ defmodule Charms.Defm.Expander do
 
   ## Helpers
 
-  @intrinsics Charms.Prelude.intrinsics()
   defp expand_remote(_meta, Kernel, fun, args, state, env) when fun in @intrinsics do
     {args, state, env} = expand(args, state, env)
 

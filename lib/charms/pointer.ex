@@ -1,8 +1,12 @@
 defmodule Charms.Pointer do
-  use Beaver
+  @moduledoc """
+  Intrinsic module to work with pointers.
+  """
+  use Charms.Intrinsic
   alias Beaver.MLIR.{Type, Attribute}
   alias Beaver.MLIR.Dialect.{Arith, LLVM, Index}
 
+  @impl true
   def handle_intrinsic(:allocate, [elem_type], opts) do
     handle_intrinsic(:allocate, [elem_type, 1], opts)
   end
@@ -51,4 +55,6 @@ defmodule Charms.Pointer do
   def handle_intrinsic(:t, [], opts) do
     Beaver.Deferred.from_opts(opts, ~t{!llvm.ptr})
   end
+
+  defintrinsic [:t, :allocate, :load, :store, :element_ptr]
 end

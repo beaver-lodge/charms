@@ -1,12 +1,11 @@
 defmodule Charms.Prelude do
-  use Beaver
+  @moduledoc """
+  Intrinsic module to define essential functions provided by Charms.
+  """
+  use Charms.Intrinsic
   alias Beaver.MLIR.Dialect.{Arith, Func}
   @enif_functions Beaver.ENIF.functions()
   @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :&&, :*]
-
-  def intrinsics() do
-    @enif_functions ++ [:result_at] ++ @binary_ops
-  end
 
   defp constant_of_same_type(i, v, opts) do
     mlir ctx: opts[:ctx], block: opts[:block] do
@@ -28,10 +27,6 @@ defmodule Charms.Prelude do
   end
 
   defp wrap_arg({v, _}, _) do
-    v
-  end
-
-  def handle_intrinsic(:result_at, [%MLIR.Value{} = v, i], _opts) when is_integer(i) do
     v
   end
 
@@ -111,4 +106,6 @@ defmodule Charms.Prelude do
   def handle_intrinsic(_name, _args, _opts) do
     :not_handled
   end
+
+  defintrinsic @enif_functions ++ [:result_at] ++ @binary_ops
 end
