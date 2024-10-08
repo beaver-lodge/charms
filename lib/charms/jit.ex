@@ -25,11 +25,11 @@ defmodule Charms.JIT do
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
   end
 
-  defp clone_func_impl(to, from) do
+  defp clone_ops(to, from) do
     ops = MLIR.Module.body(from) |> Beaver.Walker.operations()
     s_table = to |> MLIR.Operation.from_module() |> mlirSymbolTableCreate()
 
-    for op <- ops, MLIR.Operation.name(op) == "func.func" do
+    for op <- ops, MLIR.Operation.name(op) in ~w{func.func memref.global} do
       sym = mlirOperationGetAttributeByName(op, mlirSymbolTableGetSymbolAttributeName())
       found = mlirSymbolTableLookup(s_table, mlirStringAttrGetValue(sym))
       body = MLIR.Module.body(to)
@@ -52,15 +52,9 @@ defmodule Charms.JIT do
     [head | tail] = modules
 
     for module <- tail do
-      if MLIR.is_null(module) do
-        raise "can't merge a null module"
-      end
-
-      clone_func_impl(head, module)
-
-      if destroy do
-        MLIR.Module.destroy(module)
-      end
+      if MLIR.is_null(module), do: raise("can't merge a null module")
+      clone_ops(head, module)
+      if destroy, do: MLIR.Module.destroy(module)
     end
 
     head

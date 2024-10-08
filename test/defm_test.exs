@@ -44,15 +44,16 @@ defmodule DefmTest do
   end
 
   test "quick sort" do
-    assert ENIFQuickSort.sort(:what, :arg_err) == :arg_err
+    assert_raise ArgumentError, "list expected", fn -> ENIFQuickSort.sort(:what) end
+
     arr = [5, 4, 3, 2, 1]
-    assert ENIFQuickSort.sort(arr, :arg_err) == Enum.sort(arr)
+    assert ENIFQuickSort.sort(arr) == Enum.sort(arr)
 
     for i <- 0..1000 do
       arr = 0..i |> Enum.shuffle()
-      assert ENIFTimSort.sort(arr, :arg_err) == Enum.sort(arr)
-      assert ENIFQuickSort.sort(arr, :arg_err) == Enum.sort(arr)
-      assert ENIFMergeSort.sort(arr, :arg_err) == Enum.sort(arr)
+      assert ENIFTimSort.sort(arr) == Enum.sort(arr)
+      assert ENIFQuickSort.sort(arr) == Enum.sort(arr)
+      assert ENIFMergeSort.sort(arr) == Enum.sort(arr)
     end
 
     assert :ok = Charms.JIT.destroy(ENIFQuickSort)

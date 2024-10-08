@@ -100,10 +100,11 @@ defmodule ENIFMergeSort do
     func.return
   end
 
-  defm sort(env, list, err) :: Term.t() do
+  @err %ArgumentError{message: "list expected"}
+  defm sort(env, list) :: Term.t() do
     len_ptr = Pointer.allocate(i32())
 
-    cond_br(enif_get_list_length(env, list, len_ptr) != 0) do
+    if enif_get_list_length(env, list, len_ptr) != 0 do
       movable_list_ptr = Pointer.allocate(Term.t())
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
@@ -111,10 +112,9 @@ defmodule ENIFMergeSort do
       call ENIFTimSort.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
       do_sort(arr, zero, len - 1)
-      ret = enif_make_list_from_array(env, arr, len)
-      func.return(ret)
+      enif_make_list_from_array(env, arr, len)
     else
-      func.return(err)
+      enif_raise_exception(env, @err)
     end
   end
 end

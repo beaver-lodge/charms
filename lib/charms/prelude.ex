@@ -92,7 +92,7 @@ defmodule Charms.Prelude do
     args = args |> Enum.zip(arg_types) |> Enum.map(&wrap_arg(&1, opts))
 
     mlir ctx: opts[:ctx], block: opts[:block] do
-      Func.call(args, callee: Attribute.flat_symbol_ref("#{name}")) >>>
+      Func.call(args, callee: Attribute.flat_symbol_ref("#{name}"), loc: opts[:loc]) >>>
         case ret_types do
           [ret] ->
             ret

@@ -14,8 +14,7 @@ defmodule VecAddTest do
         alias Charms.SIMD
 
         defm six(env, a, b, error) do
-          v1 = SIMD.new(i32(), 8).(1, 1, 1, 1, 1, 1)
-          func.return()
+          SIMD.new(i32(), 8).(1, 1, 1, 1, 1, 1)
         end
       end
     end

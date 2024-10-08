@@ -3,7 +3,7 @@ defmodule Charms.Intrinsic do
   Behaviour to define intrinsic functions.
   """
   alias Beaver
-  @type opt :: {:ctx, MLIR.Context.t()} | {:block, MLIR.Block.t()}
+  @type opt :: {:ctx, MLIR.Context.t()} | {:block, MLIR.Block.t() | {:loc, MLIR.Location.t()}}
   @type opts :: [opt | {atom(), term()}]
   @type ir_return :: MLIR.Value.t() | MLIR.Operation.t()
   @type intrinsic_return :: ir_return() | (any() -> ir_return())

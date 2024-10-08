@@ -113,6 +113,25 @@ defmodule Charms.Defm do
     :ok
   end
 
+  # if it is single block with no terminator, add a return
+  defp append_missing_return(func) do
+    with [r] <- Beaver.Walker.regions(func) |> Enum.to_list(),
+         [b] <- Beaver.Walker.blocks(r) |> Enum.to_list(),
+         last_op = %MLIR.Operation{} <-
+           Beaver.Walker.operations(b) |> Enum.to_list() |> List.last(),
+         false <- MLIR.Operation.name(last_op) == "func.return" do
+      mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), block: b do
+        results = Beaver.Walker.results(last_op) |> Enum.to_list()
+        Func.return(results) >>> []
+      end
+    else
+      _ ->
+        nil
+    end
+
+    :ok
+  end
+
   defp referenced_modules(module) do
     Beaver.Walker.postwalk(module, MapSet.new(), fn
       %MLIR.Operation{} = op, acc ->
@@ -166,6 +185,10 @@ defmodule Charms.Defm do
 
     m
     |> Charms.Debug.print_ir_pass()
+    |> MLIR.Pass.Composer.nested(
+      "func.func",
+      {"append_missing_return", "func.func", &append_missing_return/1}
+    )
     |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
     |> MLIR.Pass.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> canonicalize
