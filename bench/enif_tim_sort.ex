@@ -32,8 +32,6 @@ defmodule ENIFTimSort do
       j = Pointer.load(i32(), j_ptr)
       Pointer.store(temp, Pointer.element_ptr(Term.t(), arr, j + 1))
     end
-
-    func.return()
   end
 
   defm tim_sort(arr :: Pointer.t(), n :: i32()) do
@@ -73,8 +71,6 @@ defmodule ENIFTimSort do
 
       Pointer.store(size * 2, size_ptr)
     end
-
-    func.return()
   end
 
   defm copy_terms(env :: Env.t(), movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
@@ -97,24 +93,22 @@ defmodule ENIFTimSort do
       Pointer.store(head_val, ith_term_ptr)
       Pointer.store(i + 1, i_ptr)
     end
-
-    func.return()
   end
 
-  defm sort(env, list, err) :: Term.t() do
+  @err %ArgumentError{message: "list expected"}
+  defm sort(env, list) :: Term.t() do
     len_ptr = Pointer.allocate(i32())
 
-    cond_br(enif_get_list_length(env, list, len_ptr) != 0) do
+    if enif_get_list_length(env, list, len_ptr) != 0 do
       movable_list_ptr = Pointer.allocate(Term.t())
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
       copy_terms(env, movable_list_ptr, arr)
       tim_sort(arr, len)
-      ret = enif_make_list_from_array(env, arr, len)
-      func.return(ret)
+      enif_make_list_from_array(env, arr, len)
     else
-      func.return(err)
+      enif_raise_exception(env, @err)
     end
   end
 end

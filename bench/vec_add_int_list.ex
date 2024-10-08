@@ -18,7 +18,6 @@ defmodule AddTwoIntVec do
       Pointer.load(i32(), v_ptr)
       |> vector.insertelement(acc, i)
     end)
-    |> func.return()
   end
 
   defm add(env, a, b, error) :: Term.t() do
@@ -27,20 +26,17 @@ defmodule AddTwoIntVec do
     v = arith.addi(v1, v2)
     start = const 0 :: i32()
 
-    ret =
-      enif_make_list8(
-        env,
-        enif_make_int(env, vector.extractelement(v, start)),
-        enif_make_int(env, vector.extractelement(v, start + 1)),
-        enif_make_int(env, vector.extractelement(v, start + 2)),
-        enif_make_int(env, vector.extractelement(v, start + 3)),
-        enif_make_int(env, vector.extractelement(v, start + 4)),
-        enif_make_int(env, vector.extractelement(v, start + 5)),
-        enif_make_int(env, vector.extractelement(v, start + 6)),
-        enif_make_int(env, vector.extractelement(v, start + 7))
-      )
-
-    func.return(ret)
+    enif_make_list8(
+      env,
+      enif_make_int(env, vector.extractelement(v, start)),
+      enif_make_int(env, vector.extractelement(v, start + 1)),
+      enif_make_int(env, vector.extractelement(v, start + 2)),
+      enif_make_int(env, vector.extractelement(v, start + 3)),
+      enif_make_int(env, vector.extractelement(v, start + 4)),
+      enif_make_int(env, vector.extractelement(v, start + 5)),
+      enif_make_int(env, vector.extractelement(v, start + 6)),
+      enif_make_int(env, vector.extractelement(v, start + 7))
+    )
   end
 
   defm dummy_load_no_make(env, a, b, error) :: Term.t() do

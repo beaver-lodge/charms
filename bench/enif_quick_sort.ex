@@ -11,7 +11,6 @@ defmodule ENIFQuickSort do
     Pointer.store(val_a, b)
     val_tmp = Pointer.load(Term.t(), tmp)
     Pointer.store(val_tmp, a)
-    func.return()
   end
 
   defm partition(arr :: Pointer.t(), low :: i32(), high :: i32()) :: i32() do
@@ -41,8 +40,6 @@ defmodule ENIFQuickSort do
       do_sort(arr, low, pi - 1)
       do_sort(arr, pi + 1, high)
     end
-
-    func.return()
   end
 
   defm copy_terms(env :: Env.t(), movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
@@ -65,14 +62,13 @@ defmodule ENIFQuickSort do
       Pointer.store(head_val, ith_term_ptr)
       Pointer.store(i + 1, i_ptr)
     end
-
-    func.return()
   end
 
-  defm sort(env, list, err) :: Term.t() do
+  @err %ArgumentError{message: "list expected"}
+  defm sort(env, list) :: Term.t() do
     len_ptr = Pointer.allocate(i32())
 
-    cond_br(enif_get_list_length(env, list, len_ptr) != 0) do
+    if enif_get_list_length(env, list, len_ptr) != 0 do
       movable_list_ptr = Pointer.allocate(Term.t())
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
@@ -80,10 +76,9 @@ defmodule ENIFQuickSort do
       copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
       do_sort(arr, zero, len - 1)
-      ret = enif_make_list_from_array(env, arr, len)
-      func.return(ret)
+      enif_make_list_from_array(env, arr, len)
     else
-      func.return(err)
+      enif_raise_exception(env, @err)
     end
   end
 end

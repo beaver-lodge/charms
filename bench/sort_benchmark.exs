@@ -1,14 +1,14 @@
 arr = Enum.to_list(1..10000) |> Enum.shuffle()
-ENIFQuickSort.sort(arr, :arg_err)
-ENIFMergeSort.sort(arr, :arg_err)
-ENIFTimSort.sort(arr, :arg_err)
+ENIFQuickSort.sort(arr)
+ENIFMergeSort.sort(arr)
+ENIFTimSort.sort(arr)
 
 Benchee.run(
   %{
     "Enum.sort" => &Enum.sort/1,
-    "enif_quick_sort" => &ENIFQuickSort.sort(&1, :arg_err),
-    "enif_merge_sort" => &ENIFMergeSort.sort(&1, :arg_err),
-    "enif_tim_sort" => &ENIFTimSort.sort(&1, :arg_err)
+    "enif_quick_sort" => &ENIFQuickSort.sort(&1),
+    "enif_merge_sort" => &ENIFMergeSort.sort(&1),
+    "enif_tim_sort" => &ENIFTimSort.sort(&1)
   },
   inputs: %{
     "array size 10" => 10,

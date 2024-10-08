@@ -402,10 +402,12 @@ defmodule Charms.Defm.Expander do
   defp expand({fun, _meta, [left, right]}, state, env) when fun in @intrinsics do
     {left, state, env} = expand(left, state, env)
     {right, state, env} = expand(right, state, env)
+    loc = MLIR.Location.from_env(env)
 
     {Charms.Prelude.handle_intrinsic(fun, [left, right],
        ctx: state.mlir.ctx,
-       block: state.mlir.blk
+       block: state.mlir.blk,
+       loc: loc
      ), state, env}
   end
 
@@ -463,6 +465,7 @@ defmodule Charms.Defm.Expander do
     arity = length(args)
     mfa = {module, fun, arity}
     state = update_in(state.remotes, &[mfa | &1])
+    loc = MLIR.Location.from_env(env)
 
     if is_atom(module) do
       try do
@@ -480,8 +483,11 @@ defmodule Charms.Defm.Expander do
               function_exported?(module, :__intrinsics__, 0) and fun in module.__intrinsics__() ->
                 {args, state, env} = expand(args, state, env)
 
-                {module.handle_intrinsic(fun, args, ctx: state.mlir.ctx, block: state.mlir.blk),
-                 state, env}
+                {module.handle_intrinsic(fun, args,
+                   ctx: state.mlir.ctx,
+                   block: state.mlir.blk,
+                   loc: loc
+                 ), state, env}
 
               module == MLIR.Attribute ->
                 {args, state, env} = expand(args, state, env)
@@ -499,8 +505,9 @@ defmodule Charms.Defm.Expander do
                   attr = unquote(attr)
                   term_ptr = Pointer.allocate(Term.t())
                   size = String.length(attr)
+                  size = value index.casts(size) :: i64()
                   buffer_ptr = Pointer.allocate(i8(), size)
-                  buffer = ptr_to_memref(buffer_ptr)
+                  buffer = ptr_to_memref(buffer_ptr, size)
                   memref.copy(attr, buffer)
                   zero = const 0 :: i32()
                   enif_binary_to_term(unquote(env_var), buffer_ptr, size, term_ptr, zero)
@@ -659,21 +666,23 @@ defmodule Charms.Defm.Expander do
 
   ## Fallback
 
+  @const_prefix "chc"
   defp expand(ast, state, env) when is_binary(ast) do
     s_table = state.mlir.mod |> MLIR.Operation.from_module() |> MLIR.CAPI.mlirSymbolTableCreate()
-    sym_name = "__const__" <> :crypto.hash(:sha256, ast)
+    sym_name = @const_prefix <> :crypto.hash(:sha256, ast)
     found = MLIR.CAPI.mlirSymbolTableLookup(s_table, MLIR.StringRef.create(sym_name))
+    loc = MLIR.Location.from_env(env)
 
     mlir ctx: state.mlir.ctx, block: MLIR.Module.body(state.mlir.mod) do
       if MLIR.is_null(found) do
-        MemRef.global(ast, sym_name: Attribute.string(sym_name)) >>> :infer
+        MemRef.global(ast, sym_name: Attribute.string(sym_name), loc: loc) >>> :infer
       else
         found
       end
       |> then(
         &mlir block: state.mlir.blk do
           name = Attribute.flat_symbol_ref(Attribute.unwrap(&1[:sym_name]))
-          MemRef.get_global(name: name) >>> Attribute.unwrap(&1[:type])
+          MemRef.get_global(name: name, loc: loc) >>> Attribute.unwrap(&1[:type])
         end
       )
     end
@@ -851,6 +860,7 @@ defmodule Charms.Defm.Expander do
     true_body = Keyword.fetch!(clauses, :do)
     false_body = clauses[:else]
     {condition, state, env} = expand(condition, state, env)
+    loc = MLIR.Location.from_env(env)
 
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
@@ -861,7 +871,7 @@ defmodule Charms.Defm.Expander do
           end
 
         # TODO: doc about an expression which is a value and an operation
-        SCF.if [condition] do
+        SCF.if [condition, loc: loc] do
           region do
             MLIR.CAPI.mlirRegionAppendOwnedBlock(Beaver.Env.region(), b)
           end
@@ -1056,11 +1066,13 @@ defmodule Charms.Defm.Expander do
   ## Helpers
 
   defp expand_remote(_meta, Kernel, fun, args, state, env) when fun in @intrinsics do
+    loc = MLIR.Location.from_env(env)
     {args, state, env} = expand(args, state, env)
 
     {Charms.Prelude.handle_intrinsic(fun, args,
        ctx: state.mlir.ctx,
-       block: state.mlir.blk
+       block: state.mlir.blk,
+       loc: loc
      ), state, env}
   end
 
@@ -1086,6 +1098,7 @@ defmodule Charms.Defm.Expander do
     state = update_in(state.locals, &[{fun, length(args)} | &1])
     {args, state, env} = expand_list(args, state, env)
     Code.ensure_loaded!(MLIR.Type)
+    loc = MLIR.Location.from_env(env)
 
     if function_exported?(MLIR.Type, fun, 1) do
       {apply(MLIR.Type, fun, [[ctx: state.mlir.ctx]]), state, env}
@@ -1093,7 +1106,8 @@ defmodule Charms.Defm.Expander do
       case i =
              Charms.Prelude.handle_intrinsic(fun, args,
                ctx: state.mlir.ctx,
-               block: state.mlir.blk
+               block: state.mlir.blk,
+               loc: loc
              ) do
         :not_handled ->
           create_call(env.module, fun, args, [], state, env)
@@ -1177,8 +1191,9 @@ defmodule Charms.Defm.Expander do
     end
   end
 
+  @var_prefix "chv"
   defp uniq_mlir_var() do
-    Macro.var(:"chv#{System.unique_integer([:positive])}", nil)
+    Macro.var(:"#{@var_prefix}#{System.unique_integer([:positive])}", nil)
   end
 
   defp uniq_mlir_var(state, val) do

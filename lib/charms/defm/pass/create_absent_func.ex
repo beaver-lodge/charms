@@ -42,8 +42,15 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
                name_str <- MLIR.StringRef.to_string(name),
                false <- MapSet.member?(created, name_str) do
             mlir ctx: ctx, block: block do
+              {arg_types, ret_types} =
+                if s = Beaver.ENIF.signature(ctx, String.to_atom(name_str)) do
+                  s
+                else
+                  {arg_types, ret_types}
+                end
+
               Func.func _(
-                          sym_name: "\"#{name_str}\"",
+                          sym_name: MLIR.Attribute.string(name_str),
                           sym_visibility: MLIR.Attribute.string("private"),
                           function_type: Type.function(arg_types, ret_types)
                         ) do
