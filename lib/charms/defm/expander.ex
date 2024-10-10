@@ -797,7 +797,7 @@ defmodule Charms.Defm.Expander do
           raise ArgumentError, "Invalid argument type ##{i + 1}"
         end
 
-        if i = Enum.find_index(ret_types, &(!is_struct(&1, MLIR.Type))) do
+        if i = Enum.find_index(List.wrap(ret_types), &(!is_struct(&1, MLIR.Type))) do
           raise ArgumentError, "Invalid return type ##{i + 1}"
         end
 
