@@ -64,7 +64,8 @@ defmodule DefmTest do
       end
     end
 
-    {:ok, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
+    {key, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
+    assert key == :add_int
     engine = Charms.JIT.engine(:add_int)
     assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
     assert AddTwoInt.add(1, 2, :arg_err).(engine) == 3

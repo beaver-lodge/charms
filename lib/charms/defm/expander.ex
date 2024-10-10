@@ -669,7 +669,7 @@ defmodule Charms.Defm.Expander do
   @const_prefix "chc"
   defp expand(ast, state, env) when is_binary(ast) do
     s_table = state.mlir.mod |> MLIR.Operation.from_module() |> MLIR.CAPI.mlirSymbolTableCreate()
-    sym_name = @const_prefix <> :crypto.hash(:sha256, ast)
+    sym_name = @const_prefix <> "#{:erlang.phash2(ast)}"
     found = MLIR.CAPI.mlirSymbolTableLookup(s_table, MLIR.StringRef.create(sym_name))
     loc = MLIR.Location.from_env(env)
 

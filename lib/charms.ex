@@ -62,9 +62,21 @@ defmodule Charms do
       @referenced_modules unquote(referenced_modules)
       unquote_splicing(r)
 
+      @ir_hash [
+        :erlang.phash2(@ir)
+        | for r <- @referenced_modules, r != __MODULE__ do
+            r.__ir__hash__()
+          end
+      ]
+
       @doc false
       def __ir__ do
         @ir
+      end
+
+      @doc false
+      def __ir__hash__ do
+        @ir_hash
       end
 
       @doc false

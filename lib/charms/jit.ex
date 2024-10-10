@@ -109,31 +109,40 @@ defmodule Charms.JIT do
   end
 
   def init(module, opts) do
-    name = opts[:name] || module
+    key = opts[:name] || module.__ir__hash__()
 
     {modules, jit} =
-      LockedCache.run(name, fn ->
+      LockedCache.run(key, fn ->
         modules = collect_modules(module)
         {:ok, jit} = do_init(modules)
         {modules, jit}
       end)
 
     # modules will be nil if cache is hit
-    if modules do
+    if opts[:name] == nil and modules do
       for m when is_atom(module) <- modules,
           module != m do
-        LockedCache.run(m, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+        LockedCache.run(m.__ir__hash__(), fn -> {:ok, %__MODULE__{jit | owner: false}} end)
       end
     end
 
-    {:ok, jit}
+    {key, jit}
+  end
+
+  defp key_of_module(module) do
+    if function_exported?(module, :__ir__hash__, 0) do
+      module.__ir__hash__()
+    else
+      module
+    end
   end
 
   @doc """
   Returns the JIT engine for the given module.
   """
   def engine(module) do
-    if jit = LockedCache.get(module), do: jit.engine
+    key = key_of_module(module)
+    if jit = LockedCache.get(key), do: jit.engine
   end
 
   def invoke(%MLIR.ExecutionEngine{ref: ref}, {mod, func, args}) do
@@ -141,7 +150,9 @@ defmodule Charms.JIT do
   end
 
   def destroy(module) do
-    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- LockedCache.get(module) do
+    key = key_of_module(module)
+
+    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- LockedCache.get(key) do
       MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
     else
