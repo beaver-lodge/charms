@@ -26,6 +26,14 @@ defmodule DefmTest do
     end
   end
 
+  test "only env defm is exported" do
+    refute function_exported?(RefereeMod, :term_roundtrip1, 0)
+    refute function_exported?(RefereeMod, :term_roundtrip1, 1)
+    refute function_exported?(RefereeMod, :term_roundtrip1, 2)
+    assert 1 = RefereeMod.term_roundtrip0(1)
+    assert 1 = ReferrerMod.term_roundtrip(1)
+  end
+
   test "add two integers" do
     defmodule AddTwoInt do
       use Charms, init: false
@@ -40,8 +48,8 @@ defmodule DefmTest do
             func.return(error)
           end
 
-        cond_br(enif_get_int64(env, a, ptr_a) != 0) do
-          cond_br(0 != enif_get_int64(env, b, ptr_b)) do
+        cond_br enif_get_int64(env, a, ptr_a) != 0 do
+          cond_br 0 != enif_get_int64(env, b, ptr_b) do
             a = Pointer.load(i64(), ptr_a)
             b = Pointer.load(i64(), ptr_b)
             sum = value llvm.add(a, b) :: i64()
@@ -82,7 +90,8 @@ defmodule DefmTest do
     end
 
     assert :ok = Charms.JIT.destroy(ENIFQuickSort)
-    assert :noop = Charms.JIT.destroy(ENIFMergeSort)
+    assert :ok = Charms.JIT.destroy(ENIFMergeSort)
     assert :ok = Charms.JIT.destroy(ENIFTimSort)
+    assert :noop = Charms.JIT.destroy(SortUtil)
   end
 end
