@@ -2,6 +2,7 @@ defmodule Charms.JIT do
   alias Beaver.MLIR.Dialect.Func
   import Beaver.MLIR.CAPI
   alias Beaver.MLIR
+  alias __MODULE__.LockedCache
 
   defstruct ctx: nil, engine: nil, owner: true
 
@@ -108,33 +109,40 @@ defmodule Charms.JIT do
   end
 
   def init(module, opts) do
-    name = opts[:name] || module
+    key = opts[:name] || module.__ir__hash__()
 
     {modules, jit} =
-      __MODULE__.LockedCache.run(name, fn ->
+      LockedCache.run(key, fn ->
         modules = collect_modules(module)
         {:ok, jit} = do_init(modules)
         {modules, jit}
       end)
 
     # modules will be nil if cache is hit
-    for m when is_atom(module) <- modules || [],
-        module != m do
-      __MODULE__.LockedCache.run(m, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+    if opts[:name] == nil and modules do
+      for m when is_atom(module) <- modules,
+          module != m do
+        LockedCache.run(m.__ir__hash__(), fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+      end
     end
 
-    {:ok, jit}
+    {key, jit}
+  end
+
+  defp key_of_module(module) do
+    if function_exported?(module, :__ir__hash__, 0) do
+      module.__ir__hash__()
+    else
+      module
+    end
   end
 
   @doc """
   Returns the JIT engine for the given module.
   """
   def engine(module) do
-    if jit = Charms.JIT.LockedCache.get(module) do
-      jit.engine
-    else
-      nil
-    end
+    key = key_of_module(module)
+    if jit = LockedCache.get(key), do: jit.engine
   end
 
   def invoke(%MLIR.ExecutionEngine{ref: ref}, {mod, func, args}) do
@@ -142,8 +150,9 @@ defmodule Charms.JIT do
   end
 
   def destroy(module) do
-    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <-
-           __MODULE__.LockedCache.get(module) do
+    key = key_of_module(module)
+
+    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- LockedCache.get(key) do
       MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
     else

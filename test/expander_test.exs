@@ -160,7 +160,7 @@ defmodule POCTest do
       |> tap(fn ir -> assert to_string(ir) =~ "@Elixir.ReturnPassedArg" end)
       |> MLIR.Operation.verify!()
       |> tap(fn m ->
-        {:ok, %Charms.JIT{}} = Charms.JIT.init(m, name: :return_this)
+        {_key, %Charms.JIT{}} = Charms.JIT.init(m, name: :return_this)
         engine = Charms.JIT.engine(:return_this)
         assert Charms.JIT.invoke(engine, {ReturnPassedArg, :bar, [:identical]}) == :identical
         assert :ok = Charms.JIT.destroy(:return_this)
