@@ -1,6 +1,31 @@
 defmodule DefmTest do
   use ExUnit.Case, async: true
 
+  test "invalid return of absent alias" do
+    assert_raise ArgumentError, "Invalid return type #1", fn ->
+      defmodule InvalidRet do
+        use Charms
+
+        defm my_function(env, arg1, arg2) :: Term.t() do
+          func.return(arg2)
+        end
+      end
+    end
+  end
+
+  test "invalid arg of absent alias" do
+    assert_raise ArgumentError, "Invalid argument type #2", fn ->
+      defmodule InvalidRet do
+        use Charms
+        alias Charms.Term
+
+        defm my_function(env, arg1 :: Pointer.t(), arg2) :: Term.t() do
+          func.return(arg2)
+        end
+      end
+    end
+  end
+
   test "add two integers" do
     defmodule AddTwoInt do
       use Charms, init: false
