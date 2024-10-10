@@ -792,6 +792,15 @@ defmodule Charms.Defm.Expander do
       mlir ctx: state.mlir.ctx, block: parent_block do
         {ret_types, state, env} = ret_types |> expand(state, env)
         {arg_types, state, env} = arg_types |> expand(state, env)
+
+        if i = Enum.find_index(arg_types, &(!is_struct(&1, MLIR.Type))) do
+          raise ArgumentError, "Invalid argument type ##{i + 1}"
+        end
+
+        if i = Enum.find_index(ret_types, &(!is_struct(&1, MLIR.Type))) do
+          raise ArgumentError, "Invalid return type ##{i + 1}"
+        end
+
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
         Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
