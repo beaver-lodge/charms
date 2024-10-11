@@ -63,11 +63,12 @@ defmodule Charms do
       unquote_splicing(r)
 
       @ir_hash [
-        :erlang.phash2(@ir)
-        | for r <- @referenced_modules, r != __MODULE__ do
-            r.__ir__hash__()
-          end
-      ]
+                 :erlang.phash2(@ir)
+                 | for r <- @referenced_modules, r != __MODULE__ do
+                     r.__ir_digest__()
+                   end
+               ]
+               |> List.flatten()
 
       @doc false
       def __ir__ do
@@ -75,7 +76,7 @@ defmodule Charms do
       end
 
       @doc false
-      def __ir__hash__ do
+      def __ir_digest__ do
         @ir_hash
       end
 

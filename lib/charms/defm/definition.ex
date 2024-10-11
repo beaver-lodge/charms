@@ -85,16 +85,13 @@ defmodule Charms.Defm.Definition do
       def unquote(name)(unquote_splicing(invoke_args)) do
         mfa = {unquote(env.module), unquote(name), unquote(invoke_args)}
 
-        cond do
-          @init_at_fun_call ->
-            {_, %Charms.JIT{engine: engine} = jit} = Charms.JIT.init(__MODULE__)
-            Charms.JIT.invoke(engine, mfa)
+        if @init_at_fun_call do
+          {_, %Charms.JIT{engine: engine} = jit} =
+            Charms.JIT.init(__MODULE__, name: __ir_digest__())
 
-          (engine = Charms.JIT.engine(__MODULE__)) != nil ->
-            Charms.JIT.invoke(engine, mfa)
-
-          true ->
-            &Charms.JIT.invoke(&1, mfa)
+          Charms.JIT.invoke(engine, mfa)
+        else
+          &Charms.JIT.invoke(&1, mfa)
         end
       end
     end

@@ -109,7 +109,7 @@ defmodule Charms.JIT do
   end
 
   def init(module, opts) do
-    key = opts[:name] || module.__ir__hash__()
+    key = Keyword.fetch!(opts, :name)
 
     {modules, jit} =
       LockedCache.run(key, fn ->
@@ -119,29 +119,21 @@ defmodule Charms.JIT do
       end)
 
     # modules will be nil if cache is hit
-    if opts[:name] == nil and modules do
+    if modules do
       for m when is_atom(module) <- modules,
           module != m do
-        LockedCache.run(m.__ir__hash__(), fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+        key = m.__ir_digest__()
+        LockedCache.run(key, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
       end
     end
 
     {key, jit}
   end
 
-  defp key_of_module(module) do
-    if function_exported?(module, :__ir__hash__, 0) do
-      module.__ir__hash__()
-    else
-      module
-    end
-  end
-
   @doc """
   Returns the JIT engine for the given module.
   """
-  def engine(module) do
-    key = key_of_module(module)
+  def engine(key) do
     if jit = LockedCache.get(key), do: jit.engine
   end
 
@@ -149,9 +141,7 @@ defmodule Charms.JIT do
     beaver_raw_jit_invoke_with_terms(ref, to_string(Charms.Defm.mangling(mod, func)), args)
   end
 
-  def destroy(module) do
-    key = key_of_module(module)
-
+  def destroy(key) do
     with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- LockedCache.get(key) do
       MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
