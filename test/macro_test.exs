@@ -4,6 +4,6 @@ defmodule MacroTest do
   test "expand macro" do
     assert 100 == CallMacroMod.term_roundtrip1(100)
     assert 200 == CallMacroMod.term_roundtrip2(200)
-    assert :ok = Charms.JIT.destroy(CallMacroMod)
+    assert :ok = Charms.JIT.destroy(CallMacroMod.__ir_digest__())
   end
 end

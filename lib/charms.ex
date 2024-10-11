@@ -22,6 +22,13 @@ defmodule Charms do
 
   - We need a explicit `call` in function call because the `::` special form has a parser priority  that is too low so a `call` macro is introduced to ensure proper scope.
   - Being variadic, intrinsic must be called with the module name. `import` doesn't work with intrinsic functions while `alias` is supported.
+
+  ## Glossary of modules
+
+  - `Charms`: the top level macros `defm` and `use Charms`
+  - `Charms.Defm`: the `defm` DSL syntax and special forms
+  - `Charms.Defm.Definition`: functions to define and compile `defm` functions to MLIR
+  - `Charms.Intrinsic`: the behavior used to define and compile intrinsic functions
   """
 
   defmacro __using__(opts) do
@@ -29,7 +36,8 @@ defmodule Charms do
       import Charms
       use Beaver
       import Beaver.MLIR.Type
-
+      @doc false
+      def __use_ir__, do: nil
       @before_compile Charms
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
       Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
@@ -37,15 +45,39 @@ defmodule Charms do
     end
   end
 
-  defmacro __before_compile__(_env) do
+  defmacro __before_compile__(env) do
+    defm_decls = Module.get_attribute(env.module, :defm) || []
+    {ir, referenced_modules} = defm_decls |> Enum.reverse() |> Charms.Defm.Definition.compile()
+
+    # create uses in Elixir, to disallow loop reference
+    r =
+      for r <- referenced_modules, r != env.module do
+        quote do
+          unquote(r).__use_ir__
+        end
+      end
+
     quote do
-      {ir, referenced_modules} = @defm |> Enum.reverse() |> Charms.Defm.compile_definitions()
-      @ir ir
-      @referenced_modules referenced_modules
+      @ir unquote(ir)
+      @referenced_modules unquote(referenced_modules)
+      unquote_splicing(r)
+
+      @ir_hash [
+                 :erlang.phash2(@ir)
+                 | for r <- @referenced_modules, r != __MODULE__ do
+                     r.__ir_digest__()
+                   end
+               ]
+               |> List.flatten()
 
       @doc false
       def __ir__ do
         @ir
+      end
+
+      @doc false
+      def __ir_digest__ do
+        @ir_hash
       end
 
       @doc false
@@ -61,38 +93,6 @@ defmodule Charms do
   define a function that can be JIT compiled
   """
   defmacro defm(call, body \\ []) do
-    {call, ret_types} = Charms.Defm.decompose_call_with_return_type(call)
-
-    call = Charms.Defm.normalize_call(call)
-    {name, args} = Macro.decompose_call(call)
-
-    {:ok, env} =
-      __CALLER__ |> Macro.Env.define_import([], Charms.Defm, warn: false, only: :macros)
-
-    [_enif_env | invoke_args] = args
-
-    invoke_args =
-      for {:"::", _, [a, _t]} <- invoke_args do
-        a
-      end
-
-    quote do
-      @defm unquote(Macro.escape({env, {call, ret_types, body}}))
-      def unquote(name)(unquote_splicing(invoke_args)) do
-        mfa = {unquote(env.module), unquote(name), unquote(invoke_args)}
-
-        cond do
-          @init_at_fun_call ->
-            {_, %Charms.JIT{engine: engine} = jit} = Charms.JIT.init(__MODULE__)
-            Charms.JIT.invoke(engine, mfa)
-
-          (engine = Charms.JIT.engine(__MODULE__)) != nil ->
-            Charms.JIT.invoke(engine, mfa)
-
-          true ->
-            &Charms.JIT.invoke(&1, mfa)
-        end
-      end
-    end
+    Charms.Defm.Definition.declare(__CALLER__, call, body)
   end
 end

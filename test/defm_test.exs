@@ -26,6 +26,14 @@ defmodule DefmTest do
     end
   end
 
+  test "only env defm is exported" do
+    refute function_exported?(RefereeMod, :term_roundtrip1, 0)
+    refute function_exported?(RefereeMod, :term_roundtrip1, 1)
+    refute function_exported?(RefereeMod, :term_roundtrip1, 2)
+    assert 1 = RefereeMod.term_roundtrip0(1)
+    assert 1 = ReferrerMod.term_roundtrip(1)
+  end
+
   test "add two integers" do
     defmodule AddTwoInt do
       use Charms, init: false
@@ -40,8 +48,8 @@ defmodule DefmTest do
             func.return(error)
           end
 
-        cond_br(enif_get_int64(env, a, ptr_a) != 0) do
-          cond_br(0 != enif_get_int64(env, b, ptr_b)) do
+        cond_br enif_get_int64(env, a, ptr_a) != 0 do
+          cond_br 0 != enif_get_int64(env, b, ptr_b) do
             a = Pointer.load(i64(), ptr_a)
             b = Pointer.load(i64(), ptr_b)
             sum = value llvm.add(a, b) :: i64()
@@ -56,16 +64,13 @@ defmodule DefmTest do
       end
     end
 
-    {:ok, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
+    {key, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
+    assert key == :add_int
     engine = Charms.JIT.engine(:add_int)
     assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
     assert AddTwoInt.add(1, 2, :arg_err).(engine) == 3
     assert AddTwoInt.add(1, "", :arg_err).(engine) == :arg_err
     assert :ok = Charms.JIT.destroy(:add_int)
-
-    Charms.JIT.init(AddTwoInt)
-    assert AddTwoInt.add(1, 2, :arg_err) == 3
-    assert :ok = Charms.JIT.destroy(AddTwoInt)
   end
 
   test "quick sort" do
@@ -81,8 +86,9 @@ defmodule DefmTest do
       assert ENIFMergeSort.sort(arr) == Enum.sort(arr)
     end
 
-    assert :ok = Charms.JIT.destroy(ENIFQuickSort)
-    assert :noop = Charms.JIT.destroy(ENIFMergeSort)
-    assert :ok = Charms.JIT.destroy(ENIFTimSort)
+    assert :ok = Charms.JIT.destroy(ENIFQuickSort.__ir_digest__())
+    assert :ok = Charms.JIT.destroy(ENIFMergeSort.__ir_digest__())
+    assert :ok = Charms.JIT.destroy(ENIFTimSort.__ir_digest__())
+    assert :noop = Charms.JIT.destroy(SortUtil.__ir_digest__())
   end
 end

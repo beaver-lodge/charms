@@ -669,7 +669,7 @@ defmodule Charms.Defm.Expander do
   @const_prefix "chc"
   defp expand(ast, state, env) when is_binary(ast) do
     s_table = state.mlir.mod |> MLIR.Operation.from_module() |> MLIR.CAPI.mlirSymbolTableCreate()
-    sym_name = @const_prefix <> :crypto.hash(:sha256, ast)
+    sym_name = @const_prefix <> "#{:erlang.phash2(ast)}"
     found = MLIR.CAPI.mlirSymbolTableLookup(s_table, MLIR.StringRef.create(sym_name))
     loc = MLIR.Location.from_env(env)
 
@@ -959,7 +959,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms.Defm, :op, [call], _callback, state, env) do
-    {call, return_types} = Charms.Defm.decompose_call_with_return_type(call)
+    {call, return_types} = decompose_call_signature(call)
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
     op = "#{dialect}.#{op}"
     {args, state, env} = expand(args, state, env)
@@ -1207,5 +1207,16 @@ defmodule Charms.Defm.Expander do
 
   defp uniq_mlir_var(state, val) do
     uniq_mlir_var() |> then(&{&1, put_mlir_var(state, &1, val)})
+  end
+
+  @doc """
+  Decomposes a call into the call part and return type.
+  """
+  def decompose_call_signature({:"::", _, [call, ret_type]}) do
+    {call, [ret_type]}
+  end
+
+  def decompose_call_signature(call) do
+    {call, []}
   end
 end
