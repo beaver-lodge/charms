@@ -2,7 +2,7 @@ defmodule Charms.Defm do
   @moduledoc """
   Charms.Defm is a DSL for defining functions that can be JIT-compiled.
 
-  This module define the `defm` DSL syntax as macros and special forms.
+  This module defines the `defm` DSL syntax as macros and special forms.
 
   ## Extending the `defm`
   - use `beaver`'s DSL to define intrinsics which can be called in the function body of a `defm`

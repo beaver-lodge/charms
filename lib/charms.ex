@@ -28,7 +28,7 @@ defmodule Charms do
   - `Charms`: the top level macros `defm` and `use Charms`
   - `Charms.Defm`: the `defm` DSL syntax and special forms
   - `Charms.Defm.Definition`: functions to define and compile `defm` functions to MLIR
-  - `Charms.Intrinsic`: the behavior and define and compile intrinsic functions
+  - `Charms.Intrinsic`: the behavior used to define and compile intrinsic functions
   """
 
   defmacro __using__(opts) do

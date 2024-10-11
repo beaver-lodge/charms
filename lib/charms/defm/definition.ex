@@ -46,15 +46,7 @@ defmodule Charms.Defm.Definition do
     call = normalize_call(call)
     {name, args} = Macro.decompose_call(call)
     {:ok, env} = Macro.Env.define_import(env, [], Charms.Defm, warn: false, only: :macros)
-
-    exported =
-      case args do
-        [{:"::", _, [{:env, _, nil}, _]} | _] ->
-          true
-
-        _ ->
-          false
-      end
+    exported = match?([{:"::", _, [{:env, _, _}, _]} | _], args)
 
     %__MODULE__{
       name: name,
@@ -150,7 +142,7 @@ defmodule Charms.Defm.Definition do
           else
             "Poison operation detected in the IR. #{to_string(op)}"
           end
-          |> raise
+          |> then(&raise ArgumentError, &1)
         else
           op
         end
