@@ -1,7 +1,7 @@
 defmodule ENIFTimSort do
   @moduledoc false
   use Charms
-  alias Charms.{Pointer, Term, Env}
+  alias Charms.{Pointer, Term}
 
   defm insertion_sort(arr :: Pointer.t(), left :: i32(), right :: i32()) do
     start_i = left + 1
@@ -73,28 +73,6 @@ defmodule ENIFTimSort do
     end
   end
 
-  defm copy_terms(env :: Env.t(), movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
-    head = Pointer.allocate(Term.t())
-    zero = const 0 :: i32()
-    i_ptr = Pointer.allocate(i32())
-    Pointer.store(zero, i_ptr)
-
-    while_loop(
-      enif_get_list_cell(
-        env,
-        Pointer.load(Term.t(), movable_list_ptr),
-        head,
-        movable_list_ptr
-      ) > 0
-    ) do
-      head_val = Pointer.load(Term.t(), head)
-      i = Pointer.load(i32(), i_ptr)
-      ith_term_ptr = Pointer.element_ptr(Term.t(), arr, i)
-      Pointer.store(head_val, ith_term_ptr)
-      Pointer.store(i + 1, i_ptr)
-    end
-  end
-
   @err %ArgumentError{message: "list expected"}
   defm sort(env, list) :: Term.t() do
     len_ptr = Pointer.allocate(i32())
@@ -104,7 +82,7 @@ defmodule ENIFTimSort do
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
-      copy_terms(env, movable_list_ptr, arr)
+      call SortUtil.copy_terms(env, movable_list_ptr, arr)
       tim_sort(arr, len)
       enif_make_list_from_array(env, arr, len)
     else

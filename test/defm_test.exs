@@ -64,8 +64,8 @@ defmodule DefmTest do
       end
     end
 
-    {key, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
-    assert key == :add_int
+    assert {:ok, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
+    assert {:cached, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
     engine = Charms.JIT.engine(:add_int)
     assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
     assert AddTwoInt.add(1, 2, :arg_err).(engine) == 3
@@ -78,6 +78,9 @@ defmodule DefmTest do
 
     arr = [5, 4, 3, 2, 1]
     assert ENIFQuickSort.sort(arr) == Enum.sort(arr)
+
+    assert {:cached, %Charms.JIT{}} =
+             Charms.JIT.init(ENIFQuickSort, name: ENIFQuickSort.__ir_digest__())
 
     for i <- 0..1000 do
       arr = 0..i |> Enum.shuffle()

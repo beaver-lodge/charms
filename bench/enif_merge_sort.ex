@@ -25,7 +25,7 @@ defmodule ENIFMergeSort do
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
-      call ENIFTimSort.copy_terms(env, movable_list_ptr, arr)
+      call SortUtil.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
       do_sort(arr, zero, len - 1)
       enif_make_list_from_array(env, arr, len)
