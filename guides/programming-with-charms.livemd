@@ -251,7 +251,7 @@ end
 Exceptional.raise_it(1)
 ```
 
-In this example, we employ a technique using `@err_t` and `@err_v`; in Charms, Elixir's module attributes are serialized and compiled as native values transparently.
+In this example, we employ a technique using `@err_t` and `@err_v`. in Charms, Elixir's module attributes are serialized and compiled as native values transparently.
 
 ## Conclusion
 
