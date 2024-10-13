@@ -2,8 +2,30 @@ defmodule SortUtil do
   use Charms
   alias Charms.{Pointer, Term}
 
+  defm copy_terms(env, movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
+    head = Pointer.allocate(Term.t())
+    zero = const 0 :: i32()
+    i_ptr = Pointer.allocate(i32())
+    Pointer.store(zero, i_ptr)
+
+    while_loop(
+      enif_get_list_cell(
+        env,
+        Pointer.load(Term.t(), movable_list_ptr),
+        head,
+        movable_list_ptr
+      ) > 0
+    ) do
+      head_val = Pointer.load(Term.t(), head)
+      i = Pointer.load(i32(), i_ptr)
+      ith_term_ptr = Pointer.element_ptr(Term.t(), arr, i)
+      Pointer.store(head_val, ith_term_ptr)
+      Pointer.store(i + 1, i_ptr)
+    end
+  end
+
   defm merge(arr :: Pointer.t(), l :: i32(), m :: i32(), r :: i32()) do
-    n1 = m - l + 1 - 1 + 1
+    n1 = m - l + 1
     n2 = r - m
 
     left_temp = Pointer.allocate(Term.t(), n1)

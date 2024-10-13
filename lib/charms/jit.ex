@@ -118,16 +118,18 @@ defmodule Charms.JIT do
         {modules, jit}
       end)
 
+    modules
     # modules will be nil if cache is hit
-    if modules do
-      for m when is_atom(module) <- modules,
-          module != m do
-        key = m.__ir_digest__()
-        LockedCache.run(key, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+    |> tap(
+      &if &1 do
+        for m when is_atom(module) <- modules,
+            module != m do
+          key = m.__ir_digest__()
+          LockedCache.run(key, fn -> {:ok, %__MODULE__{jit | owner: false}} end)
+        end
       end
-    end
-
-    {key, jit}
+    )
+    |> then(&{if(&1, do: :ok, else: :cached), jit})
   end
 
   @doc """

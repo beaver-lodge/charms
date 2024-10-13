@@ -558,7 +558,7 @@ defmodule Charms.Defm.Expander do
               end
 
             _ ->
-              raise ArgumentError, "Invalid operand: #{inspect(invalid_arg)}"
+              raise ArgumentError, "Invalid operand: #{Macro.to_string(invalid_arg)}"
           end
         end
 
