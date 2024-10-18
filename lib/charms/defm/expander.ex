@@ -1,5 +1,22 @@
 defmodule Charms.Defm.Expander do
-  @moduledoc false
+  @moduledoc """
+  Expander is a module of functions to compile Elixir AST to MLIR.
+
+  In MLIR, the process of creating IR from source or AST is usually called "import". While in our case, we are following Elixir's convention to call it "expansion". While we are not just expanding Elixir's AST tree, in the end one Elixir function definition `defm` will be compiled to one MLIR `func.func`.
+
+  ## Working with Elixir's parallel compiler
+  Charms will try to work with Elixir's parallel compiler in the most well-integrated way. This allows us to compile multiple modules at the same time, which can speed up the compilation process. Another benefit is that all `defm` functions can also be executed at compile time, just like vanilla Elixir functions defined by `def`. Behind the scenes, `func.func` generated from `defm` will also be used as reference to infer and check types of a remote function calls when compiling another module.
+  To take deep dive, Elixir has [an official blog post about parallel compiler](https://elixir-lang.org/blog/2012/04/24/a-peek-inside-elixir-s-parallel-compiler/).
+
+  ## Cycle reference
+  Charms will disallow cycle reference. If module A calls module B, then module B cannot call module A. This is to prevent infinite recursion and stream line compile times features. Although this is technically possible as long as function calls and function definitions are following same signature (like the separated complication of C/C++ files and linkage), we still make this trade-off for simplicity.
+
+  ## Compile an AST without enough type information
+  Being an dynamic language, it is possible for Elixir to have an AST that is valid in Elixir but not in MLIR. For example, Elixir allows to define a serial of nested function calls without any return type, like `a(b(c()))`. In Elixir everything is expression so a function call is assumed to always return a value while in MLIR it is possible to have a function call that does not return anything (equivalent to a void function in C). In this case, Charms will generate a `ub.poison` operation with result type `none`. If the result value of created `ub.poison` op will never be used, nothing will happen. If used, it will raise an error in later verification or passes. This is meant to allow Elixir code to work with the AST with interest only on Elixir semantic keep going without interruption as much as possible, and limit the error information to the type level, instead of leaking it to the syntax level.
+
+  ## Return type convention
+  MLIR allows multiple values as a function return, while Elixir only allows one. To keep the convention, internally Charms will always use a list to store function's return type. If the function has only one return, it will be a list with one element. If the function has no return, it will be an empty list. This should streamline the transformation and pattern matching on the function signature.
+  """
   use Beaver
   alias MLIR.Attribute
   alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, Ub, LLVM}
@@ -14,7 +31,9 @@ defmodule Charms.Defm.Expander do
             available_ops: MapSet.new(),
             vars: Map.new(),
             region: nil,
-            enif_env: nil
+            enif_env: nil,
+            dependence_modules: Map.new(),
+            return_types: Map.new()
 
   @env %{
     Macro.Env.prune_compile_info(__ENV__)
@@ -52,7 +71,7 @@ defmodule Charms.Defm.Expander do
   # one which will be further explored and compiled.
   #
   # For compilers, we'd also need two additional features: the ability
-  # to programatically report compiler errors and the ability to
+  # to programmatically report compiler errors and the ability to
   # track variables. This may be added in the future.
   def expand(ast, file) do
     ctx = MLIR.Context.create()
@@ -74,13 +93,16 @@ defmodule Charms.Defm.Expander do
     )
   end
 
-  def expand_with(ast, env, mlir = %__MODULE__{ctx: ctx}) do
+  @doc """
+  Expand an AST into MLIR.
+  """
+  def expand_to_mlir(ast, env, mlir_expander = %__MODULE__{ctx: ctx}) do
     available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
-    mlir = mlir |> Map.put(:available_ops, available_ops)
+    mlir_expander = mlir_expander |> Map.put(:available_ops, available_ops)
 
     expand(
       ast,
-      %{attrs: [], remotes: [], locals: [], definitions: [], vars: [], mlir: mlir},
+      %{attrs: [], remotes: [], locals: [], definitions: [], vars: [], mlir: mlir_expander},
       env
     )
   end
@@ -110,6 +132,87 @@ defmodule Charms.Defm.Expander do
     |> then(&{&1, state, env})
   end
 
+  # Cache and return a dependence module
+  defp fetch_dependence_module(module, state) do
+    update_in(
+      state.mlir.dependence_modules,
+      &Map.put_new_lazy(&1, module, fn ->
+        MLIR.Module.create(state.mlir.ctx, module.__ir__()) |> MLIR.Operation.from_module()
+      end)
+    )
+    |> then(&{&1.mlir.dependence_modules[module], &1})
+  end
+
+  defp infer_by_lookup(dependence, mod, name, types) do
+    symbolTable = dependence |> MLIR.CAPI.mlirSymbolTableCreate()
+
+    sym =
+      MLIR.CAPI.mlirSymbolTableLookup(
+        symbolTable,
+        MLIR.StringRef.create(mangling(mod, name))
+      )
+
+    if !MLIR.is_null(sym) do
+      if MLIR.Operation.name(sym) == "func.func" do
+        ft = sym[:function_type] |> MLIR.Attribute.unwrap()
+
+        case {List.wrap(types),
+              MLIR.CAPI.mlirFunctionTypeGetNumResults(ft) |> Beaver.Native.to_term()} do
+          {[t], 1} ->
+            MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
+            |> tap(
+              &if(!MLIR.equal?(&1, t),
+                do:
+                  raise(
+                    ArgumentError,
+                    "function #{name} has a different return type #{to_string(t)}"
+                  )
+              )
+            )
+
+          # infer the return type
+          {[], 1} ->
+            MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
+
+          {[], 0} ->
+            []
+
+          _ ->
+            raise ArgumentError,
+                  "function call #{name} different return type from its definition"
+        end
+      else
+        raise ArgumentError, "symbol #{name} is not a function"
+      end
+    else
+      raise ArgumentError, "function #{name} not found in module #{inspect(mod)}"
+    end
+  end
+
+  defp infer_by_resolving(name, types, state) do
+    case {state.mlir.return_types[name], List.wrap(types)} do
+      {nil, types} ->
+        types
+
+      {f, []} when is_function(f, 0) ->
+        f.()
+
+      {f, [t]} ->
+        case f.() do
+          [] ->
+            types
+
+          [%MLIR.Type{} = inferred_t] ->
+            if MLIR.equal?(inferred_t, t) do
+              types
+            else
+              raise ArgumentError,
+                    "function #{name} has an incompatible return type #{to_string(t)}"
+            end
+        end
+    end
+  end
+
   defp expand_call_of_types(call, types, state, env) do
     {mod, name, args, state, env} =
       case Macro.decompose_call(call) do
@@ -122,10 +225,38 @@ defmodule Charms.Defm.Expander do
           {env.module, name, args, state, env}
       end
 
-    state = update_in(state.remotes, &[{mod, name, length(args)} | &1])
+    arity = length(args)
+
+    # By elixir's evaluation order, we should expand the arguments first even the function is not found.
+
     {args, state, env} = expand(args, state, env)
     {types, state, env} = expand(types, state, env)
-    create_call(mod, name, args, types, state, env)
+
+    cond do
+      # invalid arguments, create poison
+      invalid_arg = Enum.find(args, &(not is_struct(&1, MLIR.Value))) ->
+        "Invalid operand #{Macro.to_string(invalid_arg)} when calling #{Exception.format_mfa(mod, name, arity)}"
+        |> create_poison(state, env)
+
+      # remote call, inter the type by looking up symbol in the dependence module
+      mod != env.module and match?({:module, _}, Code.ensure_compiled(mod)) and Code.loaded?(mod) and
+          function_exported?(mod, :__ir__, 0) ->
+        state = update_in(state.remotes, &[{mod, name, arity} | &1])
+        {dependence, state} = fetch_dependence_module(mod, state)
+
+        infer_by_lookup(dependence, mod, name, types)
+        |> then(&create_call(mod, name, args, &1, state, env))
+
+      # local call, resolve the expanding the type in callee's definition
+      mod == env.module ->
+        infer_by_resolving(name, types, state)
+        |> then(&create_call(mod, name, args, &1, state, env))
+
+      # remote call, but the module is absent, create poison
+      true ->
+        "Unknown intrinsic: #{Exception.format_mfa(mod, name, arity)}"
+        |> create_poison(state, env)
+    end
   end
 
   defp has_implemented_inference(op, ctx) when is_bitstring(op) do
@@ -477,10 +608,9 @@ defmodule Charms.Defm.Expander do
             expand_macro(meta, module, fun, args, callback, state, env)
 
           :error ->
-            Code.ensure_loaded(module)
-
             cond do
-              function_exported?(module, :__intrinsics__, 0) and fun in module.__intrinsics__() ->
+              Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 0) and
+                  fun in module.__intrinsics__() ->
                 {args, state, env} = expand(args, state, env)
 
                 {module.handle_intrinsic(fun, args,
@@ -520,11 +650,8 @@ defmodule Charms.Defm.Expander do
                 res
 
               true ->
-                # By elixir's evaluation order, we should expand the arguments first even if the function is not found.
-                {_, state, env} = expand(args, state, env)
-
-                "Unknown intrinsic: #{Exception.format_mfa(module, fun, arity)}"
-                |> create_poison(state, env)
+                quote(do: unquote(module).unquote(fun)(unquote_splicing(args)))
+                |> expand_call_of_types([], state, env)
             end
         end
       rescue
@@ -794,11 +921,11 @@ defmodule Charms.Defm.Expander do
         {arg_types, state, env} = arg_types |> expand(state, env)
 
         if i = Enum.find_index(arg_types, &(!is_struct(&1, MLIR.Type))) do
-          raise ArgumentError, "Invalid argument type ##{i + 1}"
+          raise ArgumentError, "invalid argument type ##{i + 1}"
         end
 
-        if i = Enum.find_index(List.wrap(ret_types), &(!is_struct(&1, MLIR.Type))) do
-          raise ArgumentError, "Invalid return type ##{i + 1}"
+        if Enum.find(List.wrap(ret_types), &(!is_struct(&1, MLIR.Type))) do
+          raise ArgumentError, "invalid return type"
         end
 
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
@@ -1119,7 +1246,10 @@ defmodule Charms.Defm.Expander do
                loc: loc
              ) do
         :not_handled ->
-          create_call(env.module, fun, args, [], state, env)
+          quote do
+            unquote(env.module).unquote(fun)(unquote_splicing(args))
+          end
+          |> expand_call_of_types([], state, env)
 
         _ ->
           {i, state, env}

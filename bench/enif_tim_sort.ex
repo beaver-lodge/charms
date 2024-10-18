@@ -63,7 +63,7 @@ defmodule ENIFTimSort do
         right = result_at(right, 0)
 
         if mid < right do
-          call SortUtil.merge(arr, left, mid, right)
+          SortUtil.merge(arr, left, mid, right)
         end
 
         Pointer.store(left + 2 * size, left_ptr)
@@ -82,7 +82,7 @@ defmodule ENIFTimSort do
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
-      call SortUtil.copy_terms(env, movable_list_ptr, arr)
+      SortUtil.copy_terms(env, movable_list_ptr, arr)
       tim_sort(arr, len)
       enif_make_list_from_array(env, arr, len)
     else

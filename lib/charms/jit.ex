@@ -32,7 +32,7 @@ defmodule Charms.JIT do
 
     for op <- ops, MLIR.Operation.name(op) in ~w{func.func memref.global} do
       sym = mlirOperationGetAttributeByName(op, mlirSymbolTableGetSymbolAttributeName())
-      found = mlirSymbolTableLookup(s_table, mlirStringAttrGetValue(sym))
+      found = mlirSymbolTableLookup(s_table, MLIR.Attribute.unwrap(sym))
       body = MLIR.Module.body(to)
 
       if MLIR.is_null(found) do

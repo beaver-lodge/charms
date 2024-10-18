@@ -36,7 +36,7 @@ defmodule ENIFQuickSort do
 
   defm do_sort(arr :: Pointer.t(), low :: i32(), high :: i32()) do
     if low < high do
-      pi = call partition(arr, low, high) :: i32()
+      pi = partition(arr, low, high)
       do_sort(arr, low, pi - 1)
       do_sort(arr, pi + 1, high)
     end
@@ -51,7 +51,7 @@ defmodule ENIFQuickSort do
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
-      call SortUtil.copy_terms(env, movable_list_ptr, arr)
+      SortUtil.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
       do_sort(arr, zero, len - 1)
       enif_make_list_from_array(env, arr, len)

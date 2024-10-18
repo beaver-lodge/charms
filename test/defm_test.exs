@@ -1,12 +1,16 @@
 defmodule DefmTest do
   use ExUnit.Case, async: true
 
+  test "referenced modules" do
+    assert [RefereeMod] == ReferrerMod.referenced_modules()
+  end
+
   test "invalid return of absent alias" do
-    assert_raise ArgumentError, "Invalid return type #1", fn ->
+    assert_raise ArgumentError, "invalid return type", fn ->
       defmodule InvalidRet do
         use Charms
 
-        defm my_function(env, arg1, arg2) :: Term.t() do
+        defm my_function(env, arg1, arg2) :: Invalid.t() do
           func.return(arg2)
         end
       end
@@ -14,7 +18,7 @@ defmodule DefmTest do
   end
 
   test "invalid arg of absent alias" do
-    assert_raise ArgumentError, "Invalid argument type #2", fn ->
+    assert_raise ArgumentError, "invalid argument type #2", fn ->
       defmodule InvalidRet do
         use Charms
         alias Charms.Term
@@ -93,5 +97,41 @@ defmodule DefmTest do
     assert :ok = Charms.JIT.destroy(ENIFMergeSort.__ir_digest__())
     assert :ok = Charms.JIT.destroy(ENIFTimSort.__ir_digest__())
     assert :noop = Charms.JIT.destroy(SortUtil.__ir_digest__())
+  end
+
+  describe "different calls" do
+    test "call with return type" do
+      assert :with == DifferentCalls.with_return_type(:with)
+    end
+
+    test "call without return type" do
+      assert :without == DifferentCalls.without_return_type(:without)
+    end
+
+    test "undefined remote function" do
+      assert_raise ArgumentError, "function something not found in module DifferentCalls", fn ->
+        defmodule Undefined do
+          use Charms
+
+          defm without_call_macro(env, i) do
+            DifferentCalls.something(i)
+          end
+        end
+      end
+    end
+
+    test "wrong return type remote function" do
+      assert_raise ArgumentError,
+                   "function without_return_type has a different return type f32",
+                   fn ->
+                     defmodule WrongReturnType do
+                       use Charms
+
+                       defm without_call_macro(env, i) do
+                         call DifferentCalls.without_return_type(env, i) :: f32()
+                       end
+                     end
+                   end
+    end
   end
 end

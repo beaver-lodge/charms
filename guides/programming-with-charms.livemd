@@ -4,7 +4,7 @@
 
 Charms is an Elixir compiler that allows you to compile a subset of Elixir to native targets. It provides a Domain-Specific Language (DSL) for defining functions that can be JIT-compiled and executed alongside the BEAM virtual machine. In this tutorial, we will explore how to use Charms to write native code and run it.
 
-## Step 1: Setting Up Your Module
+## Setting Up Your Module
 
 To start using Charms, define a module and include the Charms DSL:
 
@@ -16,7 +16,7 @@ end
 
 This sets up your module to leverage Charms and imports commonly used modules.
 
-## Step 2: Defining Functions with `defm`
+## Defining Functions with `defm`
 
 Instead of using the standard Elixir `def`, utilize `defm` to define functions that can be JIT-compiled:
 
@@ -35,7 +35,7 @@ HaveFun.my_fun(1, :hello)
 
 Note the type annotations here. The first argument, `env`, represents the BEAM environment type (`env :: Charms.Env.t()`), and the types `Term.t()` specify Erlang terms in C.
 
-## Step 3: Calling Other Functions
+## Calling Other Functions
 
 To call other functions defined with `defm`, use the `call` macro:
 
@@ -49,16 +49,19 @@ defmodule CallingAnother do
   end
 
   defm caller_function(env, arg :: Term.t()) :: Term.t() do
-    call callee_function(arg) :: Term.t()
+    fun = call callee_function(arg) :: Term.t()
+    fun = callee_function(arg)
+    fun = call HaveFun.my_fun(env, fun, fun) :: Term.t()
+    HaveFun.my_fun(env, fun, fun)
   end
 end
 
 CallingAnother.caller_function("hello")
 ```
 
-The `call` macro is essential because it allows the expression `callee_function(arg)` to declare its return type.
+The `call` macro is essential when you want to declare the return type of an expression.
 
-## Step 4: Using Pointers and Memory Operations
+## Using Pointers and Memory Operations
 
 Charms provides low-level memory operations through the `Pointer` module:
 
@@ -79,7 +82,7 @@ Dangerous.use_a_pointer(1)
 
 Yes, Charms **can** crash BEAM. We hope that as the project evolves, its safety features will improve.
 
-## Step 5: Native Types and ENIF Functions
+## Native Types and ENIF Functions
 
 Charms provides several native types. Here are some of the key types:
 
@@ -103,7 +106,7 @@ defmodule PlayWithErlangRuntime do
     i_ptr = Pointer.allocate(i32())
     enif_get_int(env, i, i_ptr)
     i = Pointer.load(i32(), i_ptr)
-    sum = call do_add(i, i) :: i32()
+    sum = do_add(i, i)
     enif_make_int(env, sum)
   end
 end
@@ -111,13 +114,13 @@ end
 PlayWithErlangRuntime.add(1)
 ```
 
-`add/1` is the only function exported to Elixir in this module, which means you cannot call the `do_add/2` function from Elixir. Use `function_exported?/3` to verify this:
+`add/1` is the only function exported to Elixir in this module, which means you cannot invoke the `do_add/2` function from Elixir. Use `function_exported?/3` to verify this:
 
 ```elixir
 function_exported?(MyModule1, :do_add, 2)
 ```
 
-## Step 6: Control Flow
+## Control Flow
 
 Charms supports conditional statements and loops, which are vital for implementing logic in your native code.
 
@@ -176,7 +179,7 @@ defmodule ControlFlowWhile do
     ) do
       min = Pointer.load(Term.t(), min_ptr)
       head = Pointer.load(Term.t(), head_ptr)
-      min = call ControlFlowIf.if_example(env, min, head) :: Term.t()
+      min = ControlFlowIf.if_example(env, min, head)
       Pointer.store(min, min_ptr)
     end
 
@@ -191,7 +194,7 @@ In the `loop_example/2` function, we manage dynamic memory allocation for list t
 
 Effectively employing control flow allows you to implement complex algorithms and logic directly in your Charms functions.
 
-## Step 7: Working with Constants
+## Working with Constants
 
 In addition to retrieving value types from Erlang terms, you can use the `const` macro to define constants with Elixir literals:
 
@@ -209,7 +212,7 @@ end
 Constantly.how_much()
 ```
 
-## Step 8: Error Handling
+## Error Handling
 
 You can raise exceptions by creating an Erlang exception term using `enif_raise_exception`, as demonstrated below. Unlike Elixir's `raise`, which introduces special control flow, `enif_raise_exception` does not alter the control flow in the same way when raising exceptions.
 
