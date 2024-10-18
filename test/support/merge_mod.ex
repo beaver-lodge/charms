@@ -22,7 +22,7 @@ defmodule SubMod1 do
   alias Charms.Term
 
   defm get_term(env, i) :: Term.t() do
-    i = call SubMod0.get_term(env, i) :: Term.t()
+    i = call SubMod0.get_term(env, i)
     func.return(i)
   end
 

@@ -1,4 +1,7 @@
 defmodule POCTest do
+  @moduledoc """
+  This test suite was created to ensure that original Elixir semantics and conventions will be preserved and respected in Charms.
+  """
   alias Charms.Defm.Expander, as: POC
   alias Beaver.MLIR
   use ExUnit.Case, async: true
@@ -127,16 +130,7 @@ defmodule POCTest do
     test "imports modules" do
       # The macro discards the content, so if the module is imported,
       # the macro is invoked and contents are discarded
-      assert %FunctionClauseError{
-               module: MLIR.Operation.Changeset,
-               function: :add_argument,
-               arity: 2,
-               kind: nil,
-               args: nil,
-               clauses: nil
-             } = catch_error(remotes("discard_import(foo())"))
-
-      # assert locals("discard_import(foo())") == [discard_import: 1, foo: 0]
+      assert locals("discard_import(foo())") == [discard_import: 1, foo: 0]
       assert locals("import POCTest; discard_import(foo())") == []
     end
   end

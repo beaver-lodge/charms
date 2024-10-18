@@ -21,8 +21,8 @@ defmodule AddTwoIntVec do
   end
 
   defm add(env, a, b, error) :: Term.t() do
-    v1 = call load_list(env, a) :: SIMD.t(i32(), 8)
-    v2 = call load_list(env, b) :: SIMD.t(i32(), 8)
+    v1 = load_list(env, a)
+    v2 = load_list(env, b)
     v = arith.addi(v1, v2)
     start = const 0 :: i32()
 
@@ -40,8 +40,8 @@ defmodule AddTwoIntVec do
   end
 
   defm dummy_load_no_make(env, a, b, error) :: Term.t() do
-    v1 = call load_list(env, a) :: SIMD.t(i32(), 8)
-    v2 = call load_list(env, b) :: SIMD.t(i32(), 8)
+    v1 = load_list(env, a)
+    v2 = load_list(env, b)
     func.return(a)
   end
 

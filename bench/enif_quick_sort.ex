@@ -1,7 +1,7 @@
 defmodule ENIFQuickSort do
   @moduledoc false
   use Charms
-  alias Charms.{Pointer, Term, Env}
+  alias Charms.{Pointer, Term}
 
   defm swap(a :: Pointer.t(), b :: Pointer.t()) do
     tmp = Pointer.allocate(Term.t())
@@ -36,31 +36,9 @@ defmodule ENIFQuickSort do
 
   defm do_sort(arr :: Pointer.t(), low :: i32(), high :: i32()) do
     if low < high do
-      pi = call partition(arr, low, high) :: i32()
+      pi = partition(arr, low, high)
       do_sort(arr, low, pi - 1)
       do_sort(arr, pi + 1, high)
-    end
-  end
-
-  defm copy_terms(env :: Env.t(), movable_list_ptr :: Pointer.t(), arr :: Pointer.t()) do
-    head = Pointer.allocate(Term.t())
-    zero = const 0 :: i32()
-    i_ptr = Pointer.allocate(i32())
-    Pointer.store(zero, i_ptr)
-
-    while_loop(
-      enif_get_list_cell(
-        env,
-        Pointer.load(Term.t(), movable_list_ptr),
-        head,
-        movable_list_ptr
-      ) > 0
-    ) do
-      head_val = Pointer.load(Term.t(), head)
-      i = Pointer.load(i32(), i_ptr)
-      ith_term_ptr = Pointer.element_ptr(Term.t(), arr, i)
-      Pointer.store(head_val, ith_term_ptr)
-      Pointer.store(i + 1, i_ptr)
     end
   end
 
@@ -73,7 +51,7 @@ defmodule ENIFQuickSort do
       Pointer.store(list, movable_list_ptr)
       len = Pointer.load(i32(), len_ptr)
       arr = Pointer.allocate(Term.t(), len)
-      copy_terms(env, movable_list_ptr, arr)
+      SortUtil.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
       do_sort(arr, zero, len - 1)
       enif_make_list_from_array(env, arr, len)
