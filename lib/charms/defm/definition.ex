@@ -91,6 +91,9 @@ defmodule Charms.Defm.Definition do
 
   @doc """
   Declare a function that can be JIT compiled and generate Elixir invoker function.
+  Declare a function that can be JIT compiled and generate Elixir invoker function.
+
+  The call signature will be decomposed and transformed into a normalized form.
   """
   def declare(env, call, body) do
     d = new(env, call, body)
@@ -137,8 +140,9 @@ defmodule Charms.Defm.Definition do
       %MLIR.Operation{} = op ->
         if MLIR.Operation.name(op) == "ub.poison" do
           if msg = Beaver.Walker.attributes(op)["msg"] do
-            msg = MLIR.CAPI.mlirStringAttrGetValue(msg) |> MLIR.StringRef.to_string()
-            msg <> ", " <> to_string(MLIR.Operation.location(op))
+            MLIR.Attribute.unwrap(msg)
+            |> MLIR.StringRef.to_string()
+            |> then(&(&1 <> ", " <> to_string(MLIR.Operation.location(op))))
           else
             "Poison operation detected in the IR. #{to_string(op)}"
           end
@@ -161,9 +165,23 @@ defmodule Charms.Defm.Definition do
          last_op = %MLIR.Operation{} <-
            Beaver.Walker.operations(b) |> Enum.to_list() |> List.last(),
          false <- MLIR.Operation.name(last_op) == "func.return" do
-      mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), block: b do
-        results = Beaver.Walker.results(last_op) |> Enum.to_list()
-        Func.return(results) >>> []
+      case func[:function_type]
+           |> MLIR.Attribute.unwrap()
+           |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
+           |> Beaver.Native.to_term() do
+        0 ->
+          mlir ctx: MLIR.CAPI.mlirOperationGetContext(func), block: b do
+            Func.return(loc: MLIR.Operation.location(func)) >>> []
+          end
+
+        1 ->
+          mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), block: b do
+            results = Beaver.Walker.results(last_op) |> Enum.to_list()
+            Func.return(results, loc: MLIR.Operation.location(last_op)) >>> []
+          end
+
+        _ ->
+          raise ArgumentError, "Multiple return values are not supported yet."
       end
     else
       _ ->
@@ -199,6 +217,12 @@ defmodule Charms.Defm.Definition do
 
   @doc """
   Compile definitions into MLIR module.
+  Compile definitions into an MLIR module.
+
+  ## Partial and lazy compilation
+  When compiling `defm`, Charms performs preprocessing before the definition is fully translated to the target language or IR. Notable preprocessing steps include:
+  - Extracting the return type of the `defm` definition, and wrapping it as an anonymous function to be called on-demand at the invocation site.
+  - Determine the MLIR ops available in the definition.
   """
   def compile(definitions) when is_list(definitions) do
     import MLIR.Transforms
@@ -206,7 +230,7 @@ defmodule Charms.Defm.Definition do
     m = MLIR.Module.create(ctx, "")
 
     mlir ctx: ctx, block: MLIR.Module.body(m) do
-      mlir = %Charms.Defm.Expander{
+      mlir_expander = %Charms.Defm.Expander{
         ctx: ctx,
         blk: Beaver.Env.block(),
         available_ops: MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx)),
@@ -216,11 +240,29 @@ defmodule Charms.Defm.Definition do
         mod: m
       }
 
+      # at this moment, we wrap it in the simplest way, before we decide what expander state to use.
+      return_types =
+        for %__MODULE__{name: name, env: env, ret_types: ret_types} <- definitions do
+          {name,
+           fn ->
+             {m, _, _} =
+               quote do
+                 unquote(ret_types)
+               end
+               |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
+
+             m
+           end}
+        end
+        |> Map.new()
+
+      mlir_expander = %Charms.Defm.Expander{mlir_expander | return_types: return_types}
+
       for %__MODULE__{env: env, call: call, ret_types: ret_types, body: body} <- definitions do
         quote do
           def(unquote(call) :: unquote(ret_types), unquote(body))
         end
-        |> Charms.Defm.Expander.expand_with(env, mlir)
+        |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
       end
     end
 

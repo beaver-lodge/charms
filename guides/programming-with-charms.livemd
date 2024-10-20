@@ -1,0 +1,261 @@
+# Tutorial: Programming with Charms
+
+## Introduction
+
+Charms is an Elixir compiler that allows you to compile a subset of Elixir to native targets. It provides a Domain-Specific Language (DSL) for defining functions that can be JIT-compiled and executed alongside the BEAM virtual machine. In this tutorial, we will explore how to use Charms to write native code and run it.
+
+## Setting Up Your Module
+
+To start using Charms, define a module and include the Charms DSL:
+
+```elixir
+defmodule Charming do
+  use Charms
+end
+```
+
+This sets up your module to leverage Charms and imports commonly used modules.
+
+## Defining Functions with `defm`
+
+Instead of using the standard Elixir `def`, utilize `defm` to define functions that can be JIT-compiled:
+
+```elixir
+defmodule HaveFun do
+  use Charms
+  alias Charms.Term
+
+  defm my_fun(env, arg1 :: Term.t(), arg2 :: Term.t()) :: Term.t() do
+    func.return(arg2)
+  end
+end
+
+HaveFun.my_fun(1, :hello)
+```
+
+Note the type annotations here. The first argument, `env`, represents the BEAM environment type (`env :: Charms.Env.t()`), and the types `Term.t()` specify Erlang terms in C.
+
+## Calling Other Functions
+
+To call other functions defined with `defm`, use the `call` macro:
+
+```elixir
+defmodule CallingAnother do
+  use Charms
+  alias Charms.Term
+
+  defm callee_function(arg :: Term.t()) :: Term.t() do
+    func.return(arg)
+  end
+
+  defm caller_function(env, arg :: Term.t()) :: Term.t() do
+    fun = call callee_function(arg) :: Term.t()
+    fun = callee_function(arg)
+    fun = call HaveFun.my_fun(env, fun, fun) :: Term.t()
+    HaveFun.my_fun(env, fun, fun)
+  end
+end
+
+CallingAnother.caller_function("hello")
+```
+
+The `call` macro is essential when you want to declare the return type of an expression.
+
+## Using Pointers and Memory Operations
+
+Charms provides low-level memory operations through the `Pointer` module:
+
+```elixir
+defmodule Dangerous do
+  use Charms
+  alias Charms.{Term, Pointer}
+
+  defm use_a_pointer(env, value :: Term.t()) :: Term.t() do
+    ptr = Pointer.allocate(Term.t())
+    Pointer.store(value, ptr)
+    Pointer.load(Term.t(), ptr)
+  end
+end
+
+Dangerous.use_a_pointer(1)
+```
+
+Yes, Charms **can** crash BEAM. We hope that as the project evolves, its safety features will improve.
+
+## Native Types and ENIF Functions
+
+Charms provides several native types. Here are some of the key types:
+
+* `Term.t()`: Represents an Erlang term
+* `Pointer.t()`: Represents a pointer
+* `Env.t()`: Represents the BEAM environment
+* `i32()`, `i64()`: Represent integer types
+
+You can make use of Erlang's ENIF functions to work with these types. Let's define a native function that specifies types for both arguments and the return value:
+
+```elixir
+defmodule PlayWithErlangRuntime do
+  use Charms
+  alias Charms.{Env, Term, Pointer}
+
+  defm do_add(a :: i32(), b :: i32()) :: i32() do
+    a + b
+  end
+
+  defm add(env :: Env.t(), i) :: Term.t() do
+    i_ptr = Pointer.allocate(i32())
+    enif_get_int(env, i, i_ptr)
+    i = Pointer.load(i32(), i_ptr)
+    sum = do_add(i, i)
+    enif_make_int(env, sum)
+  end
+end
+
+PlayWithErlangRuntime.add(1)
+```
+
+`add/1` is the only function exported to Elixir in this module, which means you cannot invoke the `do_add/2` function from Elixir. Use `function_exported?/3` to verify this:
+
+```elixir
+function_exported?(MyModule1, :do_add, 2)
+```
+
+## Control Flow
+
+Charms supports conditional statements and loops, which are vital for implementing logic in your native code.
+
+### If-Else Control
+
+For conditional logic, you can use `if` expressions. Below is an example that compares two values and returns the lesser one:
+
+```elixir
+defmodule ControlFlowIf do
+  use Charms
+  alias Charms.Term
+
+  defm if_example(env, a, b) :: Term.t() do
+    if enif_compare(a, b) < 0 do
+      a
+    else
+      b
+    end
+  end
+end
+
+ControlFlowIf.if_example(1, 2)
+```
+
+In this function, we utilize `enif_compare/2` to determine which value is smaller, permitting a straightforward control flow. Notably, in Charms, both branches of the `if` must return values of the same type.
+
+### While Loops
+
+You can implement loops using `while` constructs. Here's an example that iterates over a list to find the minimum value:
+
+```elixir
+defmodule ControlFlowWhile do
+  use Charms
+  alias Charms.{Term, Pointer}
+
+  defm loop_example(env, list :: Term.t()) :: Term.t() do
+    movable_list_ptr = Pointer.allocate(Term.t())
+    Pointer.store(list, movable_list_ptr)
+    head_ptr = Pointer.allocate(Term.t())
+    min_ptr = Pointer.allocate(Term.t())
+
+    enif_get_list_cell(
+      env,
+      Pointer.load(Term.t(), movable_list_ptr),
+      min_ptr,
+      movable_list_ptr
+    )
+
+    while(
+      enif_get_list_cell(
+        env,
+        Pointer.load(Term.t(), movable_list_ptr),
+        head_ptr,
+        movable_list_ptr
+      ) > 0
+    ) do
+      min = Pointer.load(Term.t(), min_ptr)
+      head = Pointer.load(Term.t(), head_ptr)
+      min = ControlFlowIf.if_example(env, min, head)
+      Pointer.store(min, min_ptr)
+    end
+
+    Pointer.load(Term.t(), min_ptr)
+  end
+end
+
+[:a, :b, 1, 2, 3] |> Enum.shuffle() |> ControlFlowWhile.loop_example()
+```
+
+In the `loop_example/2` function, we manage dynamic memory allocation for list traversal using pointers. The `while` checks if there are still elements to be processed in the list and updates the minimum value accordingly.
+
+Effectively employing control flow allows you to implement complex algorithms and logic directly in your Charms functions.
+
+## Working with Constants
+
+In addition to retrieving value types from Erlang terms, you can use the `const` macro to define constants with Elixir literals:
+
+```elixir
+defmodule Constantly do
+  use Charms
+  alias Charms.Term
+
+  defm how_much(env) :: Term.t() do
+    zero = const 0 :: i32()
+    enif_make_int(env, zero + 100)
+  end
+end
+
+Constantly.how_much()
+```
+
+## Error Handling
+
+You can raise exceptions by creating an Erlang exception term using `enif_raise_exception`, as demonstrated below. Unlike Elixir's `raise`, which introduces special control flow, `enif_raise_exception` does not alter the control flow in the same way when raising exceptions.
+
+```elixir
+defmodule Exceptional do
+  use Charms
+  alias Charms.{Term, Pointer}
+
+  @err_t %ArgumentError{message: "not an int"}
+  @err_v %ArgumentError{message: "num too small"}
+
+  defm raise_it(env, i :: Term.t()) :: Term.t() do
+    i_ptr = Pointer.allocate(i32())
+
+    if enif_get_int(env, i, i_ptr) != 0 do
+      if Pointer.load(i32(), i_ptr) > 0 do
+        i
+      else
+        enif_raise_exception(env, @err_v)
+      end
+    else
+      enif_raise_exception(env, @err_t)
+    end
+  end
+end
+
+try do
+  Exceptional.raise_it(:a)
+rescue
+  e -> IO.inspect(e)
+end
+
+try do
+  Exceptional.raise_it(0)
+rescue
+  e -> IO.inspect(e)
+end
+
+Exceptional.raise_it(1)
+```
+
+In this example, we employ a technique using `@err_t` and `@err_v`. In Charms, Elixir's module attributes are serialized and compiled as native values transparently.
+
+## Conclusion
+
+This tutorial provides an overview of the basics of programming with the Charms DSL, which lets you write native code that can be JIT-compiled while still utilizing a familiar Elixir-like syntax. For more advanced features and additional fun, be sure to consult the Charms documentation.

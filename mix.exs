@@ -63,7 +63,11 @@ defmodule Charms.MixProject do
 
   defp docs do
     [
-      before_closing_head_tag: &before_closing_head_tag/1
+      before_closing_head_tag: &before_closing_head_tag/1,
+      main: "Charms",
+      extras: [
+        "guides/programming-with-charms.livemd"
+      ]
     ]
   end
 
