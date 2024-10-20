@@ -7,14 +7,12 @@ defmodule DifferentCalls do
     func.return(i)
   end
 
-  defm without_return_type(env, i) :: Term.t() do
-    i = call RefereeMod.term_roundtrip1(i)
-    func.return(i)
+  defm no_return_type_annotation(env, i) :: Term.t() do
+    call RefereeMod.term_roundtrip1(i) :: Term.t()
   end
 
   defm without_call_macro(env, i) :: Term.t() do
-    i_ = RefereeMod.term_roundtrip1(i)
-    func.return(i)
+    RefereeMod.term_roundtrip1(i)
   end
 
   defm forward_call(i) :: Term.t() do

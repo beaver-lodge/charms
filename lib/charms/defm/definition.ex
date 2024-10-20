@@ -164,9 +164,23 @@ defmodule Charms.Defm.Definition do
          last_op = %MLIR.Operation{} <-
            Beaver.Walker.operations(b) |> Enum.to_list() |> List.last(),
          false <- MLIR.Operation.name(last_op) == "func.return" do
-      mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), block: b do
-        results = Beaver.Walker.results(last_op) |> Enum.to_list()
-        Func.return(results, loc: MLIR.Operation.location(last_op)) >>> []
+      case func[:function_type]
+           |> MLIR.Attribute.unwrap()
+           |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
+           |> Beaver.Native.to_term() do
+        0 ->
+          mlir ctx: MLIR.CAPI.mlirOperationGetContext(func), block: b do
+            Func.return(loc: MLIR.Operation.location(func)) >>> []
+          end
+
+        1 ->
+          mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), block: b do
+            results = Beaver.Walker.results(last_op) |> Enum.to_list()
+            Func.return(results, loc: MLIR.Operation.location(last_op)) >>> []
+          end
+
+        _ ->
+          raise ArgumentError, "Multiple return values are not supported yet."
       end
     else
       _ ->

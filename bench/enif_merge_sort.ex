@@ -12,8 +12,6 @@ defmodule ENIFMergeSort do
       do_sort(arr, m + 1, r)
       SortUtil.merge(arr, l, m, r)
     end
-
-    func.return
   end
 
   @err %ArgumentError{message: "list expected"}

@@ -104,7 +104,5 @@ defmodule SortUtil do
       Pointer.store(j + 1, j_ptr)
       Pointer.store(k + 1, k_ptr)
     end
-
-    func.return
   end
 end

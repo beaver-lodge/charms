@@ -105,7 +105,7 @@ defmodule DefmTest do
     end
 
     test "call without return type" do
-      assert :without == DifferentCalls.without_return_type(:without)
+      assert :without == DifferentCalls.no_return_type_annotation(:without)
     end
 
     test "undefined remote function" do
@@ -122,13 +122,13 @@ defmodule DefmTest do
 
     test "wrong return type remote function" do
       assert_raise ArgumentError,
-                   "function without_return_type has a different return type f32",
+                   "function no_return_type_annotation has a different return type f32",
                    fn ->
                      defmodule WrongReturnType do
                        use Charms
 
                        defm without_call_macro(env, i) do
-                         call DifferentCalls.without_return_type(env, i) :: f32()
+                         call DifferentCalls.no_return_type_annotation(env, i) :: f32()
                        end
                      end
                    end
