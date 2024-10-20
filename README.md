@@ -1,3 +1,5 @@
+[![Run in Livebook](https://livebook.dev/badge/v1/pink.svg)](https://livebook.dev/run?url=https%3A%2F%2Fhexdocs.pm%2Fcharms%2F0.1.1%2Fprogramming-with-charms.livemd)
+
 # Charms
 [![Package](https://img.shields.io/badge/-Package-important)](https://hex.pm/packages/charms) [![Documentation](https://img.shields.io/badge/-Documentation-blueviolet)](https://hexdocs.pm/charms)
 
