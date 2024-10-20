@@ -1,5 +1,11 @@
 # Tutorial: Programming with Charms
 
+```elixir
+Mix.install([
+  {:charms, "~> 0.1.1"}
+])
+```
+
 ## Introduction
 
 Charms is an Elixir compiler that allows you to compile a subset of Elixir to native targets. It provides a Domain-Specific Language (DSL) for defining functions that can be JIT-compiled and executed alongside the BEAM virtual machine. In this tutorial, we will explore how to use Charms to write native code and run it.
