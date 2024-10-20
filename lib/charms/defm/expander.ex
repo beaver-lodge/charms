@@ -1023,7 +1023,7 @@ defmodule Charms.Defm.Expander do
     {v, state, env}
   end
 
-  defp expand_macro(_meta, Charms.Defm, :while_loop, [expr, [do: body]], _callback, state, env) do
+  defp expand_macro(_meta, Charms.Defm, :while, [expr, [do: body]], _callback, state, env) do
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
         SCF.while [] do

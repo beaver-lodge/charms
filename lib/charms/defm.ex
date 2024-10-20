@@ -42,7 +42,7 @@ defmodule Charms.Defm do
   @doc """
   while loop
   """
-  defmacro while_loop(_expr, do: _body), do: :implemented_in_expander
+  defmacro while(_expr, do: _body), do: :implemented_in_expander
 
   @doc """
   `cond` expression requires identical types for both branches

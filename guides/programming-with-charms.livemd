@@ -169,7 +169,7 @@ defmodule ControlFlowWhile do
       movable_list_ptr
     )
 
-    while_loop(
+    while(
       enif_get_list_cell(
         env,
         Pointer.load(Term.t(), movable_list_ptr),
@@ -190,7 +190,7 @@ end
 [:a, :b, 1, 2, 3] |> Enum.shuffle() |> ControlFlowWhile.loop_example()
 ```
 
-In the `loop_example/2` function, we manage dynamic memory allocation for list traversal using pointers. The `while_loop` checks if there are still elements to be processed in the list and updates the minimum value accordingly.
+In the `loop_example/2` function, we manage dynamic memory allocation for list traversal using pointers. The `while` checks if there are still elements to be processed in the list and updates the minimum value accordingly.
 
 Effectively employing control flow allows you to implement complex algorithms and logic directly in your Charms functions.
 

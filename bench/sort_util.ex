@@ -8,7 +8,7 @@ defmodule SortUtil do
     i_ptr = Pointer.allocate(i32())
     Pointer.store(zero, i_ptr)
 
-    while_loop(
+    while(
       enif_get_list_cell(
         env,
         Pointer.load(Term.t(), movable_list_ptr),
@@ -52,7 +52,7 @@ defmodule SortUtil do
     Pointer.store(zero, j_ptr)
     Pointer.store(l, k_ptr)
 
-    while_loop(Pointer.load(i32(), i_ptr) < n1 && Pointer.load(i32(), j_ptr) < n2) do
+    while(Pointer.load(i32(), i_ptr) < n1 && Pointer.load(i32(), j_ptr) < n2) do
       i = Pointer.load(i32(), i_ptr)
       j = Pointer.load(i32(), j_ptr)
       k = Pointer.load(i32(), k_ptr)
@@ -79,7 +79,7 @@ defmodule SortUtil do
       Pointer.store(k + 1, k_ptr)
     end
 
-    while_loop(Pointer.load(i32(), i_ptr) < n1) do
+    while(Pointer.load(i32(), i_ptr) < n1) do
       i = Pointer.load(i32(), i_ptr)
       k = Pointer.load(i32(), k_ptr)
 
@@ -92,7 +92,7 @@ defmodule SortUtil do
       Pointer.store(k + 1, k_ptr)
     end
 
-    while_loop(Pointer.load(i32(), j_ptr) < n2) do
+    while(Pointer.load(i32(), j_ptr) < n2) do
       j = Pointer.load(i32(), j_ptr)
       k = Pointer.load(i32(), k_ptr)
 
