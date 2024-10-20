@@ -40,7 +40,7 @@ defmodule ENIFTimSort do
     zero = const 0 :: i32()
     Pointer.store(zero, i_ptr)
 
-    while(Pointer.load(i32(), i_ptr) < n) do
+    while Pointer.load(i32(), i_ptr) < n do
       i = Pointer.load(i32(), i_ptr)
       min = value arith.minsi(i + run - 1, n - 1) :: i32()
       insertion_sort(arr, i, min)
@@ -50,13 +50,13 @@ defmodule ENIFTimSort do
     size_ptr = Pointer.allocate(i32())
     Pointer.store(run, size_ptr)
 
-    while(Pointer.load(i32(), size_ptr) < n) do
+    while Pointer.load(i32(), size_ptr) < n do
       size = Pointer.load(i32(), size_ptr)
 
       left_ptr = Pointer.allocate(i32())
       Pointer.store(zero, left_ptr)
 
-      while(Pointer.load(i32(), left_ptr) < n) do
+      while Pointer.load(i32(), left_ptr) < n do
         left = Pointer.load(i32(), left_ptr)
         mid = left + size - 1
         right = op arith.minsi(left + 2 * size - 1, n - 1) :: i32()

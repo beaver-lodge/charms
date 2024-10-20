@@ -52,7 +52,7 @@ defmodule SortUtil do
     Pointer.store(zero, j_ptr)
     Pointer.store(l, k_ptr)
 
-    while(Pointer.load(i32(), i_ptr) < n1 && Pointer.load(i32(), j_ptr) < n2) do
+    while Pointer.load(i32(), i_ptr) < n1 && Pointer.load(i32(), j_ptr) < n2 do
       i = Pointer.load(i32(), i_ptr)
       j = Pointer.load(i32(), j_ptr)
       k = Pointer.load(i32(), k_ptr)
@@ -79,7 +79,7 @@ defmodule SortUtil do
       Pointer.store(k + 1, k_ptr)
     end
 
-    while(Pointer.load(i32(), i_ptr) < n1) do
+    while Pointer.load(i32(), i_ptr) < n1 do
       i = Pointer.load(i32(), i_ptr)
       k = Pointer.load(i32(), k_ptr)
 
@@ -92,7 +92,7 @@ defmodule SortUtil do
       Pointer.store(k + 1, k_ptr)
     end
 
-    while(Pointer.load(i32(), j_ptr) < n2) do
+    while Pointer.load(i32(), j_ptr) < n2 do
       j = Pointer.load(i32(), j_ptr)
       k = Pointer.load(i32(), k_ptr)
 
