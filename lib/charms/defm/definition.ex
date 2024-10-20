@@ -91,8 +91,9 @@ defmodule Charms.Defm.Definition do
 
   @doc """
   Declare a function that can be JIT compiled and generate Elixir invoker function.
+  Declare a function that can be JIT compiled and generate Elixir invoker function.
 
-  The call signature will be decomposed and transformed into an normalized form.
+  The call signature will be decomposed and transformed into a normalized form.
   """
   def declare(env, call, body) do
     d = new(env, call, body)
