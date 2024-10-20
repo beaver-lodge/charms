@@ -101,7 +101,7 @@ defmodule DefmTest do
 
   describe "different calls" do
     test "call with return type" do
-      assert :with == DifferentCalls.with_return_type(:with)
+      assert :with == DifferentCalls.return_type_annotation(:with)
     end
 
     test "call without return type" do

@@ -2,13 +2,12 @@ defmodule DifferentCalls do
   use Charms
   alias Charms.Term
 
-  defm with_return_type(env, i) :: Term.t() do
-    i = call RefereeMod.term_roundtrip1(i) :: Term.t()
-    func.return(i)
+  defm return_type_annotation(env, i) :: Term.t() do
+    call RefereeMod.term_roundtrip1(i) :: Term.t()
   end
 
   defm no_return_type_annotation(env, i) :: Term.t() do
-    call RefereeMod.term_roundtrip1(i) :: Term.t()
+    call RefereeMod.term_roundtrip1(i)
   end
 
   defm without_call_macro(env, i) :: Term.t() do
