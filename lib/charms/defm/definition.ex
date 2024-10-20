@@ -202,10 +202,11 @@ defmodule Charms.Defm.Definition do
 
   @doc """
   Compile definitions into MLIR module.
+  Compile definitions into an MLIR module.
 
   ## Partial and lazy compilation
-  When Charms is compiling `defm`, before the definition is fully translated to the target language or IR yet, it will do preprocessing. Some notable preprocessing steps are:
-  - Extracting the return type of the `defm` definition, and wrap it as anonymous function to be later called at invocation site on-demand.
+  When compiling `defm`, Charms performs preprocessing before the definition is fully translated to the target language or IR. Notable preprocessing steps include:
+  - Extracting the return type of the `defm` definition, and wrapping it as an anonymous function to be called on-demand at the invocation site.
   - Determine the MLIR ops available in the definition.
   """
   def compile(definitions) when is_list(definitions) do
