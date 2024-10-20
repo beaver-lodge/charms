@@ -120,11 +120,7 @@ end
 PlayWithErlangRuntime.add(1)
 ```
 
-`add/1` is the only function exported to Elixir in this module, which means you cannot invoke the `do_add/2` function from Elixir. Use `function_exported?/3` to verify this:
-
-```elixir
-function_exported?(MyModule1, :do_add, 2)
-```
+Note `add/1` is the only function exported to Elixir in this module and `do_add/2` can only be called within a `defm`.
 
 ## Control Flow
 
