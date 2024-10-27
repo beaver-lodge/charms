@@ -2,6 +2,7 @@ defmodule Charms.Pointer do
   @moduledoc """
   Intrinsic module to work with pointers.
   """
+  alias Charms.Pointer
   use Charms.Intrinsic
   alias Beaver.MLIR.{Type, Attribute}
   alias Beaver.MLIR.Dialect.{Arith, LLVM, Index}
@@ -45,7 +46,7 @@ defmodule Charms.Pointer do
 
     quote do
       size = unquote(cast)
-      value llvm.alloca(size, elem_type: unquote(elem_type)) :: "!llvm.ptr"
+      value llvm.alloca(size, elem_type: unquote(elem_type)) :: Pointer.t()
     end
   end
 

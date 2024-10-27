@@ -1129,16 +1129,6 @@ defmodule Charms.Defm.Expander do
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
     op = "#{dialect}.#{op}"
     {args, state, env} = expand(args, state, env)
-
-    return_types =
-      for t <- List.flatten(return_types) do
-        if is_bitstring(t) do
-          MLIR.Type.get(t, ctx: state.mlir.ctx)
-        else
-          t
-        end
-      end
-
     {return_types, state, env} = expand(return_types, state, env)
 
     return_types =
