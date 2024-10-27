@@ -28,15 +28,15 @@ defmodule Charms.Pointer do
 
   def handle_intrinsic(
         :allocate,
-        [elem_type_ast, size_ast],
-        [_elem_type, size = %MLIR.Value{}],
+        [elem_type, size],
+        [_elem_type = %MLIR.Type{}, size_v = %MLIR.Value{}],
         opts
       ) do
     cast =
       cond do
-        not MLIR.equal?(MLIR.Value.type(size), Type.i64(ctx: opts[:ctx])) ->
+        not MLIR.equal?(MLIR.Value.type(size_v), Type.i64(ctx: opts[:ctx])) ->
           quote do
-            size = value arith.extsi(unquote(size_ast)) :: i64()
+            size = value arith.extsi(unquote(size)) :: i64()
           end
 
         true ->
@@ -45,7 +45,7 @@ defmodule Charms.Pointer do
 
     quote do
       size = unquote(cast)
-      value llvm.alloca(size, elem_type: unquote(elem_type_ast)) :: "!llvm.ptr"
+      value llvm.alloca(size, elem_type: unquote(elem_type)) :: "!llvm.ptr"
     end
   end
 
