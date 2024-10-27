@@ -7,7 +7,7 @@ defmodule CallTest do
 
     log =
       capture_log(fn ->
-        assert_raise RuntimeError, fn ->
+        assert_raise CompileError, fn ->
           defmodule CallingAbsentFunc do
             use Charms
             alias Charms.{Pointer, Term}

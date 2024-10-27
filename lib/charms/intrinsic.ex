@@ -17,7 +17,7 @@ defmodule Charms.Intrinsic do
   ## More on higher-order intrinsic
   Higher-order intrinsic function can be variadic, which means it a list will be passed as arguments.
   """
-  @callback handle_intrinsic(atom(), [term()], opts()) :: intrinsic_return()
+  @callback handle_intrinsic(atom(), [Macro.t()], [term()], opts()) :: intrinsic_return()
   Module.register_attribute(__MODULE__, :defintrinsic, accumulate: true)
 
   @doc false

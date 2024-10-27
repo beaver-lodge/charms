@@ -6,7 +6,7 @@ defmodule DefmTest do
   end
 
   test "invalid return of absent alias" do
-    assert_raise ArgumentError, "invalid return type", fn ->
+    assert_raise CompileError, "test/defm_test.exs:13: invalid return type", fn ->
       defmodule InvalidRet do
         use Charms
 
@@ -18,7 +18,7 @@ defmodule DefmTest do
   end
 
   test "invalid arg of absent alias" do
-    assert_raise ArgumentError, "invalid argument type #2", fn ->
+    assert_raise CompileError, "test/defm_test.exs:26: invalid argument type #2", fn ->
       defmodule InvalidRet do
         use Charms
         alias Charms.Term
@@ -109,20 +109,22 @@ defmodule DefmTest do
     end
 
     test "undefined remote function" do
-      assert_raise ArgumentError, "function something not found in module DifferentCalls", fn ->
-        defmodule Undefined do
-          use Charms
+      assert_raise CompileError,
+                   "test/defm_test.exs:119: function something not found in module DifferentCalls",
+                   fn ->
+                     defmodule Undefined do
+                       use Charms
 
-          defm without_call_macro(env, i) do
-            DifferentCalls.something(i)
-          end
-        end
-      end
+                       defm without_call_macro(env, i) do
+                         DifferentCalls.something(i)
+                       end
+                     end
+                   end
     end
 
     test "wrong return type remote function" do
-      assert_raise ArgumentError,
-                   "function no_return_type_annotation has a different return type f32",
+      assert_raise CompileError,
+                   "test/defm_test.exs:133: function no_return_type_annotation has a different return type f32",
                    fn ->
                      defmodule WrongReturnType do
                        use Charms
@@ -132,6 +134,21 @@ defmodule DefmTest do
                        end
                      end
                    end
+    end
+  end
+
+  describe "diagnostic" do
+    test "doesn't match function result type" do
+      assert_raise CompileError, ~r/type of return operand 0.+/, fn ->
+        defmodule DoesNotMatchRetType do
+          use Charms
+          alias Charms.Term
+
+          defm add(env, i) :: i32() do
+            func.return(i)
+          end
+        end
+      end
     end
   end
 end

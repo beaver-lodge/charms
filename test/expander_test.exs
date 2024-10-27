@@ -181,33 +181,33 @@ defmodule POCTest do
     end
 
     test "op not found" do
-      assert catch_error(
-               quote do
-                 defmodule ReturnPassedArg do
-                   import Charms.Defm
-                   alias Charms.Term
-                   def foo(a :: Term.t()) :: Term.t(), do: cf.ar(a)
-                 end
-               end
-               |> compile()
-             ) == %ArgumentError{
-               message: "Unknown MLIR operation to create: cf.ar, did you mean: cf.br"
-             }
+      assert_raise CompileError,
+                   "example.exs: Unknown MLIR operation to create: cf.ar, did you mean: cf.br",
+                   fn ->
+                     quote do
+                       defmodule ReturnPassedArg do
+                         import Charms.Defm
+                         alias Charms.Term
+                         def foo(a :: Term.t()) :: Term.t(), do: cf.ar(a)
+                       end
+                     end
+                     |> compile()
+                   end
     end
 
     test "no return" do
-      err = %ArgumentError{
-        message: "func.call @Elixir.InvalidLocalCall.dummy doesn't return a value"
-      }
-
-      quote do
-        defmodule InvalidLocalCall do
-          import Charms.Defm
-          alias Charms.Term
-          def foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
-        end
-      end
-      |> then(&assert catch_error(compile(&1)) == err)
+      assert_raise CompileError,
+                   "example.exs: func.call @Elixir.InvalidLocalCall.dummy doesn't return a value",
+                   fn ->
+                     quote do
+                       defmodule InvalidLocalCall do
+                         import Charms.Defm
+                         alias Charms.Term
+                         def foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
+                       end
+                     end
+                     |> compile
+                   end
     end
   end
 end
