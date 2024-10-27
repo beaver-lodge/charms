@@ -38,6 +38,7 @@ defmodule Charms.Defm.Definition do
   use Beaver
   alias MLIR.Dialect.Func
   require Func
+  require Logger
 
   defstruct [:name, :args, :env, :call, :ret_types, :body, :exported]
 
@@ -227,6 +228,9 @@ defmodule Charms.Defm.Definition do
   def compile(definitions) when is_list(definitions) do
     import MLIR.Transforms
     ctx = MLIR.Context.create()
+    {:ok, diagnostic_server} = GenServer.start(Beaver.Diagnostic.Server, [])
+    diagnostic_handler_id = Beaver.Diagnostic.attach(ctx, diagnostic_server)
+
     m = MLIR.Module.create(ctx, "")
 
     mlir ctx: ctx, block: MLIR.Module.body(m) do
@@ -275,9 +279,27 @@ defmodule Charms.Defm.Definition do
     |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
     |> MLIR.Pass.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> canonicalize
-    |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
+    |> then(fn op ->
+      case MLIR.Pass.Composer.run(op, print: Charms.Debug.step_print?()) do
+        {:ok, op} ->
+          op
+
+        {:error, msg} ->
+          case Charms.Diagnostic.compile_error_message(diagnostic_server) do
+            {:ok, dm} ->
+              raise CompileError, dm
+
+            {:error, _} ->
+              raise CompileError, file: __ENV__.file, line: __ENV__.line, description: msg
+          end
+      end
+    end)
     |> then(&{MLIR.to_string(&1, bytecode: true), referenced_modules(&1)})
-    |> tap(fn _ -> MLIR.Context.destroy(ctx) end)
+    |> tap(fn _ ->
+      :ok = GenServer.stop(diagnostic_server)
+      Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
+      MLIR.Context.destroy(ctx)
+    end)
   end
 
   defp extract_mangled_mod("@" <> name) do

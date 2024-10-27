@@ -30,15 +30,15 @@ defmodule Charms.Prelude do
     v
   end
 
-  def handle_intrinsic(:result_at, [l, i], _opts) when is_list(l) do
+  def handle_intrinsic(:result_at, _params, [l, i], _opts) when is_list(l) do
     l |> Enum.at(i)
   end
 
-  def handle_intrinsic(:result_at, [%MLIR.Operation{} = op, i], _opts) do
+  def handle_intrinsic(:result_at, _params, [%MLIR.Operation{} = op, i], _opts) do
     MLIR.CAPI.mlirOperationGetResult(op, i)
   end
 
-  def handle_intrinsic(op, [left, right], opts) when op in @binary_ops do
+  def handle_intrinsic(op, _params, [left, right], opts) when op in @binary_ops do
     mlir ctx: opts[:ctx], block: opts[:block] do
       operands =
         [left, _] =
@@ -87,7 +87,7 @@ defmodule Charms.Prelude do
     end
   end
 
-  def handle_intrinsic(name, args, opts) when name in @enif_functions do
+  def handle_intrinsic(name, _params, args, opts) when name in @enif_functions do
     {arg_types, ret_types} = Beaver.ENIF.signature(opts[:ctx], name)
     args = args |> Enum.zip(arg_types) |> Enum.map(&wrap_arg(&1, opts))
 
@@ -103,7 +103,7 @@ defmodule Charms.Prelude do
     end
   end
 
-  def handle_intrinsic(_name, _args, _opts) do
+  def handle_intrinsic(_name, _params, _args, _opts) do
     :not_handled
   end
 

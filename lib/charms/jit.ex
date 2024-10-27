@@ -4,7 +4,7 @@ defmodule Charms.JIT do
   alias Beaver.MLIR
   alias __MODULE__.LockedCache
 
-  defstruct ctx: nil, engine: nil, owner: true
+  defstruct ctx: nil, engine: nil, owner: true, diagnostic_server: nil, diagnostic_handler_id: nil
 
   defp jit_of_mod(m) do
     import Beaver.MLIR.{Conversion, Transforms}
@@ -63,7 +63,8 @@ defmodule Charms.JIT do
 
   defp do_init(modules) when is_list(modules) do
     ctx = MLIR.Context.create()
-    Beaver.Diagnostic.attach(ctx)
+    {:ok, diagnostic_server} = GenServer.start(Beaver.Diagnostic.Server, [])
+    diagnostic_handler_id = Beaver.Diagnostic.attach(ctx, diagnostic_server)
 
     modules
     |> Enum.map(fn
@@ -79,9 +80,30 @@ defmodule Charms.JIT do
       other ->
         raise ArgumentError, "Unexpected module type: #{inspect(other)}"
     end)
-    |> merge_modules()
-    |> jit_of_mod
-    |> then(&%__MODULE__{ctx: ctx, engine: &1})
+    |> then(fn op ->
+      try do
+        op
+        |> merge_modules()
+        |> jit_of_mod
+      rescue
+        e ->
+          case Charms.Diagnostic.compile_error_message(diagnostic_server) do
+            {:ok, dm} ->
+              raise CompileError, dm
+
+            {:error, _} ->
+              reraise e, __STACKTRACE__
+          end
+      end
+    end)
+    |> then(
+      &%__MODULE__{
+        ctx: ctx,
+        engine: &1,
+        diagnostic_server: diagnostic_server,
+        diagnostic_handler_id: diagnostic_handler_id
+      }
+    )
     |> then(&{:ok, &1})
   end
 
@@ -144,7 +166,15 @@ defmodule Charms.JIT do
   end
 
   def destroy(key) do
-    with %__MODULE__{ctx: ctx, engine: engine, owner: true} <- LockedCache.get(key) do
+    with %__MODULE__{
+           ctx: ctx,
+           engine: engine,
+           owner: true,
+           diagnostic_server: diagnostic_server,
+           diagnostic_handler_id: diagnostic_handler_id
+         } <- LockedCache.get(key) do
+      :ok = GenServer.stop(diagnostic_server)
+      Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
       MLIR.ExecutionEngine.destroy(engine)
       MLIR.Context.destroy(ctx)
     else
