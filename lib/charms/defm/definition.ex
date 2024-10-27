@@ -216,21 +216,7 @@ defmodule Charms.Defm.Definition do
     |> then(fn {_, acc} -> MapSet.to_list(acc) end)
   end
 
-  @doc """
-  Compile definitions into MLIR module.
-  Compile definitions into an MLIR module.
-
-  ## Partial and lazy compilation
-  When compiling `defm`, Charms performs preprocessing before the definition is fully translated to the target language or IR. Notable preprocessing steps include:
-  - Extracting the return type of the `defm` definition, and wrapping it as an anonymous function to be called on-demand at the invocation site.
-  - Determine the MLIR ops available in the definition.
-  """
-  def compile(definitions) when is_list(definitions) do
-    import MLIR.Transforms
-    ctx = MLIR.Context.create()
-    {:ok, diagnostic_server} = GenServer.start(Beaver.Diagnostic.Server, [])
-    diagnostic_handler_id = Beaver.Diagnostic.attach(ctx, diagnostic_server)
-
+  def do_compile(ctx, definitions, diagnostic_server) do
     m = MLIR.Module.create(ctx, "")
 
     mlir ctx: ctx, block: MLIR.Module.body(m) do
@@ -278,7 +264,7 @@ defmodule Charms.Defm.Definition do
     )
     |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
     |> MLIR.Pass.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
-    |> canonicalize
+    |> MLIR.Transforms.canonicalize()
     |> then(fn op ->
       case MLIR.Pass.Composer.run(op, print: Charms.Debug.step_print?()) do
         {:ok, op} ->
@@ -295,11 +281,29 @@ defmodule Charms.Defm.Definition do
       end
     end)
     |> then(&{MLIR.to_string(&1, bytecode: true), referenced_modules(&1)})
-    |> tap(fn _ ->
+  end
+
+  @doc """
+  Compile definitions into MLIR module.
+  Compile definitions into an MLIR module.
+
+  ## Partial and lazy compilation
+  When compiling `defm`, Charms performs preprocessing before the definition is fully translated to the target language or IR. Notable preprocessing steps include:
+  - Extracting the return type of the `defm` definition, and wrapping it as an anonymous function to be called on-demand at the invocation site.
+  - Determine the MLIR ops available in the definition.
+  """
+  def compile(definitions) when is_list(definitions) do
+    ctx = MLIR.Context.create()
+    {:ok, diagnostic_server} = GenServer.start(Beaver.Diagnostic.Server, [])
+    diagnostic_handler_id = Beaver.Diagnostic.attach(ctx, diagnostic_server)
+
+    try do
+      do_compile(ctx, definitions, diagnostic_server)
+    after
       :ok = GenServer.stop(diagnostic_server)
       Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
       MLIR.Context.destroy(ctx)
-    end)
+    end
   end
 
   defp extract_mangled_mod("@" <> name) do
