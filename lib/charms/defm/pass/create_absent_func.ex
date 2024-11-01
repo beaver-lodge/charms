@@ -26,7 +26,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
   end
 
   # create absent if it is a function not found in the symbol table
-  defp create_func(ctx, block, ir, symbol_table, created) do
+  defp create_func(ctx, block, symbol_table, ir, created) do
     with op = %MLIR.Operation{} <- ir,
          "func.call" <- MLIR.Operation.name(op),
          {name, arg_types, ret_types} <- decompose(op),
@@ -67,9 +67,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
       Beaver.Walker.postwalk(
         func,
         MapSet.new(),
-        fn ir, created ->
-          {ir, create_func(ctx, block, ir, symbol_table, created)}
-        end
+        &{&1, create_func(ctx, block, symbol_table, &1, &2)}
       )
     after
       mlirSymbolTableDestroy(symbol_table)
