@@ -28,15 +28,15 @@ defmodule Charms.Diagnostic do
     quote do
       case Charms.Diagnostic.compile_error_message(unquote(diagnostic_server)) do
         {:ok, dm} ->
-          raise CompileError, dm
+          dm
 
         {:error, _} ->
-          raise CompileError,
-                Charms.Diagnostic.compile_error_message_from_env(
-                  unquote(env),
-                  unquote(fallback_description)
-                )
+          Charms.Diagnostic.compile_error_message_from_env(
+            unquote(env),
+            unquote(fallback_description)
+          )
       end
+      |> then(&raise(CompileError, &1))
     end
   end
 
