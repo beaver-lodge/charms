@@ -25,6 +25,39 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
     {name, arg_types, ret_types}
   end
 
+  # create absent if it is a function not found in the symbol table
+  defp create_func(ctx, block, ir, symbol_table, created) do
+    with op = %MLIR.Operation{} <- ir,
+         "func.call" <- MLIR.Operation.name(op),
+         {name, arg_types, ret_types} <- decompose(op),
+         true <- MLIR.is_null(mlirSymbolTableLookup(symbol_table, name)),
+         name_str <- MLIR.StringRef.to_string(name),
+         false <- MapSet.member?(created, name_str) do
+      mlir ctx: ctx, block: block do
+        {arg_types, ret_types} =
+          if s = Beaver.ENIF.signature(ctx, String.to_atom(name_str)) do
+            s
+          else
+            {arg_types, ret_types}
+          end
+
+        Func.func _(
+                    sym_name: MLIR.Attribute.string(name_str),
+                    sym_visibility: MLIR.Attribute.string("private"),
+                    function_type: Type.function(arg_types, ret_types)
+                  ) do
+          region do
+          end
+        end
+      end
+
+      MapSet.put(created, name_str)
+    else
+      _ ->
+        created
+    end
+  end
+
   def run(func) do
     ctx = mlirOperationGetContext(func)
     block = mlirOperationGetBlock(func)
@@ -35,38 +68,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
         func,
         MapSet.new(),
         fn ir, created ->
-          created =
-            with op = %MLIR.Operation{} <- ir,
-                 "func.call" <- MLIR.Operation.name(op),
-                 {name, arg_types, ret_types} <- decompose(op),
-                 true <- MLIR.is_null(mlirSymbolTableLookup(symbol_table, name)),
-                 name_str <- MLIR.StringRef.to_string(name),
-                 false <- MapSet.member?(created, name_str) do
-              mlir ctx: ctx, block: block do
-                {arg_types, ret_types} =
-                  if s = Beaver.ENIF.signature(ctx, String.to_atom(name_str)) do
-                    s
-                  else
-                    {arg_types, ret_types}
-                  end
-
-                Func.func _(
-                            sym_name: MLIR.Attribute.string(name_str),
-                            sym_visibility: MLIR.Attribute.string("private"),
-                            function_type: Type.function(arg_types, ret_types)
-                          ) do
-                  region do
-                  end
-                end
-              end
-
-              MapSet.put(created, name_str)
-            else
-              _ ->
-                created
-            end
-
-          {ir, created}
+          {ir, create_func(ctx, block, ir, symbol_table, created)}
         end
       )
     after
