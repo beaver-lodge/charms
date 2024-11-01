@@ -199,7 +199,7 @@ defmodule POCTest do
 
     test "no return" do
       assert_raise CompileError,
-                   "example.exs: func.call @Elixir.InvalidLocalCall.dummy doesn't return a value",
+                   "example.exs: Function call @Elixir.InvalidLocalCall.dummy does not return a value",
                    fn ->
                      quote do
                        defmodule InvalidLocalCall do

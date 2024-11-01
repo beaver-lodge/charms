@@ -407,15 +407,15 @@ defmodule Charms.Defm.Expander do
       %MLIR.Operation{} = arg_op ->
         op = MLIR.Operation.name(arg_op)
 
-        if "func.call" == op do
+        if op == "func.call" do
           callee = Beaver.Walker.attributes(arg_op)["callee"]
 
           raise_compile_error(
             env,
-            "#{op} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
+            "Function call #{to_string(callee) || "(unknown callee)"} does not return a value"
           )
         else
-          raise_compile_error(env, "can't use #{op} as an argument")
+          raise_compile_error(env, "Cannot use operation #{op} as an argument")
         end
 
       _ ->
