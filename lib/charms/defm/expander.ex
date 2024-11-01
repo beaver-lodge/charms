@@ -157,7 +157,7 @@ defmodule Charms.Defm.Expander do
         do:
           raise_compile_error(
             env,
-            "function #{name} has a different return type #{to_string(t)}"
+            "in invocation of #{name}, mismatch type: #{to_string(t)} vs. #{to_string(&1)}, definition: #{to_string(ft)}"
           )
       )
     )
