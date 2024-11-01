@@ -302,9 +302,9 @@ defmodule Charms.Defm.Definition do
     try do
       do_compile(ctx, definitions, diagnostic_server)
     after
-      :ok = GenServer.stop(diagnostic_server)
       Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
       MLIR.Context.destroy(ctx)
+      :ok = GenServer.stop(diagnostic_server)
     end
   end
 

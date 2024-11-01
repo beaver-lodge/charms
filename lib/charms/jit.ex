@@ -177,10 +177,10 @@ defmodule Charms.JIT do
         diagnostic_server: diagnostic_server,
         diagnostic_handler_id: diagnostic_handler_id
       } ->
-        :ok = GenServer.stop(diagnostic_server)
         Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
         MLIR.ExecutionEngine.destroy(engine)
         MLIR.Context.destroy(ctx)
+        :ok = GenServer.stop(diagnostic_server)
 
       nil ->
         :not_found
