@@ -5,8 +5,10 @@ defmodule Charms.Defm do
   This module defines the `defm` DSL syntax as macros and special forms.
 
   ## Extending the `defm`
-  - use `beaver`'s DSL to define intrinsics which can be called in the function body of a `defm`
-  - use `defm` to define functions that can be JIT-compiled
+  There are two kinds of functions in `Charms`:
+  - Intrinsic: use `beaver`'s DSL to define, which can be called in the function body of a `defm`
+  - `defm`: use `defm` to define, can be JIT-compiled
+  Although they are different in terms of underline implementation, they share the same syntax to invoke.
   """
 
   @doc """

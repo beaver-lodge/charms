@@ -28,7 +28,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
   def run(func) do
     ctx = mlirOperationGetContext(func)
     block = mlirOperationGetBlock(func)
-    symbolTable = mlirSymbolTableCreate(mlirOperationGetParentOperation(func))
+    symbol_table = mlirSymbolTableCreate(mlirOperationGetParentOperation(func))
 
     Beaver.Walker.postwalk(
       func,
@@ -38,7 +38,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
           with op = %MLIR.Operation{} <- ir,
                "func.call" <- MLIR.Operation.name(op),
                {name, arg_types, ret_types} <- decompose(op),
-               true <- MLIR.is_null(mlirSymbolTableLookup(symbolTable, name)),
+               true <- MLIR.is_null(mlirSymbolTableLookup(symbol_table, name)),
                name_str <- MLIR.StringRef.to_string(name),
                false <- MapSet.member?(created, name_str) do
             mlir ctx: ctx, block: block do
@@ -69,7 +69,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
       end
     )
 
-    mlirSymbolTableDestroy(symbolTable)
+    mlirSymbolTableDestroy(symbol_table)
     :ok
   end
 end

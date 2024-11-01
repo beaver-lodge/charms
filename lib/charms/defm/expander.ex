@@ -8,8 +8,8 @@ defmodule Charms.Defm.Expander do
   Charms will try to work with Elixir's parallel compiler in the most well-integrated way. This allows us to compile multiple modules at the same time, which can speed up the compilation process. Another benefit is that all `defm` functions can also be executed at compile time, just like vanilla Elixir functions defined by `def`. Behind the scenes, `func.func` generated from `defm` will also be used as reference to infer and check types of a remote function calls when compiling another module.
   To take deep dive, Elixir has [an official blog post about parallel compiler](https://elixir-lang.org/blog/2012/04/24/a-peek-inside-elixir-s-parallel-compiler/).
 
-  ## Cycle reference
-  Charms will disallow cycle reference. If module A calls module B, then module B cannot call module A. This is to prevent infinite recursion and stream line compile times features. Although this is technically possible as long as function calls and function definitions are following same signature (like the separated complication of C/C++ files and linkage), we still make this trade-off for simplicity.
+  ## Cyclic dependency
+  Charms will disallow cyclic dependency. If module A calls module B, module B cannot call module A. This is to prevent infinite recursion and stream line compile times features. Although this is technically possible as long as function calls and function definitions are following same signature (like the separated complication of C/C++ files and linkage), we still make this trade-off for simplicity.
 
   ## Compile an AST without enough type information
   Being an dynamic language, it is possible for Elixir to have an AST that is valid in Elixir but not in MLIR. For example, Elixir allows to define a serial of nested function calls without any return type, like `a(b(c()))`. In Elixir everything is expression so a function call is assumed to always return a value while in MLIR it is possible to have a function call that does not return anything (equivalent to a void function in C). In this case, Charms will generate a `ub.poison` operation with result type `none`. If the result value of created `ub.poison` op will never be used, nothing will happen. If used, it will raise an error in later verification or passes. This is meant to allow Elixir code to work with the AST with interest only on Elixir semantic keep going without interruption as much as possible, and limit the error information to the type level, instead of leaking it to the syntax level.
@@ -103,7 +103,7 @@ defmodule Charms.Defm.Expander do
   @doc """
   Expand an AST into MLIR.
   """
-  def expand_to_mlir(ast, env, mlir_expander = %__MODULE__{ctx: ctx}) do
+  def expand_to_mlir(ast, env, %__MODULE__{ctx: ctx} = mlir_expander) do
     available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
     mlir_expander = mlir_expander |> Map.put(:available_ops, available_ops)
 
@@ -150,94 +150,92 @@ defmodule Charms.Defm.Expander do
     |> then(&{&1.mlir.dependence_modules[module], &1})
   end
 
+  defp return_type_match_function_type!(ft, t, name, env) do
+    MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
+    |> tap(
+      &if(!MLIR.equal?(&1, t),
+        do:
+          raise_compile_error(
+            env,
+            "function #{name} has a different return type #{to_string(t)}"
+          )
+      )
+    )
+  end
+
+  defp resolve_return_type!(ft, types, name, env) do
+    with types <- List.wrap(types),
+         {[t], 1} <-
+           {types, MLIR.CAPI.mlirFunctionTypeGetNumResults(ft) |> Beaver.Native.to_term()} do
+      return_type_match_function_type!(ft, t, name, env)
+    else
+      {[], 1} -> MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
+      {types, 0} -> types
+    end
+  end
+
   defp infer_by_lookup(env, dependence, mod, name, types) do
-    symbolTable = dependence |> MLIR.CAPI.mlirSymbolTableCreate()
+    symbol_table = dependence |> MLIR.CAPI.mlirSymbolTableCreate()
 
     sym =
       MLIR.CAPI.mlirSymbolTableLookup(
-        symbolTable,
+        symbol_table,
         MLIR.StringRef.create(mangling(mod, name))
       )
 
-    if !MLIR.is_null(sym) do
-      if MLIR.Operation.name(sym) == "func.func" do
-        ft = sym[:function_type] |> MLIR.Attribute.unwrap()
-
-        case {List.wrap(types),
-              MLIR.CAPI.mlirFunctionTypeGetNumResults(ft) |> Beaver.Native.to_term()} do
-          {[t], 1} ->
-            MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
-            |> tap(
-              &if(!MLIR.equal?(&1, t),
-                do:
-                  raise_compile_error(
-                    env,
-                    "function #{name} has a different return type #{to_string(t)}"
-                  )
-              )
-            )
-
-          # infer the return type
-          {[], 1} ->
-            MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
-
-          {[], 0} ->
-            []
-
-          _ ->
-            raise_compile_error(
-              env,
-              "function call #{name} different return type from its definition"
-            )
-        end
-      else
-        raise_compile_error(env, "symbol #{name} is not a function")
-      end
-    else
+    if MLIR.is_null(sym) do
       raise_compile_error(
         env,
         "function #{name} not found in module #{inspect(mod)}"
       )
+    else
+      if MLIR.Operation.name(sym) == "func.func" do
+        sym[:function_type] |> MLIR.Attribute.unwrap() |> resolve_return_type!(types, name, env)
+      else
+        raise_compile_error(env, "symbol #{name} is not a function")
+      end
     end
   end
 
   defp infer_by_resolving(env, name, types, state) do
-    case {state.mlir.return_types[name], List.wrap(types)} do
-      {nil, types} ->
+    # resolve and check if compatible
+    with resolver when not is_nil(resolver) and is_function(resolver, 0) <-
+           state.mlir.return_types[name],
+         {[resolved_t], [t]} <- {resolver.(), List.wrap(types)} do
+      if MLIR.equal?(resolved_t, t) do
+        types
+      else
+        raise_compile_error(
+          env,
+          "function #{name} has an incompatible return type #{to_string(t)}"
+        )
+      end
+    else
+      # fail to resolve, return the types as is
+      nil ->
         types
 
-      {f, []} when is_function(f, 0) ->
-        f.()
+      # use resolved type
+      {resolved_types, []} ->
+        resolved_types
+    end
+  end
 
-      {f, [t]} ->
-        case f.() do
-          [] ->
-            types
+  # expand call and prefix with module if it is a local
+  defp decompose_and_expand_call(call, state, env) do
+    case Macro.decompose_call(call) do
+      {alias, f, args} ->
+        {mod, state, env} = expand(alias, state, env)
+        {mod, f, args, state, env}
 
-          [%MLIR.Type{} = inferred_t] ->
-            if MLIR.equal?(inferred_t, t) do
-              types
-            else
-              raise_compile_error(
-                env,
-                "function #{name} has an incompatible return type #{to_string(t)}"
-              )
-            end
-        end
+      {name, args} ->
+        state = update_in(state.locals, &[{name, length(args)} | &1])
+        {env.module, name, args, state, env}
     end
   end
 
   defp expand_call_of_types(call, types, state, env) do
-    {mod, name, args, state, env} =
-      case Macro.decompose_call(call) do
-        {alias, f, args} ->
-          {mod, state, env} = expand(alias, state, env)
-          {mod, f, args, state, env}
-
-        {name, args} ->
-          state = update_in(state.locals, &[{name, length(args)} | &1])
-          {env.module, name, args, state, env}
-      end
+    {mod, name, args, state, env} = decompose_and_expand_call(call, state, env)
 
     arity = length(args)
 
@@ -268,7 +266,7 @@ defmodule Charms.Defm.Expander do
 
       # remote call, but the module is absent, create poison
       true ->
-        "Unknown intrinsic: #{Exception.format_mfa(mod, name, arity)}"
+        "Unknown invocation: #{Exception.format_mfa(mod, name, arity)}"
         |> create_poison(state, env)
     end
   end
@@ -383,8 +381,8 @@ defmodule Charms.Defm.Expander do
 
           state =
             with [head_arg_type | _] <- arg_types,
-                 [{:env, _, nil} | _] <- args,
-                 MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)) do
+                 MLIR.Type.equal?(head_arg_type, Beaver.ENIF.Type.env(ctx: state.mlir.ctx)),
+                 [{:env, _, nil} | _] <- args do
               a = MLIR.Block.get_arg!(Beaver.Env.block(), 0)
               put_in(state.mlir.enif_env, a)
             else
@@ -398,6 +396,150 @@ defmodule Charms.Defm.Expander do
         end
 
       {b, state, env}
+    end
+  end
+
+  defp validate_call_args!(args, env) do
+    case invalid_arg = Enum.find(args, &(not is_struct(&1, MLIR.Value))) do
+      nil ->
+        :ok
+
+      %MLIR.Operation{} = arg_op ->
+        op = MLIR.Operation.name(arg_op)
+
+        if "func.call" == op do
+          callee = Beaver.Walker.attributes(arg_op)["callee"]
+
+          raise_compile_error(
+            env,
+            "#{op} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
+          )
+        else
+          raise_compile_error(env, "can't use #{op} as an argument")
+        end
+
+      _ ->
+        raise_compile_error(env, "Invalid operand: #{Macro.to_string(invalid_arg)}")
+    end
+  end
+
+  defp expand_call_as_op(dialect, op, args, state, env) do
+    op = "#{dialect}.#{op}"
+
+    MapSet.member?(state.mlir.available_ops, op) or
+      raise_compile_error(
+        env,
+        "Unknown MLIR operation to create: #{op}, did you mean: #{did_you_mean_op(op)}"
+      )
+
+    {args, state, env} = expand(args, state, env)
+    validate_call_args!(args, env)
+
+    try do
+      %Beaver.SSA{
+        op: op,
+        arguments: args,
+        ctx: state.mlir.ctx,
+        block: state.mlir.blk,
+        loc: MLIR.Location.from_env(env),
+        results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
+      }
+      |> MLIR.Operation.create()
+      |> then(&{MLIR.Operation.results(&1), state, env})
+    rescue
+      _ ->
+        raise_compile_error(env, "Failed to create #{op}")
+    end
+  end
+
+  defp expand_get_attribute(args, state, env) do
+    {args, state, env} = expand(args, state, env)
+    attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
+    {env_var, state} = beam_env_from_defm!(env, state)
+
+    # there is no nested do-block to expand, so it is safe to use regular variable names, as long as the updated state and env are not leaked
+    quote do
+      alias Charms.Pointer
+      alias Charms.Term
+      attr = unquote(attr)
+      term_ptr = Pointer.allocate(Term.t())
+      size = String.length(attr)
+      size = value index.casts(size) :: i64()
+      buffer_ptr = Pointer.allocate(i8(), size)
+      buffer = ptr_to_memref(buffer_ptr, size)
+      memref.copy(attr, buffer)
+      zero = const 0 :: i32()
+      enif_binary_to_term(unquote(env_var), buffer_ptr, size, term_ptr, zero)
+      Pointer.load(Term.t(), term_ptr)
+    end
+    |> expand(state, env)
+    |> then(&{List.last(elem(&1, 0)), state, env})
+  end
+
+  defp expand_intrinsics(loc, module, fun, args, state, env) do
+    {args, state, env} = expand(args, state, env)
+    {params, state} = uniq_mlir_params(state, args)
+
+    case v =
+           module.handle_intrinsic(fun, params, args,
+             ctx: state.mlir.ctx,
+             block: state.mlir.blk,
+             loc: loc,
+             eval: fn ast ->
+               expand(
+                 ast,
+                 state,
+                 env
+               )
+             end,
+             params: params
+           ) do
+      %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
+        {v, state, env}
+
+      f when is_function(f) ->
+        {f, state, env}
+
+      ast = {_, _, _} ->
+        {v, state, env} = expand(ast, state, env)
+        {List.last(v), state, env}
+    end
+  end
+
+  defp expand_magic_macros(loc, {module, fun, _arity} = mfa, args, state, env) do
+    cond do
+      Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 0) and
+          fun in module.__intrinsics__() ->
+        expand_intrinsics(loc, module, fun, args, state, env)
+
+      module == MLIR.Attribute ->
+        {args, state, env} = expand(args, state, env)
+        {apply(MLIR.Attribute, fun, args), state, env}
+
+      mfa == {Module, :__get_attribute__, 4} ->
+        expand_get_attribute(args, state, env)
+
+      (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
+        res
+
+      true ->
+        quote(do: unquote(module).unquote(fun)(unquote_splicing(args)))
+        |> expand_call_of_types([], state, env)
+    end
+  end
+
+  defp expand_remote_macro(meta, {module, fun, arity} = mfa, args, state, env) do
+    loc = MLIR.Location.from_env(env)
+
+    case Macro.Env.expand_require(env, meta, module, fun, arity,
+           trace: true,
+           check_deprecations: false
+         ) do
+      {:macro, module, callback} ->
+        expand_macro(meta, module, fun, args, callback, state, env)
+
+      :error ->
+        expand_magic_macros(loc, mfa, args, state, env)
     end
   end
 
@@ -543,8 +685,8 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  @intrinsics Charms.Prelude.__intrinsics__()
-  defp expand({fun, _meta, [left, right]}, state, env) when fun in @intrinsics do
+  @prelude_intrinsics Charms.Prelude.__intrinsics__()
+  defp expand({fun, _meta, [left, right]}, state, env) when fun in @prelude_intrinsics do
     {left, state, env} = expand(left, state, env)
     {right, state, env} = expand(right, state, env)
     loc = MLIR.Location.from_env(env)
@@ -611,137 +753,17 @@ defmodule Charms.Defm.Expander do
     arity = length(args)
     mfa = {module, fun, arity}
     state = update_in(state.remotes, &[mfa | &1])
-    loc = MLIR.Location.from_env(env)
 
     if is_atom(module) do
       try do
-        case Macro.Env.expand_require(env, meta, module, fun, arity,
-               trace: true,
-               check_deprecations: false
-             ) do
-          {:macro, module, callback} ->
-            expand_macro(meta, module, fun, args, callback, state, env)
-
-          :error ->
-            cond do
-              Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 0) and
-                  fun in module.__intrinsics__() ->
-                {args, state, env} = expand(args, state, env)
-                {params, state} = uniq_mlir_params(state, args)
-
-                case v =
-                       module.handle_intrinsic(fun, params, args,
-                         ctx: state.mlir.ctx,
-                         block: state.mlir.blk,
-                         loc: loc,
-                         eval: fn ast ->
-                           expand(
-                             ast,
-                             state,
-                             env
-                           )
-                         end,
-                         params: params
-                       ) do
-                  %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
-                    {v, state, env}
-
-                  f when is_function(f) ->
-                    {f, state, env}
-
-                  ast = {_, _, _} ->
-                    {v, state, env} = expand(ast, state, env)
-                    {List.last(v), state, env}
-                end
-
-              module == MLIR.Attribute ->
-                {args, state, env} = expand(args, state, env)
-                {apply(MLIR.Attribute, fun, args), state, env}
-
-              mfa == {Module, :__get_attribute__, 4} ->
-                {args, state, env} = expand(args, state, env)
-                attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
-                {env_var, state} = beam_env_from_defm!(env, state)
-
-                # there is no nested do-block to expand, so it is safe to use regular variable names, as long as the updated state and env are not leaked
-                quote do
-                  alias Charms.Pointer
-                  alias Charms.Term
-                  attr = unquote(attr)
-                  term_ptr = Pointer.allocate(Term.t())
-                  size = String.length(attr)
-                  size = value index.casts(size) :: i64()
-                  buffer_ptr = Pointer.allocate(i8(), size)
-                  buffer = ptr_to_memref(buffer_ptr, size)
-                  memref.copy(attr, buffer)
-                  zero = const 0 :: i32()
-                  enif_binary_to_term(unquote(env_var), buffer_ptr, size, term_ptr, zero)
-                  Pointer.load(Term.t(), term_ptr)
-                end
-                |> expand(state, env)
-                |> then(&{List.last(elem(&1, 0)), state, env})
-
-              (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
-                res
-
-              true ->
-                quote(do: unquote(module).unquote(fun)(unquote_splicing(args)))
-                |> expand_call_of_types([], state, env)
-            end
-        end
+        expand_remote_macro(meta, mfa, args, state, env)
       rescue
         e ->
           reraise e, put_env_in_stacktrace(__STACKTRACE__, env, mfa)
       end
     else
       [{dialect, _, _}, op] = [module, fun]
-
-      try do
-        op = "#{dialect}.#{op}"
-
-        MapSet.member?(state.mlir.available_ops, op) or
-          raise_compile_error(
-            env,
-            "Unknown MLIR operation to create: #{op}, did you mean: #{did_you_mean_op(op)}"
-          )
-
-        {args, state, env} = expand(args, state, env)
-
-        if invalid_arg = Enum.find(args, &(not is_struct(&1, MLIR.Value))) do
-          case invalid_arg do
-            %MLIR.Operation{} = arg_op ->
-              case name = MLIR.Operation.name(arg_op) do
-                "func.call" ->
-                  callee = Beaver.Walker.attributes(arg_op)["callee"]
-
-                  raise_compile_error(
-                    env,
-                    "#{name} #{to_string(callee) || "(unknown callee)"} doesn't return a value"
-                  )
-
-                _ ->
-                  raise_compile_error(env, "#{name} doesn't return a value")
-              end
-
-            _ ->
-              raise_compile_error(env, "Invalid operand: #{Macro.to_string(invalid_arg)}")
-          end
-        end
-
-        %Beaver.SSA{
-          op: op,
-          arguments: args,
-          ctx: state.mlir.ctx,
-          block: state.mlir.blk,
-          loc: MLIR.Location.from_env(env),
-          results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
-        }
-        |> MLIR.Operation.create()
-        |> then(&{MLIR.Operation.results(&1), state, env})
-      rescue
-        e ->
-          reraise e, put_env_in_stacktrace(__STACKTRACE__, env)
-      end
+      expand_call_as_op(dialect, op, args, state, env)
     end
   end
 
@@ -936,7 +958,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  defp expand_macro(_meta, Kernel, :def, [call, [do: body]], _callback, state, env) do
+  defp expand_macro(_meta, Charms, :defm, [call, [do: body]], _callback, state, env) do
     {:"::", _, [call, ret_types]} = call
 
     {name, args} = Macro.decompose_call(call)
@@ -1045,7 +1067,6 @@ defmodule Charms.Defm.Expander do
               expand_if_clause_body(true_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
           end
 
-        # TODO: doc about an expression which is a value and an operation
         SCF.if [condition, loc: loc] do
           region do
             MLIR.CAPI.mlirRegionAppendOwnedBlock(Beaver.Env.region(), b)
@@ -1240,7 +1261,7 @@ defmodule Charms.Defm.Expander do
 
   ## Helpers
 
-  defp expand_remote(_meta, Kernel, fun, args, state, env) when fun in @intrinsics do
+  defp expand_remote(_meta, Kernel, fun, args, state, env) when fun in @prelude_intrinsics do
     loc = MLIR.Location.from_env(env)
     {args, state, env} = expand(args, state, env)
     {params, state} = uniq_mlir_params(state, args)

@@ -1,4 +1,5 @@
 defmodule SubMod0 do
+  @moduledoc false
   use Charms
   alias Charms.Term
 
@@ -18,6 +19,7 @@ defmodule SubMod0 do
 end
 
 defmodule SubMod1 do
+  @moduledoc false
   use Charms
   alias Charms.Term
 

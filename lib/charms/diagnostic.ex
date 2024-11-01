@@ -20,11 +20,27 @@ defmodule Charms.Diagnostic do
   defmacro raise_compile_error(env, description) do
     quote do
       raise CompileError,
-            Charms.Diagnostic.compile_error_message(unquote(env), unquote(description))
+            Charms.Diagnostic.compile_error_message_from_env(unquote(env), unquote(description))
     end
   end
 
-  def compile_error_message(%Macro.Env{file: file, line: line}, description) do
+  defmacro raise_compile_error(env, diagnostic_server, fallback_description) do
+    quote do
+      case Charms.Diagnostic.compile_error_message(unquote(diagnostic_server)) do
+        {:ok, dm} ->
+          raise CompileError, dm
+
+        {:error, _} ->
+          raise CompileError,
+                Charms.Diagnostic.compile_error_message_from_env(
+                  unquote(env),
+                  unquote(fallback_description)
+                )
+      end
+    end
+  end
+
+  def compile_error_message_from_env(%Macro.Env{file: file, line: line}, description) do
     [file: file, line: line, description: description]
   end
 end

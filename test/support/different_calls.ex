@@ -1,4 +1,5 @@
 defmodule DifferentCalls do
+  @moduledoc false
   use Charms
   alias Charms.Term
 
