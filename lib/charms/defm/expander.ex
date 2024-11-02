@@ -386,7 +386,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp validate_call_args!(args, env) do
-    case invalid_arg = Enum.find(args, &(not is_struct(&1, MLIR.Value))) do
+    case Enum.find(args, &(not is_struct(&1, MLIR.Value))) do
       nil ->
         :ok
 
@@ -404,7 +404,7 @@ defmodule Charms.Defm.Expander do
           raise_compile_error(env, "Cannot use operation #{op} as an argument")
         end
 
-      _ ->
+      invalid_arg ->
         raise_compile_error(env, "Invalid operand: #{Macro.to_string(invalid_arg)}")
     end
   end
