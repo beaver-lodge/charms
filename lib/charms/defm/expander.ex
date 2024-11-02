@@ -495,6 +495,12 @@ defmodule Charms.Defm.Expander do
       ast = {_, _, _} ->
         {v, state, env} = expand(ast, state, env)
         {List.last(v), state, env}
+
+      other ->
+        raise_compile_error(
+          env,
+          "Unexpected return type from intrinsic #{module}.#{fun}: #{inspect(other)}"
+        )
     end
   end
 
