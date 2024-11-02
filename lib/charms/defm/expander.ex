@@ -46,20 +46,6 @@ defmodule Charms.Defm.Expander do
   }
   defp env, do: @env
 
-  defp put_env_in_stacktrace(stacktrace, env) do
-    [frame] = Macro.Env.stacktrace(env)
-    idx = stacktrace |> Enum.find_index(&match?({__MODULE__, _, _, _}, &1))
-    List.insert_at(stacktrace, idx, frame)
-  end
-
-  defp put_env_in_stacktrace(stacktrace, env, {m, f, a}) do
-    [{_, _, _, meta}] = Macro.Env.stacktrace(env)
-    frame = {m, f, a, meta}
-
-    idx = stacktrace |> Enum.find_index(&match?({__MODULE__, _, _, _}, &1))
-    List.insert_at(stacktrace, idx, frame)
-  end
-
   # This is a proof of concept of how to build language server
   # tooling or a compiler of a custom language on top of Elixir's
   # building blocks.
@@ -800,28 +786,13 @@ defmodule Charms.Defm.Expander do
            check_deprecations: true
          ) do
       {:macro, module, callback} ->
-        try do
-          expand_macro(meta, module, fun, args, callback, state, env)
-        rescue
-          e ->
-            reraise e, put_env_in_stacktrace(__STACKTRACE__, env, {module, fun, arity})
-        end
+        expand_macro(meta, module, fun, args, callback, state, env)
 
       {:function, module, fun} ->
-        try do
-          expand_remote(meta, module, fun, args, state, env)
-        rescue
-          e ->
-            reraise e, put_env_in_stacktrace(__STACKTRACE__, env, {module, fun, arity})
-        end
+        expand_remote(meta, module, fun, args, state, env)
 
       {:error, :not_found} ->
-        try do
-          expand_local(meta, fun, args, state, env)
-        rescue
-          e ->
-            reraise e, put_env_in_stacktrace(__STACKTRACE__, env)
-        end
+        expand_local(meta, fun, args, state, env)
     end
   end
 
