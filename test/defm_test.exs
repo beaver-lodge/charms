@@ -110,7 +110,7 @@ defmodule DefmTest do
 
     test "undefined remote function" do
       assert_raise CompileError,
-                   "test/defm_test.exs:119: function something not found in module DifferentCalls",
+                   "test/defm_test.exs:119: Failed to expand macro Elixir.DifferentCalls.something/1: test/defm_test.exs:119: function something not found in module DifferentCalls",
                    fn ->
                      defmodule Undefined do
                        use Charms
@@ -124,7 +124,7 @@ defmodule DefmTest do
 
     test "wrong return type remote function" do
       assert_raise CompileError,
-                   "test/defm_test.exs:133: function no_return_type_annotation has a different return type f32",
+                   "test/defm_test.exs:133: mismatch type in invocation: f32 vs. i64",
                    fn ->
                      defmodule WrongReturnType do
                        use Charms

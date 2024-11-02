@@ -30,6 +30,35 @@ defmodule Charms.Prelude do
     v
   end
 
+  @compare_ops [:!=, :==, :>, :>=, :<, :<=]
+  defp i_predicate(:!=), do: :ne
+  defp i_predicate(:==), do: :eq
+  defp i_predicate(:>), do: :sgt
+  defp i_predicate(:>=), do: :sge
+  defp i_predicate(:<), do: :slt
+  defp i_predicate(:<=), do: :sle
+
+  defp create_binary(op, operands, type, ctx, block) do
+    mlir ctx: ctx, block: block do
+      case op do
+        op when op in @compare_ops ->
+          Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(i_predicate(op))) >>> Type.i1()
+
+        :- ->
+          Arith.subi(operands) >>> type
+
+        :+ ->
+          Arith.addi(operands) >>> type
+
+        :&& ->
+          Arith.andi(operands) >>> type
+
+        :* ->
+          Arith.muli(operands) >>> type
+      end
+    end
+  end
+
   def handle_intrinsic(:result_at, _params, [l, i], _opts) when is_list(l) do
     l |> Enum.at(i)
   end
@@ -39,52 +68,20 @@ defmodule Charms.Prelude do
   end
 
   def handle_intrinsic(op, _params, [left, right], opts) when op in @binary_ops do
-    mlir ctx: opts[:ctx], block: opts[:block] do
-      operands =
-        [left, _] =
-        case {left, right} do
-          {%MLIR.Value{} = v, i} when is_integer(i) ->
-            [v, constant_of_same_type(i, v, opts)]
+    {operands, type} =
+      case {left, right} do
+        {%MLIR.Value{} = v, i} when is_integer(i) ->
+          [v, constant_of_same_type(i, v, opts)]
 
-          {i, %MLIR.Value{} = v} when is_integer(i) ->
-            [constant_of_same_type(i, v, opts), v]
+        {i, %MLIR.Value{} = v} when is_integer(i) ->
+          [constant_of_same_type(i, v, opts), v]
 
-          {%MLIR.Value{}, %MLIR.Value{}} ->
-            [left, right]
-        end
-
-      case op do
-        :!= ->
-          Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(:ne)) >>> Type.i1()
-
-        :== ->
-          Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(:eq)) >>> Type.i1()
-
-        :> ->
-          Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(:sgt)) >>> Type.i1()
-
-        :>= ->
-          Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(:sge)) >>> Type.i1()
-
-        :< ->
-          Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(:slt)) >>> Type.i1()
-
-        :<= ->
-          Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(:sle)) >>> Type.i1()
-
-        :- ->
-          Arith.subi(operands) >>> MLIR.CAPI.mlirValueGetType(left)
-
-        :+ ->
-          Arith.addi(operands) >>> MLIR.CAPI.mlirValueGetType(left)
-
-        :&& ->
-          Arith.andi(operands) >>> MLIR.CAPI.mlirValueGetType(left)
-
-        :* ->
-          Arith.muli(operands) >>> MLIR.CAPI.mlirValueGetType(left)
+        {%MLIR.Value{}, %MLIR.Value{}} ->
+          [left, right]
       end
-    end
+      |> then(fn [left, _] = operands -> {operands, MLIR.CAPI.mlirValueGetType(left)} end)
+
+    create_binary(op, operands, type, opts[:ctx], opts[:block])
   end
 
   def handle_intrinsic(name, _params, args, opts) when name in @enif_functions do

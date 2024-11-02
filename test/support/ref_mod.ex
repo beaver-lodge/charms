@@ -1,4 +1,5 @@
 defmodule RefereeMod do
+  @moduledoc false
   use Charms
   alias Charms.Term
 
@@ -12,6 +13,7 @@ defmodule RefereeMod do
 end
 
 defmodule ReferrerMod do
+  @moduledoc false
   use Charms
   alias Charms.Term
 

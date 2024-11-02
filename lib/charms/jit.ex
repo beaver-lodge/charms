@@ -1,4 +1,7 @@
 defmodule Charms.JIT do
+  @moduledoc """
+  Compile and execute MLIR modules generated from `Charms.Defm`.
+  """
   alias Beaver.MLIR.Dialect.Func
   import Beaver.MLIR.CAPI
   alias Beaver.MLIR
@@ -89,7 +92,7 @@ defmodule Charms.JIT do
         e ->
           case Charms.Diagnostic.compile_error_message(diagnostic_server) do
             {:ok, dm} ->
-              raise CompileError, dm
+              reraise CompileError, dm, __STACKTRACE__
 
             {:error, _} ->
               reraise e, __STACKTRACE__
@@ -166,18 +169,19 @@ defmodule Charms.JIT do
   end
 
   def destroy(key) do
-    with %__MODULE__{
-           ctx: ctx,
-           engine: engine,
-           owner: true,
-           diagnostic_server: diagnostic_server,
-           diagnostic_handler_id: diagnostic_handler_id
-         } <- LockedCache.get(key) do
-      :ok = GenServer.stop(diagnostic_server)
-      Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
-      MLIR.ExecutionEngine.destroy(engine)
-      MLIR.Context.destroy(ctx)
-    else
+    case LockedCache.get(key) do
+      %__MODULE__{
+        ctx: ctx,
+        engine: engine,
+        owner: true,
+        diagnostic_server: diagnostic_server,
+        diagnostic_handler_id: diagnostic_handler_id
+      } ->
+        Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
+        MLIR.ExecutionEngine.destroy(engine)
+        MLIR.Context.destroy(ctx)
+        :ok = GenServer.stop(diagnostic_server)
+
       nil ->
         :not_found
 

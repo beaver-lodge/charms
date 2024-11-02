@@ -39,6 +39,7 @@ defmodule Charms.Defm.Definition do
   alias MLIR.Dialect.Func
   require Func
   require Logger
+  import Charms.Diagnostic
 
   defstruct [:name, :args, :env, :call, :ret_types, :body, :exported]
 
@@ -137,23 +138,31 @@ defmodule Charms.Defm.Definition do
   end
 
   defp check_poison!(op) do
-    Beaver.Walker.postwalk(op, fn
-      %MLIR.Operation{} = op ->
-        if MLIR.Operation.name(op) == "ub.poison" do
-          if msg = Beaver.Walker.attributes(op)["msg"] do
-            MLIR.Attribute.unwrap(msg)
-            |> MLIR.StringRef.to_string()
-            |> then(&(&1 <> ", " <> to_string(MLIR.Operation.location(op))))
-          else
-            "Poison operation detected in the IR. #{to_string(op)}"
-          end
-          |> then(&raise ArgumentError, &1)
-        else
-          op
-        end
+    Beaver.Walker.postwalk(op, fn op ->
+      with %MLIR.Operation{} <- op,
+           "ub.poison" <- MLIR.Operation.name(op) do
+        loc_str = to_string(MLIR.Operation.location(op))
 
-      ir ->
-        ir
+        compile_err_msg =
+          case String.split(loc_str, ":") do
+            [f, line, _col] ->
+              [file: f, line: String.to_integer(line)]
+
+            _ ->
+              [file: loc_str, line: 0]
+          end
+
+        if msg = Beaver.Walker.attributes(op)["msg"] do
+          MLIR.Attribute.unwrap(msg)
+          |> MLIR.StringRef.to_string()
+        else
+          "Poison operation detected in the IR. #{to_string(op)}"
+        end
+        |> then(&raise(CompileError, [{:description, &1} | compile_err_msg]))
+      else
+        ir ->
+          ir
+      end
     end)
 
     :ok
@@ -249,9 +258,8 @@ defmodule Charms.Defm.Definition do
       mlir_expander = %Charms.Defm.Expander{mlir_expander | return_types: return_types}
 
       for %__MODULE__{env: env, call: call, ret_types: ret_types, body: body} <- definitions do
-        quote do
-          def(unquote(call) :: unquote(ret_types), unquote(body))
-        end
+        quote(do: unquote(call) :: unquote(ret_types))
+        |> then(&quote(do: defm(unquote(&1), unquote(body))))
         |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
       end
     end
@@ -271,13 +279,7 @@ defmodule Charms.Defm.Definition do
           op
 
         {:error, msg} ->
-          case Charms.Diagnostic.compile_error_message(diagnostic_server) do
-            {:ok, dm} ->
-              raise CompileError, dm
-
-            {:error, _} ->
-              raise CompileError, file: __ENV__.file, line: __ENV__.line, description: msg
-          end
+          raise_compile_error(__ENV__, diagnostic_server, msg)
       end
     end)
     |> then(&{MLIR.to_string(&1, bytecode: true), referenced_modules(&1)})
@@ -300,9 +302,9 @@ defmodule Charms.Defm.Definition do
     try do
       do_compile(ctx, definitions, diagnostic_server)
     after
-      :ok = GenServer.stop(diagnostic_server)
       Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
       MLIR.Context.destroy(ctx)
+      :ok = GenServer.stop(diagnostic_server)
     end
   end
 

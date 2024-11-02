@@ -34,14 +34,12 @@ defmodule Charms.Pointer do
         opts
       ) do
     cast =
-      cond do
-        not MLIR.equal?(MLIR.Value.type(size_v), Type.i64(ctx: opts[:ctx])) ->
-          quote do
-            size = value arith.extsi(unquote(size)) :: i64()
-          end
-
-        true ->
-          size
+      if MLIR.equal?(MLIR.Value.type(size_v), Type.i64(ctx: opts[:ctx])) do
+        size
+      else
+        quote do
+          size = value arith.extsi(unquote(size)) :: i64()
+        end
       end
 
     quote do

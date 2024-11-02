@@ -3,6 +3,7 @@ defmodule CallTest do
   import ExUnit.CaptureLog
 
   test "if with value" do
+    file = "test/call_test.exs"
     line = __ENV__.line + 10
 
     log =
@@ -20,7 +21,9 @@ defmodule CallTest do
         end
       end)
 
-    assert log =~ "(ArgumentError) Unknown intrinsic: AbsentMod.absent_fun/2"
-    assert log =~ "#{__ENV__.file}:#{line}"
+    assert log =~
+             "(CompileError) #{file}:#{line}: Unknown invocation: AbsentMod.absent_fun/2"
+
+    assert log =~ "#{file}:#{line}"
   end
 end

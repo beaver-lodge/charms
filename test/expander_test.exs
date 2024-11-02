@@ -139,12 +139,13 @@ defmodule POCTest do
     test "return original arg" do
       quote do
         defmodule ReturnPassedArg do
+          import Charms
           import Charms.Defm
           alias Charms.Env
           alias Charms.Term
-          def foo(a :: Term.t()) :: Term.t(), do: func.return(a)
+          defm foo(a :: Term.t()) :: Term.t(), do: func.return(a)
 
-          def bar(env :: Env.t(), a :: Term.t()) :: Term.t() do
+          defm bar(env :: Env.t(), a :: Term.t()) :: Term.t() do
             b = call foo(a) :: Term.t()
             func.return(b)
           end
@@ -164,10 +165,11 @@ defmodule POCTest do
     test "intrinsic not found" do
       quote do
         defmodule InvalidRemoteCall do
+          import Charms
           import Charms.Defm
           alias Charms.Term
 
-          def foo(a :: Term.t()) :: Term.t() do
+          defm foo(a :: Term.t()) :: Term.t() do
             Foo.bar(a)
             func.return(a)
           end
@@ -175,7 +177,7 @@ defmodule POCTest do
       end
       |> compile()
       |> tap(fn m ->
-        assert to_string(m) =~ "Unknown intrinsic: Foo.bar/1"
+        assert to_string(m) =~ "Unknown invocation: Foo.bar/1"
       end)
       |> MLIR.Operation.verify!()
     end
@@ -188,7 +190,7 @@ defmodule POCTest do
                        defmodule ReturnPassedArg do
                          import Charms.Defm
                          alias Charms.Term
-                         def foo(a :: Term.t()) :: Term.t(), do: cf.ar(a)
+                         defm foo(a :: Term.t()) :: Term.t(), do: cf.ar(a)
                        end
                      end
                      |> compile()
@@ -197,13 +199,14 @@ defmodule POCTest do
 
     test "no return" do
       assert_raise CompileError,
-                   "example.exs: func.call @Elixir.InvalidLocalCall.dummy doesn't return a value",
+                   "example.exs: Function call @Elixir.InvalidLocalCall.dummy does not return a value",
                    fn ->
                      quote do
                        defmodule InvalidLocalCall do
+                         import Charms
                          import Charms.Defm
                          alias Charms.Term
-                         def foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
+                         defm foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
                        end
                      end
                      |> compile
