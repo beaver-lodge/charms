@@ -433,8 +433,8 @@ defmodule Charms.Defm.Expander do
       |> MLIR.Operation.create()
       |> then(&{MLIR.Operation.results(&1), state, env})
     rescue
-      _ ->
-        raise_compile_error(env, "Failed to create #{op}")
+      e ->
+        raise_compile_error(env, "Failed to create #{op}: #{Exception.message(e)}")
     end
   end
 
