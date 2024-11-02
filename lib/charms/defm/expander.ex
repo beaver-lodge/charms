@@ -531,15 +531,23 @@ defmodule Charms.Defm.Expander do
   defp expand_remote_macro(meta, {module, fun, arity} = mfa, args, state, env) do
     loc = MLIR.Location.from_env(env)
 
-    case Macro.Env.expand_require(env, meta, module, fun, arity,
-           trace: true,
-           check_deprecations: false
-         ) do
-      {:macro, module, callback} ->
-        expand_macro(meta, module, fun, args, callback, state, env)
+    try do
+      case Macro.Env.expand_require(env, meta, module, fun, arity,
+             trace: true,
+             check_deprecations: false
+           ) do
+        {:macro, module, callback} ->
+          expand_macro(meta, module, fun, args, callback, state, env)
 
-      :error ->
-        expand_magic_macros(loc, mfa, args, state, env)
+        :error ->
+          expand_magic_macros(loc, mfa, args, state, env)
+      end
+    rescue
+      e ->
+        raise_compile_error(
+          env,
+          "Failed to expand macro #{module}.#{fun}/#{arity}: #{Exception.message(e)}"
+        )
     end
   end
 
@@ -755,12 +763,7 @@ defmodule Charms.Defm.Expander do
     state = update_in(state.remotes, &[mfa | &1])
 
     if is_atom(module) do
-      try do
-        expand_remote_macro(meta, mfa, args, state, env)
-      rescue
-        e ->
-          reraise e, put_env_in_stacktrace(__STACKTRACE__, env, mfa)
-      end
+      expand_remote_macro(meta, mfa, args, state, env)
     else
       [{dialect, _, _}, op] = [module, fun]
       expand_call_as_op(dialect, op, args, state, env)
