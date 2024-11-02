@@ -124,7 +124,7 @@ defmodule DefmTest do
 
     test "wrong return type remote function" do
       assert_raise CompileError,
-                   "test/defm_test.exs:133: in invocation of no_return_type_annotation, mismatch type: f32 vs. i64, definition: (!llvm.ptr, i64) -> i64",
+                   "test/defm_test.exs:133: mismatch type in invocation: f32 vs. i64",
                    fn ->
                      defmodule WrongReturnType do
                        use Charms

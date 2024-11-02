@@ -136,28 +136,34 @@ defmodule Charms.Defm.Expander do
     |> then(&{&1.mlir.dependence_modules[module], &1})
   end
 
-  defp return_type_match_function_type!(ft, t, name, env) do
-    MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
-    |> tap(
-      &if(!MLIR.equal?(&1, t),
-        do:
-          raise_compile_error(
-            env,
-            "in invocation of #{name}, mismatch type: #{to_string(t)} vs. #{to_string(&1)}, definition: #{to_string(ft)}"
-          )
+  # check if function type's result type is compatible with the annotation
+  defp do_resolve_return_type([t], [rt], env) do
+    if MLIR.equal?(t, rt) do
+      rt
+    else
+      raise_compile_error(
+        env,
+        "mismatch type in invocation: #{to_string(t)} vs. #{to_string(rt)}"
       )
-    )
+    end
   end
 
-  defp resolve_return_type!(ft, types, name, env) do
-    with types <- List.wrap(types),
-         {[t], 1} <-
-           {types, MLIR.CAPI.mlirFunctionTypeGetNumResults(ft) |> Beaver.Native.to_term()} do
-      return_type_match_function_type!(ft, t, name, env)
-    else
-      {[], 1} -> MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)
-      {types, 0} -> types
-    end
+  defp do_resolve_return_type([], [rt], _env) do
+    rt
+  end
+
+  defp do_resolve_return_type(types, [], _env) do
+    types
+  end
+
+  defp resolve_return_type!(ft, types, env) do
+    expected_types =
+      case MLIR.CAPI.mlirFunctionTypeGetNumResults(ft) |> Beaver.Native.to_term() do
+        0 -> []
+        1 -> [MLIR.CAPI.mlirFunctionTypeGetResult(ft, 0)]
+      end
+
+    types |> List.wrap() |> do_resolve_return_type(expected_types, env) |> List.wrap()
   end
 
   defp infer_by_lookup(env, dependence, mod, name, types) do
@@ -176,7 +182,7 @@ defmodule Charms.Defm.Expander do
       )
     else
       if MLIR.Operation.name(sym) == "func.func" do
-        sym[:function_type] |> MLIR.Attribute.unwrap() |> resolve_return_type!(types, name, env)
+        sym[:function_type] |> MLIR.Attribute.unwrap() |> resolve_return_type!(types, env)
       else
         raise_compile_error(env, "symbol #{name} is not a function")
       end
