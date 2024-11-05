@@ -510,10 +510,6 @@ defmodule Charms.Defm.Expander do
           fun in module.__intrinsics__() ->
         expand_intrinsics(loc, module, fun, args, state, env)
 
-      module == MLIR.Attribute ->
-        {args, state, env} = expand(args, state, env)
-        {apply(MLIR.Attribute, fun, args), state, env}
-
       mfa == {Module, :__get_attribute__, 4} ->
         expand_get_attribute(args, state, env)
 
@@ -924,7 +920,7 @@ defmodule Charms.Defm.Expander do
         end
       )
 
-    state = put_in(state.mlir.blk, MLIR.CAPI.mlirModuleGetBody(state.mlir.mod))
+    state = put_in(state.mlir.blk, MLIR.Module.body(state.mlir.mod))
 
     if is_atom(expanded) do
       {full, env} = alias_defmodule(meta, alias, expanded, env)

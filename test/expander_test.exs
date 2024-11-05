@@ -29,26 +29,8 @@ defmodule POCTest do
 
   test "locals" do
     assert locals("foo()") == [foo: 0]
-    one = "value(arith.constant(value: Beaver.MLIR.Attribute.integer(i32(), 1)) :: i32())"
-    two = "value(arith.constant(value: Beaver.MLIR.Attribute.integer(i32(), 2)) :: i32())"
-
-    assert locals("import Charms.Defm; foo(#{one}, #{two})") == [
-             foo: 2,
-             i32: 0,
-             i32: 0,
-             i32: 0,
-             i32: 0
-           ]
-
-    assert locals("import Charms.Defm; foo(#{one}, call(bar(#{two})::i32()))") == [
-             bar: 1,
-             foo: 2,
-             i32: 0,
-             i32: 0,
-             i32: 0,
-             i32: 0,
-             i32: 0
-           ]
+    assert locals("foo(1, 2)") == [foo: 2]
+    assert locals("foo(1, bar(2))") == [bar: 1, foo: 2]
   end
 
   # This test shows we can track locals inside containers,
@@ -56,11 +38,11 @@ defmodule POCTest do
   test "containers" do
     assert locals("[foo()]") == [foo: 0]
     assert locals("[foo() | bar()]") == [bar: 0, foo: 0]
-    # assert locals("[foo() | bar(1, 2)]") == [bar: 2, foo: 0]
+    assert locals("[foo() | bar(1, 2)]") == [bar: 2, foo: 0]
     assert locals("{foo(), bar()}") == [bar: 0, foo: 0]
-    # assert locals("{foo(), bar(1, 2)}") == [bar: 2, foo: 0]
-    # assert locals("{foo(), bar(1, 2), baz(3)}") == [bar: 2, baz: 1, foo: 0]
-    # assert locals("%{foo() => bar(1, 2)}") == [bar: 2, foo: 0]
+    assert locals("{foo(), bar(1, 2)}") == [bar: 2, foo: 0]
+    assert locals("{foo(), bar(1, 2), baz(3)}") == [bar: 2, baz: 1, foo: 0]
+    assert locals("%{foo() => bar(1, 2)}") == [bar: 2, foo: 0]
   end
 
   # This test shows we can track locals inside unquotes.
