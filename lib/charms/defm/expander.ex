@@ -279,7 +279,7 @@ defmodule Charms.Defm.Expander do
         {l, state, env} = expand(l, state, env)
         {init, state, env} = expand(init, state, env)
         result_t = MLIR.Value.type(init)
-        {list_term_ptr, state} = uniq_mlir_var(state, l)
+        {list_term_ptr, state} = uniq_mlir_var(l, state)
         tail_ptr = uniq_mlir_var()
         head_ptr = uniq_mlir_var()
 
@@ -470,7 +470,7 @@ defmodule Charms.Defm.Expander do
 
   defp expand_intrinsics(loc, module, fun, args, state, env) do
     {args, state, env} = expand(args, state, env)
-    {params, state} = uniq_mlir_params(state, args)
+    {params, state} = uniq_mlir_params(args, state)
 
     case v =
            module.handle_intrinsic(fun, params, args,
@@ -692,13 +692,21 @@ defmodule Charms.Defm.Expander do
     {left, state, env} = expand(left, state, env)
     {right, state, env} = expand(right, state, env)
     loc = MLIR.Location.from_env(env)
-    {params, state} = uniq_mlir_params(state, [left, right])
+    {params, state} = uniq_mlir_params([left, right], state)
 
-    {Charms.Prelude.handle_intrinsic(fun, params, [left, right],
-       ctx: state.mlir.ctx,
-       block: state.mlir.blk,
-       loc: loc
-     ), state, env}
+    try do
+      {Charms.Prelude.handle_intrinsic(fun, params, [left, right],
+         ctx: state.mlir.ctx,
+         block: state.mlir.blk,
+         loc: loc
+       ), state, env}
+    rescue
+      e ->
+        raise_compile_error(
+          env,
+          "Failed to expand prelude intrinsic #{fun}: #{Exception.message(e)}"
+        )
+    end
   end
 
   ## =/2
@@ -1043,6 +1051,19 @@ defmodule Charms.Defm.Expander do
 
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
+        cond_type = MLIR.Value.type(condition)
+
+        # Ensure the condition is a i1, if not compare it to 0
+        condition =
+          if MLIR.equal?(cond_type, Type.i1(ctx: state.mlir.ctx)) do
+            condition
+          else
+            zero =
+              Arith.constant(value: Attribute.integer(cond_type, 0), loc: loc) >>> cond_type
+
+            Arith.cmpi(condition, zero, predicate: Arith.cmp_i_predicate(:sgt)) >>> Type.i1()
+          end
+
         b =
           block _true() do
             ret_t =
@@ -1063,6 +1084,22 @@ defmodule Charms.Defm.Expander do
       end
 
     {v, state, env}
+  end
+
+  defp expand_macro(_meta, Kernel, :!, [value], _callback, state, env) do
+    {value, state, env} = expand(value, state, env)
+    type = MLIR.Value.type(value)
+    {value, state} = uniq_mlir_var(value, state)
+    {type, state} = uniq_mlir_var(type, state)
+
+    {not_value, state, env} =
+      quote do
+        one = const 1 :: unquote(type)
+        value arith.xori(unquote(value), one) :: unquote(type)
+      end
+      |> expand(state, env)
+
+    {List.last(not_value), state, env}
   end
 
   defp expand_macro(_meta, Charms.Defm, :while, [expr, [do: body]], _callback, state, env) do
@@ -1246,7 +1283,7 @@ defmodule Charms.Defm.Expander do
   defp expand_remote(_meta, Kernel, fun, args, state, env) when fun in @prelude_intrinsics do
     loc = MLIR.Location.from_env(env)
     {args, state, env} = expand(args, state, env)
-    {params, state} = uniq_mlir_params(state, args)
+    {params, state} = uniq_mlir_params(args, state)
 
     {Charms.Prelude.handle_intrinsic(fun, params, args,
        ctx: state.mlir.ctx,
@@ -1282,7 +1319,7 @@ defmodule Charms.Defm.Expander do
     if function_exported?(MLIR.Type, fun, 1) do
       {apply(MLIR.Type, fun, [[ctx: state.mlir.ctx]]), state, env}
     else
-      {params, state} = uniq_mlir_params(state, args)
+      {params, state} = uniq_mlir_params(args, state)
 
       case i =
              Charms.Prelude.handle_intrinsic(fun, params, args,
@@ -1369,7 +1406,7 @@ defmodule Charms.Defm.Expander do
 
   defp beam_env_from_defm!(env, state) do
     if e = state.mlir.enif_env do
-      uniq_mlir_var(state, e)
+      uniq_mlir_var(e, state)
     else
       raise_compile_error(env, "must be a defm with beam env as the first argument")
     end
@@ -1380,14 +1417,14 @@ defmodule Charms.Defm.Expander do
     Macro.var(:"#{@var_prefix}#{System.unique_integer([:positive])}", nil)
   end
 
-  defp uniq_mlir_var(state, val) do
+  defp uniq_mlir_var(val, state) do
     uniq_mlir_var() |> then(&{&1, put_mlir_var(state, &1, val)})
   end
 
-  defp uniq_mlir_params(state, args) when is_list(args) do
+  defp uniq_mlir_params(args, state) when is_list(args) do
     for param <- args, reduce: {[], state} do
       {params, %{mlir: _} = state} ->
-        {param, %{mlir: _} = state} = uniq_mlir_var(state, param)
+        {param, %{mlir: _} = state} = uniq_mlir_var(param, state)
         {params ++ [param], state}
     end
   end

@@ -5,12 +5,17 @@ defmodule Charms.Prelude do
   use Charms.Intrinsic
   alias Beaver.MLIR.Dialect.{Arith, Func}
   @enif_functions Beaver.ENIF.functions()
-  @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :&&, :*]
+  @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :&&, :||, :*]
 
   defp constant_of_same_type(i, v, opts) do
     mlir ctx: opts[:ctx], block: opts[:block] do
       t = MLIR.CAPI.mlirValueGetType(v)
-      Arith.constant(value: Attribute.integer(t, i)) >>> t
+
+      if MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
+        Arith.constant(value: Attribute.integer(t, i)) >>> t
+      else
+        raise ArgumentError, "Not an integer type for constant, #{to_string(t)}"
+      end
     end
   end
 
@@ -21,7 +26,11 @@ defmodule Charms.Prelude do
           i
 
         i when is_integer(i) ->
-          Arith.constant(value: Attribute.integer(t, i)) >>> t
+          if MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
+            Arith.constant(value: Attribute.integer(t, i)) >>> t
+          else
+            raise ArgumentError, "Not an integer type, #{to_string(t)}"
+          end
       end
     end
   end
@@ -52,6 +61,9 @@ defmodule Charms.Prelude do
 
         :&& ->
           Arith.andi(operands) >>> type
+
+        :|| ->
+          Arith.ori(operands) >>> type
 
         :* ->
           Arith.muli(operands) >>> type
