@@ -1052,16 +1052,17 @@ defmodule Charms.Defm.Expander do
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
         cond_type = MLIR.Value.type(condition)
-
+        bool_type = Type.i1(ctx: state.mlir.ctx)
         # Ensure the condition is a i1, if not compare it to 0
         condition =
-          if MLIR.equal?(cond_type, Type.i1(ctx: state.mlir.ctx)) do
+          if MLIR.equal?(cond_type, bool_type) do
             condition
           else
             zero =
               Arith.constant(value: Attribute.integer(cond_type, 0), loc: loc) >>> cond_type
 
-            Arith.cmpi(condition, zero, predicate: Arith.cmp_i_predicate(:sgt)) >>> Type.i1()
+            Arith.cmpi(condition, zero, predicate: Arith.cmp_i_predicate(:sgt), loc: loc) >>>
+              Type.i1()
           end
 
         b =
