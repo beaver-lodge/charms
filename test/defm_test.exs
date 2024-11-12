@@ -3,8 +3,8 @@ defmodule AddTwoInt do
   alias Charms.{Pointer, Term}
 
   defm add_or_error(env, a, b, error) :: Term.t() do
-    ptr_a = Pointer.allocate(i64())
-    ptr_b = Pointer.allocate(i64())
+    ptr_a = Pointer.allocate(i32())
+    ptr_b = Pointer.allocate(i32())
 
     arg_err =
       block do
@@ -12,11 +12,11 @@ defmodule AddTwoInt do
       end
 
     cond_br enif_get_int64(env, a, ptr_a) != 0 do
-      cond_br 0 != enif_get_int64(env, b, ptr_b) do
-        a = Pointer.load(i64(), ptr_a)
-        b = Pointer.load(i64(), ptr_b)
-        sum = value llvm.add(a, b) :: i64()
-        term = enif_make_int64(env, sum)
+      cond_br 0 != enif_get_int(env, b, ptr_b) do
+        a = Pointer.load(i32(), ptr_a)
+        b = Pointer.load(i32(), ptr_b)
+        sum = value llvm.add(a, b) :: i32()
+        term = enif_make_int(env, sum)
         func.return(term)
       else
         ^arg_err
