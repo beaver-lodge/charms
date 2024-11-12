@@ -2,7 +2,7 @@ defmodule AddTwoInt do
   use Charms, init: false
   alias Charms.{Pointer, Term}
 
-  defm add_or_error(env, a, b, error) :: Term.t() do
+  defm add_or_error_with_cond_br(env, a, b, error) :: Term.t() do
     ptr_a = Pointer.allocate(i32())
     ptr_b = Pointer.allocate(i32())
 
@@ -11,7 +11,7 @@ defmodule AddTwoInt do
         func.return(error)
       end
 
-    cond_br enif_get_int64(env, a, ptr_a) != 0 do
+    cond_br enif_get_int(env, a, ptr_a) != 0 do
       cond_br 0 != enif_get_int(env, b, ptr_b) do
         a = Pointer.load(i32(), ptr_a)
         b = Pointer.load(i32(), ptr_b)
@@ -23,19 +23,6 @@ defmodule AddTwoInt do
       end
     else
       ^arg_err
-    end
-  end
-
-  defm add0(env, a, b) :: Term.t() do
-    ptr_a = Pointer.allocate(i32())
-    ptr_b = Pointer.allocate(i32())
-
-    if enif_get_int(env, a, ptr_a) <= 0 || enif_get_int(env, b, ptr_b) <= 0 do
-      enif_make_badarg(env)
-    else
-      a = Pointer.load(i32(), ptr_a)
-      b = Pointer.load(i32(), ptr_b)
-      enif_make_int(env, a + b)
     end
   end
 
@@ -104,10 +91,8 @@ defmodule DefmTest do
     assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
     assert AddTwoInt.add(1, 2).(engine) == 3
     assert_raise ArgumentError, fn -> AddTwoInt.add(1, "2").(engine) end
-    assert AddTwoInt.add0(1, 2).(engine) == 3
-    assert_raise ArgumentError, fn -> AddTwoInt.add0(1, "2").(engine) end
-    assert AddTwoInt.add_or_error(1, 2, :arg_err).(engine) == 3
-    assert AddTwoInt.add_or_error(1, "", :arg_err).(engine) == :arg_err
+    assert AddTwoInt.add_or_error_with_cond_br(1, 2, :arg_err).(engine) == 3
+    assert AddTwoInt.add_or_error_with_cond_br(1, "", :arg_err).(engine) == :arg_err
     assert :ok = Charms.JIT.destroy(:add_int)
   end
 
