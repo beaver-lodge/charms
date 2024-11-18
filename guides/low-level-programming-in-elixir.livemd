@@ -1,0 +1,323 @@
+<!-- livebook:{"file_entries":[{"name":"dev-snapshot-godot-4-4-dev-3.webp","type":"attachment"},{"name":"raspberry-pi-4-labelled-f5e5dcdf6a34223235f83261fa42d1e8.png","type":"attachment"},{"name":"tke2stni7l051.jpg","type":"attachment"},{"name":"tke2stni7l0511.jpg","type":"attachment"}]} -->
+
+# Preview of Charms and Low-level Programming in Elixir
+
+## Typical ML framework
+
+Components in the stack of a ML framework, from high to low level. Let's look at PyTorch as an example.
+
+| Component                                         | Made of                   | Description                                                                                       |
+| ------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Application**                                   | Python                    | Users interact with high-level APIs to define and train models.                                   |
+| **High-Level API**, `nn`, `optim`, `autograd`     | Python, PyTorch APIs      | Provides abstractions for neural network layers, optimization, and **automatic differentiation**. |
+| **Computation Graph Layer**, `Tensor`, `autograd` | Python, PyTorch APIs, C++ | Constructs and manages the **computation graph** and computes **gradients**.                      |
+| **Execution Engine**                              | C++, CUDA, cuDNN, MKL     | Executes operations on specified hardware, including CPU and GPU.                                 |
+| **Low-Level Operations**                          | C++, CUDA, cuDNN, MKL     | Provides fundamental mathematical operations and is optimized for performance.                    |
+| **Backend**                                       | C++, CUDA, cuDNN, MKL     | Interfaces with optimized libraries for hardware, such as NVIDIA's cuDNN and Intel's MKL.         |
+| **Hardware**                                      | CUDA, cuDNN, MKL          | Physical hardware on which computations are performed, including CPUs, GPUs                       |
+
+## But Erlang has everything
+
+There is this famous meme to compare Web servers.
+
+<!-- livebook:{"break_markdown":true} -->
+
+![](files/tke2stni7l0511.jpg)
+
+<!-- livebook:{"break_markdown":true} -->
+
+So what it should look like in ML ideally:
+
+| Technical requirement                             | Server A                  | Server B   |
+| ------------------------------------------------- | ------------------------- | ---------- |
+| **Application**                                   | Python, Flask             | **Elixir** |
+| **High-Level API**, `nn`, `optim`, `autograd`     | Python, PyTorch APIs      | **Elixir** |
+| **Computation Graph Layer**, `Tensor`, `autograd` | Python, PyTorch APIs, C++ | **Elixir** |
+| **Execution Engine**                              | C++, CUDA, cuDNN, MKL     | **Elixir** |
+| **Low-Level Operations**                          | C++, CUDA, cuDNN, MKL     | **Elixir** |
+| **Backend**                                       | C++, CUDA, cuDNN, MKL     | **Elixir** |
+| **Hardware**                                      | CUDA, cuDNN, MKL          | **Elixir** |
+
+## But how?
+
+`Nx` has already implemented the higher-level features.
+
+| Technical requirement                             | Server A                  | Server B |
+| ------------------------------------------------- | ------------------------- | -------- |
+| **Application**                                   | Python                    | **Nx**   |
+| **High-Level API**, `nn`, `optim`, `autograd`     | Python, PyTorch APIs      | **Nx**   |
+| **Computation Graph Layer**, `Tensor`, `autograd` | Python, PyTorch APIs, C++ | **Nx**   |
+
+What is yet to be implemented is the low-level parts. Today in `Nx`, we are using bindings to libraries that was originally created for Python as the backend and compiler of `Nx` expressions. These libraries heavily uses `NIF` to interface the native code. Let's take `EXLA` as an example.
+
+* By calling `EXLA` `NIF`s we generated `MLIR`
+* MLIR gets compiled by `XLA`, and finally produce `LLVM` that can be compiled to native targets like GPU.
+
+| Technical requirement    | Server A              | Server B        |
+| ------------------------ | --------------------- | --------------- |
+| **Execution Engine**     | C++, CUDA, cuDNN, MKL | **EXLA NIFs**   |
+| **Low-Level Operations** | C++, CUDA, cuDNN, MKL | **MLIR (MHLO)** |
+| **Backend**              | C++, CUDA, cuDNN, MKL | **MLIR**        |
+| **Hardware**             | CUDA, cuDNN, MKL      | **LLVM**        |
+
+To achieve a full Elixir ML stack, we can just use Elixir to implement `NIF`s and the `MLIR` stuff right?
+
+So let's dive in. More about `NIF` and `MLIR`.
+
+## What is NIF?
+
+NIF stands for "Native Implemented Function" in Erlang. It means writing functions in native language that can be called directly from Erlang code. If you are familiar with Python, NIFs serve the same purpose of APIs like `PyObject`, `PyMethodDef` provided by `Python.h`.
+
+```mermaid
+graph TD
+    A[Erlang virtual machine] -->|call| B[NIF function, in C ABI]
+    B -->|implemented in| C[Native languages, C/C++/Rust/Zig]
+    C -->|return native data types| B
+    B -->|return Erlang terms| A
+```
+
+Here is a small example of a NIF implemented in C.
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+#include "erl_nif.h"
+static ERL_NIF_TERM add_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ErlNifFunc nif_funcs[] =
+{
+    {"add", 2, add_nif}
+};
+ERL_NIF_INIT(example, nif_funcs, NULL, NULL, NULL, NULL);
+static ERL_NIF_TERM add_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    int a, b;
+    if (!enif_get_int(env, argv[0], &a) || !enif_get_int(env, argv[1], &b)) {
+        return enif_make_badarg(env);
+    }
+    int result = a + b;
+    return enif_make_int(env, result);
+}
+```
+
+There are also many NIF libraries you can use in Elixir. They usually use C/C++/Rust/Zig, which can be hard to use. And it often requires complicated build process.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Usually you need a wrapper Elixir module to declare the function and library loading
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+defmodule Example do
+  @on_load :load_nifs
+
+  def load_nifs do
+    :erlang.load_nif(~c'./example', 0)
+  end
+
+  def add(_a, _b) do
+    raise "NIF add/2 not implemented"
+  end
+end
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+And `CMake` to build the C source
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+cmake_minimum_required(VERSION 3.10)
+project(example C)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+find_package(Erlang REQUIRED)
+set(SOURCE_FILES example.c)
+add_library(example SHARED ${SOURCE_FILES})
+set_target_properties(example PROPERTIES
+  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+)
+target_include_directories(example PRIVATE ${ERLANG_INCLUDE_DIRS})
+target_link_libraries(example ${ERLANG_LIBRARIES})
+```
+
+## Start by making NIFs easy
+
+How about cut all the corners and use Elixir to write NIFs?
+
+Here is the equivalent implementation to the C version of the `NIF`.
+
+```elixir
+defmodule AddTwoInt do
+  use Charms
+  alias Charms.{Pointer, Term}
+
+  defm add(env, a, b) :: Term.t() do
+    ptr_a = Pointer.allocate(i32())
+    ptr_b = Pointer.allocate(i32())
+
+    if !enif_get_int(env, a, ptr_a) || !enif_get_int(env, b, ptr_b) do
+      enif_make_badarg(env)
+    else
+      a = Pointer.load(i32(), ptr_a)
+      b = Pointer.load(i32(), ptr_b)
+      enif_make_int(env, a + b)
+    end
+  end
+end
+
+AddTwoInt.add(1, 2)
+```
+
+## What is MLIR
+
+MLIR stands for "Multi-Level Intermediate Representation". To explain what it is, we will break it into two parts:
+
+* Multi-Level (ML)
+* Intermediate Representation (IR)
+
+### What is "Multi-Level"?
+
+MLIR is created by people created LLVM. So they learned this lesson: very hard to directly compile high level to lower level. So do it in more steps (levels).
+
+Let's illustrate the problem with diagram:
+
+* Very hard to get the compiler right, if the lowering of the semantic is too steep.
+  ```mermaid
+  sequenceDiagram
+    participant HighLevel as Programming Language
+    participant MidLevel as LLVM
+    participant LowLevel as Assembly
+
+    HighLevel->>MidLevel: Compiler
+    MidLevel->>LowLevel: Backend
+  ```
+* So they invented MLIR, to solve this problem. In MLIR, you can have as many steps in the compiler as you found necessary. So the compiler becomes simple and modular.
+  ```mermaid
+  sequenceDiagram
+    participant HighLevel as High-Level Code
+    participant Step1 as Step 1 Intermediate
+    participant Step2 as Step 2 Intermediate
+    participant Step3 as Step 3 Intermediate
+    participant Step4 as Step 4 Intermediate
+    participant LowLevel as Low-Level Code
+
+    HighLevel->>Step1: Step 1
+    Step1->>Step2: Step 2
+    Step2->>Step3: Step 3
+    Step3->>Step4: Step 4
+    Step4->>LowLevel: Step 5
+  ```
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Intermediate Representation, aka, IR
+
+Intermediate Representation (IR) is a concept in compiler. Usually it is compiler's **data structure to represent the program** and has these characteristics:
+
+* Easy to write code to modify and optimize the IR
+* Hard to read it by human eye
+
+To better understand why we need IR, let's look at a more detailed comparison of using an IR vs. generating C source code directly:
+
+| Feature/Aspect                   | IR                                                                        | C Source Code Generation                                                    |
+| -------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Platform Independence**        | More platform-independent; can target multiple architectures with one IR. | Often tied to a specific architecture or C implementation.                  |
+| **Optimization**                 | Apply various optimizations in a uniform way                              | Optimization must be done separately for each target language.              |
+| **Abstract Representation**      | Abstracts away specific language constructs, making analysis simpler.     | Reflects high-level language semantics, which can complicate optimization.  |
+| **Analysis**                     | Advanced program analysis thanks to structured representation             | Requires parsing and understanding high-level language's complexities.      |
+| **Code Generation**              | Allows for multiple backends. DRY                                         | Typically requires separate logic for each output language or target.       |
+| **Cross-Language Compatibility** | Supports multiple source languages compiling to the same IR.              | Generally, each programming language must be compiled separately to C.      |
+| **Incremental Development**      | Easier to incrementally develop and test in a modular manner              | Changes to one part of C generation can affect all other parts              |
+| **Future-Proofing**              | Adapt to new HW architectures or languages with minor changes to IR       | Requires significant updates to adapt to new languages or HW architectures. |
+
+## How to use MLIR to compile Elixir
+
+```mermaid
+graph TD
+    A[Elixir Source Code] -->|Charms| B[MLIR]
+    B -->|Dialect Conversion| C[Lower-Level MLIR]
+    C -->|Optimization Passes| D[Optimized MLIR]
+    D -->|Lower to LLVM IR| E[LLVM IR]
+    E -->|Backend| F[Target-Specific Assembly Code]
+
+    subgraph MLIR
+        B
+        C
+        D
+        E
+    end
+
+    style B fill:#c9e8f9,stroke:#333,stroke-width:2px
+    style C fill:#c9e8f9,stroke:#333,stroke-width:2px
+    style D fill:#c9e8f9,stroke:#333,stroke-width:2px
+    style E fill:#c9e8f9,stroke:#333,stroke-width:2px
+    style F fill:#c9e8f9,stroke:#333,stroke-width:2px
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+Let's look at IR the example above produces.
+
+```
+func.func @Elixir.AddTwoInt.add(%arg0: !llvm.ptr, %arg1: i64, %arg2: i64) -> i64 {
+  %c1_i32 = arith.constant 1 : i32
+  %0 = llvm.alloca %c1_i32 x i32 : (i32) -> !llvm.ptr
+  %c1_i32_0 = arith.constant 1 : i32
+  %1 = llvm.alloca %c1_i32_0 x i32 : (i32) -> !llvm.ptr
+  %2 = call @enif_get_int(%arg0, %arg1, %0) : (!llvm.ptr, i64, !llvm.ptr) -> i32
+  %3 = call @enif_get_int(%arg0, %arg2, %1) : (!llvm.ptr, i64, !llvm.ptr) -> i32
+  %4 = arith.andi %2, %3 : i32
+  %c0_i32 = arith.constant 0 : i32
+  %5 = arith.cmpi sgt, %4, %c0_i32 : i32
+  %6 = scf.if %5 -> (i64) {
+    %7 = llvm.load %0 : !llvm.ptr -> i32
+    %8 = llvm.load %1 : !llvm.ptr -> i32
+    %9 = arith.addi %7, %8 : i32
+    %10 = func.call @enif_make_int(%arg0, %9) : (!llvm.ptr, i32) -> i64
+    scf.yield %10 : i64
+  } else {
+    %7 = func.call @enif_make_badarg(%arg0) : (!llvm.ptr) -> i64
+    scf.yield %7 : i64
+  }
+  return %6 : i64
+}
+```
+
+## Some other use cases
+
+With full access to native libraries, many interesting apps can be built with Elixir
+
+### Game engine
+
+We can build 3D games with Elixir in the future! No need to build from scratch. We can build extension for engines like `godot`. Imagine that, a gaming's network communication runs on BEAM, and its game logic is implemented in Elixir, compiled by Charms.
+
+```mermaid
+graph TD
+    A[Godot Engine] -->|Loads| B(GDExtension)
+    B -->|Initializes| C[Elixir Extension]
+    C -->|Registers| D[Custom Classes/Functions]
+    D -->|Called by| A
+    A -->|Uses| D
+    D -->|Interacts with| E[Godot Engine API]
+    E -->|Provides| F[Game Logic]
+    F -->|Updates| A
+style A fill:#c9e8f9,stroke:#333,stroke-width:2px
+style B fill:#c9e8f9,stroke:#333,stroke-width:2px
+style D fill:#c9e8f9,stroke:#333,stroke-width:2px
+style E fill:#c9e8f9,stroke:#333,stroke-width:2px
+style F fill:#c9e8f9,stroke:#333,stroke-width:2px
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+![](files/dev-snapshot-godot-4-4-dev-3.webp)
+
+## IoT and embedded hardware
+
+With full access to native code, we can write Elixir NIFs for hardware, like controlling the fan or light. Sometimes for hardware it is more performant if we can use loop, or use pointer to do io.
+
+<!-- livebook:{"break_markdown":true} -->
+
+![](files/raspberry-pi-4-labelled-f5e5dcdf6a34223235f83261fa42d1e8.png)

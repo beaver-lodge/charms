@@ -224,9 +224,9 @@ defmodule Exceptional do
   alias Charms.{Term, Pointer}
 
   @err_t %ArgumentError{message: "not an int"}
-  @err_v %ArgumentError{message: "num too small"}
+  @err_v %ArgumentError{message: "not positive"}
 
-  defm raise_it(env, i :: Term.t()) :: Term.t() do
+  defm raise_if_not_positive_int(env, i :: Term.t()) :: Term.t() do
     i_ptr = Pointer.allocate(i32())
 
     if enif_get_int(env, i, i_ptr) != 0 do
@@ -242,22 +242,22 @@ defmodule Exceptional do
 end
 
 try do
-  Exceptional.raise_it(:a)
+  Exceptional.raise_if_not_positive_int(:a)
 rescue
   e -> IO.inspect(e)
 end
 
 try do
-  Exceptional.raise_it(0)
+  Exceptional.raise_if_not_positive_int(0)
 rescue
   e -> IO.inspect(e)
 end
 
-Exceptional.raise_it(1)
+Exceptional.raise_if_not_positive_int(1)
 ```
 
 In this example, we employ a technique using `@err_t` and `@err_v`. In Charms, Elixir's module attributes are serialized and compiled as native values transparently.
 
 ## Conclusion
 
-This tutorial provides an overview of the basics of programming with the Charms DSL, which lets you write native code that can be JIT-compiled while still utilizing a familiar Elixir-like syntax. For more advanced features and additional fun, be sure to consult the Charms documentation.
+This tutorial provides an overview of the basics of programming with the Charms DSL, which lets you write native code that can be JIT-compiled while still utilizing Elixir syntax. For more advanced features and additional fun, be sure to consult the Charms documentation.

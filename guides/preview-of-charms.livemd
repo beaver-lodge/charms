@@ -1,0 +1,73 @@
+<!-- livebook:{"file_entries":[{"name":"100-percent-elixir.png","type":"attachment"}]} -->
+
+# Preview of Charms and Low-level Programming in Elixir
+
+## What is "low-level bits Elixir"?
+
+100% Elixir, but runs on native, GPU.
+
+<!-- livebook:{"break_markdown":true} -->
+
+![](files/100-percent-elixir.png)
+
+<!-- livebook:{"break_markdown":true} -->
+
+So Elixir was generally considered to be a language for the fields of web and IoT. In recent years this changes, as you can see, we made gigantic progress in the field of ML. It is exciting that Elixir as a language and ecosystem is very generic and still growing.
+
+It happens in web Elixir before. 5 or 6 years ago we were using Cowboy and Erlang's JSON library and today we are using Bandit, Jason, Finch, etc. There is absolutely fine if the Erlang libaries does the job for you.
+
+Very often the typical terrible experience you would have is that mystery error message you don't know what to do with. It could be an peculiar `arg_err` or a C++ stacktrace you can't understand unless you read the source code. Not mentioning if it is a Elixir library we can use the Registry and Elixir's supervisors and protocols, which makes everything cohesive and programmable instead of spending time learning how to config things.
+
+If one day Elixir is going have its breakthrough in AI, I mean an influencial product like ChatGPT, Elixir should have its low-level bits ready on that day.
+
+## About this talk
+
+This talk was originally titled **"Overview of Elixir ML ecosystem and preview of Charms"**. Consider the previous presenter seems to do an excellent job talking about the overview part, my topic is shifted a bit.
+
+The upcoming project, Charms, is going to take a step further. It aims to implement the NIFs in Elixir, to do the number crutching in Elixir, without using or repurposing an library that was built for Python. Will this be inpratical and too ambitious? Maybe but why not.
+
+## How it started and how it is going
+
+Couple years ago Jose tweeted to express his interest in ML. I sent an e-mail to say say hi and told him I’m an Elixir developer working on ML for years. Rounds of exchanges on ML and he said there is another Elixir developer who is working on ML and we should start a Slack channel and it turns out to be Sean.
+
+```mermaid
+timeline
+    title Timeline of early day Elixir ML Collaboration
+
+    section Initial Contact
+    Jose tweets interest in ML : the tweet
+    Jackal emailed Jose introducing himself as an Elixir developer working on ML : email
+
+    section Collaboration Setup
+    Jose mentions another Elixir developer (Sean) working on ML : Slack
+    Jackal, Jose, and Sean start a Slack channel for collaboration : Nx prototype
+
+    section Project Focus
+    POC development around XLA integration : EXLA prototype
+
+    section Transition
+    Move to develop low-level bits with MLIR using Elixir : Beaver : Charms
+```
+
+My code contribution is very minimum. Quickly I noticed Jose and Sean are way more capable programmer than me and they don’t need me to code anything.
+
+I suggested the most practical library to integrate was XLA and we did some POC around that. It was fun! I never did this kind work outside of Python ecosystem and it was refreshing.
+
+Basically after that I moved to develop something else: use Elixir to do low level meta-programming with MLIR, and I am still doing it today. Recently the work evolves to become the library Charms.
+
+## Jose’s influence on the younger me
+
+In the early day of Elixir. I remember Jose used to say this in an Elixir fountain podcast the Elixir 2.0 might make Erlang core as target. So I figured, oh Erlang core must be cool and always looked for possibility to compile Elixir to something else. So later I always kept an eye on the IR and the various IRs of BEAM. I even wanted to use `beam_ssa` as the source to compile to native but later found it not going anywhere.
+
+## The vision
+
+Soon, people will exhaust the data to train. Then the model is gonna
+
+* become super adaptive
+* training on data generated during itself’s execution
+
+Human brain is so scalable and adaptive. There is no way that we always run a model of a fixed architecture.
+
+Back-propagation to influence how CUDA kernel is generated and run
+
+Projects code 100% in Elixir but still can deal with low level capabilities. For instance, Charms is 100% in Elixir. Although it calls Beaver’s MLIR APIs, these APIs are generic to any compilers, not specific to Charms.
