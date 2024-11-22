@@ -166,7 +166,7 @@ defmodule POCTest do
 
     test "op not found" do
       assert_raise CompileError,
-                   "example.exs: Unknown MLIR operation to create: cf.ar, did you mean: cf.br",
+                   ~r"example.exs: Unknown MLIR operation to create: cf.ar, did you mean: cf.br",
                    fn ->
                      quote do
                        defmodule ReturnPassedArg do
@@ -181,7 +181,7 @@ defmodule POCTest do
 
     test "no return" do
       assert_raise CompileError,
-                   "example.exs: Function call @Elixir.InvalidLocalCall.dummy does not return a value",
+                   ~r"example.exs: Function call @Elixir.InvalidLocalCall.dummy does not return a value",
                    fn ->
                      quote do
                        defmodule InvalidLocalCall do

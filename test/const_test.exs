@@ -16,7 +16,7 @@ defmodule ConstTest do
     end
 
     assert_raise CompileError,
-                 "test/const_test.exs:13: Unsupported type for const macro: tensor<*xf64>",
+                 ~r"test/const_test.exs:13: Unsupported type for const macro: tensor<\*xf64>",
                  f
   end
 end

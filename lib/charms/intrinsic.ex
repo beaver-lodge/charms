@@ -1,4 +1,11 @@
 defmodule Charms.Intrinsic do
+  defmodule Opts do
+    @moduledoc """
+    Options for intrinsic functions.
+    """
+    defstruct [:ctx, :args, :block, :loc, :eval]
+  end
+
   @moduledoc """
   Behaviour to define intrinsic functions.
   """
@@ -7,49 +14,113 @@ defmodule Charms.Intrinsic do
   @type opts :: [opt | {atom(), term()}]
   @type ir_return :: MLIR.Value.t() | MLIR.Operation.t()
   @type intrinsic_return :: ir_return() | (any() -> ir_return())
-  @doc """
-  Callback to implement an intrinsic.
-
-  Having different return types, there are two kinds of intrinsic functions:
-  - Regular: returns a MLIR value or operation.
-  - Higher-order: returns a function that returns a MLIR value or operation.
-
-  ## More on higher-order intrinsic
-  Higher-order intrinsic function can be variadic, which means it a list will be passed as arguments.
-  """
-  @callback handle_intrinsic(atom(), [Macro.t()], [term()], opts()) :: intrinsic_return()
   Module.register_attribute(__MODULE__, :defintrinsic, accumulate: true)
-
-  @doc false
-  def collect_intrinsics(nil) do
-    raise ArgumentError, "no intrinsic functions defined"
-  end
-
-  def collect_intrinsics(attr_list) when length(attr_list) > 0 do
-    attr_list |> Enum.reverse() |> List.flatten() |> Enum.uniq()
-  end
 
   defmacro __using__(_) do
     quote do
-      @behaviour Charms.Intrinsic
       use Beaver
       @before_compile Charms.Intrinsic
       import Charms.Intrinsic, only: :macros
+      Module.register_attribute(__MODULE__, :intrinsic, accumulate: true)
     end
   end
 
-  defmacro defintrinsic(intrinsic_list) do
+  defmacro defintrinsic(call, do: body) do
     quote do
-      @defintrinsic unquote(intrinsic_list)
+      defintrinsic(unquote(call), %Charms.Intrinsic.Opts{}, do: unquote(body))
+    end
+  end
+
+  defp unwrap_unquote(name) do
+    case name do
+      {:unquote, _, [name]} ->
+        name
+
+      _ ->
+        name
+    end
+  end
+
+  defp recompose_when_clauses(name, args, opts) do
+    intrinsic_name_ast =
+      {:unquote, [], [quote(do: :"__defintrinsic_#{unquote(unwrap_unquote(name))}__")]}
+
+    case opts do
+      {:when, when_meta, [opts | clauses]} ->
+        {:when, when_meta,
+         [
+           quote do
+             unquote(intrinsic_name_ast)(unquote(args), unquote(opts))
+           end
+           | clauses
+         ]}
+
+      _ ->
+        quote do
+          unquote(intrinsic_name_ast)(unquote(args), unquote(opts))
+        end
+    end
+  end
+
+  defp normalize_arg_names(args) do
+    for arg <- args do
+      case arg do
+        {arg_name, meta, nil} ->
+          arg_name
+          |> to_string()
+          |> String.trim_leading("_")
+          |> String.to_atom()
+          |> then(&{&1, meta, nil})
+
+        _ ->
+          arg
+      end
+    end
+  end
+
+  @doc """
+  To implement an intrinsic function
+  """
+  defmacro defintrinsic(call, opts, do: body) do
+    {name, _meta, args} = call
+    call = recompose_when_clauses(name, args, opts)
+    placeholder_args = normalize_arg_names(args)
+
+    # can't get the arity from length(args), because it might be an unquote_splicing, whose length is 1
+    placeholder =
+      quote generated: true do
+        def unquote(name)(unquote_splicing(placeholder_args)) do
+          arity = length([unquote_splicing(placeholder_args)])
+
+          raise "Intrinsic #{Exception.format_mfa(__MODULE__, unquote(name), arity)} cannot be called outside of a defm body"
+        end
+      end
+
+    quote do
+      unquote(placeholder)
+      @doc false
+      def unquote(call) do
+        unquote(body)
+      end
+
+      @intrinsic {unquote(unwrap_unquote(name)),
+                  :"__defintrinsic_#{unquote(unwrap_unquote(name))}__"}
     end
   end
 
   defmacro __before_compile__(_env) do
-    quote do
-      @defintrinsic_list @defintrinsic |> Charms.Intrinsic.collect_intrinsics()
-      def __intrinsics__() do
-        @defintrinsic_list
+    quote bind_quoted: [] do
+      @all_intrinsics @intrinsic |> Enum.uniq()
+
+      for {name, intrinsic_name} <- @all_intrinsics do
+        def __intrinsics__(unquote(name), arity) do
+          if function_exported?(__MODULE__, unquote(name), arity) do
+            unquote(intrinsic_name)
+          end
+        end
       end
+
+      def __intrinsics__(_, _), do: nil
     end
   end
 end

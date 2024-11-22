@@ -364,7 +364,7 @@ defmodule Charms.Defm.Expander do
           MLIR.Block.add_args!(Beaver.Env.block(), arg_types, ctx: Beaver.Env.context())
 
           arg_values =
-            Range.new(0, length(args) - 1)
+            Range.new(0, length(args) - 1, 1)
             |> Enum.map(&MLIR.Block.get_arg!(Beaver.Env.block(), &1))
 
           state =
@@ -472,42 +472,60 @@ defmodule Charms.Defm.Expander do
     {args, state, env} = expand(args, state, env)
     {params, state} = uniq_mlir_params(args, state)
 
-    case v =
-           module.handle_intrinsic(fun, params, args,
-             ctx: state.mlir.ctx,
-             block: state.mlir.blk,
-             loc: loc,
-             eval: fn ast ->
-               expand(
-                 ast,
-                 state,
-                 env
-               )
-             end,
-             params: params
-           ) do
-      %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
-        {v, state, env}
+    if f = module.__intrinsics__(fun, length(args)) do
+      v =
+        apply(module, f, [
+          params,
+          %Charms.Intrinsic.Opts{
+            ctx: state.mlir.ctx,
+            args: args,
+            block: state.mlir.blk,
+            loc: loc,
+            eval: fn ast ->
+              expand(
+                ast,
+                state,
+                env
+              )
+            end
+          }
+        ])
 
-      f when is_function(f) ->
-        {f, state, env}
+      case v do
+        %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
+          {v, state, env}
 
-      ast = {_, _, _} ->
-        {v, state, env} = expand(ast, state, env)
-        {List.last(v), state, env}
+        f when is_function(f) ->
+          {f, state, env}
 
-      other ->
-        raise_compile_error(
-          env,
-          "Unexpected return type from intrinsic #{module}.#{fun}: #{inspect(other)}"
-        )
+        {:__block__, _, list} ->
+          # do not leak variables created in the macro
+          {v, _, _} = expand_list(list, state, env)
+
+          v
+          |> List.last()
+          |> then(&{&1, state, env})
+
+        ast = {_, _, _} ->
+          # do not leak variables created in the macro
+          {v, _state, _env} = expand(ast, state, env)
+          {v, state, env}
+
+        other ->
+          raise_compile_error(
+            env,
+            "Unexpected return type from intrinsic #{module}.#{fun}: #{inspect(other)}"
+          )
+      end
+    else
+      raise_compile_error(env, "Intrinsic #{module}.#{fun}/#{length(args)} not found")
     end
   end
 
-  defp expand_magic_macros(loc, {module, fun, _arity} = mfa, args, state, env) do
+  defp expand_magic_macros(loc, {module, fun, arity} = mfa, args, state, env) do
     cond do
-      Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 0) and
-          fun in module.__intrinsics__() ->
+      Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 2) and
+          module.__intrinsics__(fun, arity) ->
         expand_intrinsics(loc, module, fun, args, state, env)
 
       mfa == {Module, :__get_attribute__, 4} ->
@@ -540,7 +558,7 @@ defmodule Charms.Defm.Expander do
       e ->
         raise_compile_error(
           env,
-          "Failed to expand macro #{module}.#{fun}/#{arity}: #{Exception.message(e)}"
+          "Failed to expand macro #{module}.#{fun}/#{arity}: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
         )
     end
   end
@@ -687,24 +705,31 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  @prelude_intrinsics Charms.Prelude.__intrinsics__()
-  defp expand({fun, _meta, [left, right]}, state, env) when fun in @prelude_intrinsics do
-    {left, state, env} = expand(left, state, env)
-    {right, state, env} = expand(right, state, env)
+  @intrinsics Charms.Kernel.macro_intrinsics() ++ Charms.Kernel.intrinsics()
+  defp expand({fun, _meta, args}, state, env) when fun in @intrinsics do
+    {args, state, env} = expand(args, state, env)
     loc = MLIR.Location.from_env(env)
-    {params, state} = uniq_mlir_params([left, right], state)
 
     try do
-      {Charms.Prelude.handle_intrinsic(fun, params, [left, right],
-         ctx: state.mlir.ctx,
-         block: state.mlir.blk,
-         loc: loc
-       ), state, env}
+      expand_intrinsics(loc, Charms.Kernel, fun, args, state, env)
+      |> then(fn {v, _, _} ->
+        if is_list(v) do
+          List.last(v)
+        else
+          v
+        end
+      end)
+      |> tap(fn v ->
+        unless match?(%MLIR.Value{}, v) do
+          raise_compile_error(env, "Expected a value, got: #{inspect(v)}")
+        end
+      end)
+      |> then(&{&1, state, env})
     rescue
       e ->
         raise_compile_error(
           env,
-          "Failed to expand prelude intrinsic #{fun}: #{Exception.message(e)}"
+          "Failed to expand kernel intrinsic #{fun}: #{Exception.message(e)}"
         )
     end
   end
@@ -1087,32 +1112,22 @@ defmodule Charms.Defm.Expander do
     {v, state, env}
   end
 
-  defp expand_macro(_meta, Kernel, :!, [value], _callback, state, env) do
-    {value, state, env} = expand(value, state, env)
-    type = MLIR.Value.type(value)
-    {value, state} = uniq_mlir_var(value, state)
-    {type, state} = uniq_mlir_var(type, state)
-
-    {not_value, state, env} =
-      quote do
-        one = const 1 :: unquote(type)
-        value arith.xori(unquote(value), one) :: unquote(type)
-      end
-      |> expand(state, env)
-
-    {List.last(not_value), state, env}
-  end
-
   defp expand_macro(_meta, Charms.Defm, :while, [expr, [do: body]], _callback, state, env) do
+    loc = MLIR.Location.from_env(env)
+
     v =
       mlir ctx: state.mlir.ctx, block: state.mlir.blk do
-        SCF.while [] do
+        SCF.while loc: loc do
           region do
             block _() do
               {condition, _state, _env} =
                 expand(expr, put_in(state.mlir.blk, Beaver.Env.block()), env)
 
-              SCF.condition(condition) >>> []
+              unless match?(%MLIR.Value{}, condition) do
+                raise_compile_error(env, "Expected a value, got: #{inspect(condition)}")
+              end
+
+              SCF.condition(condition, loc: loc) >>> []
             end
           end
 
@@ -1281,32 +1296,27 @@ defmodule Charms.Defm.Expander do
 
   ## Helpers
 
-  defp expand_remote(_meta, Kernel, fun, args, state, env) when fun in @prelude_intrinsics do
-    loc = MLIR.Location.from_env(env)
-    {args, state, env} = expand(args, state, env)
-    {params, state} = uniq_mlir_params(args, state)
-
-    {Charms.Prelude.handle_intrinsic(fun, params, args,
-       ctx: state.mlir.ctx,
-       block: state.mlir.blk,
-       loc: loc
-     ), state, env}
-  end
-
-  defp expand_remote(meta, module, fun, args, state, env) do
+  defp expand_remote(_meta, module, fun, args, state, env) do
     # A compiler may want to emit a :remote_function trace in here.
     state = update_in(state.remotes, &[{module, fun, length(args)} | &1])
     {args, state, env} = expand_list(args, state, env)
+    loc = MLIR.Location.from_env(env)
 
-    if module in [MLIR.Type] do
-      if fun in [:unranked_tensor, :complex, :vector] do
-        args
-      else
-        args ++ [[ctx: state.mlir.ctx]]
-      end
-      |> then(&{apply(module, fun, &1), state, env})
-    else
-      {{{:., meta, [module, fun]}, meta, args}, state, env}
+    cond do
+      Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 2) and
+          module.__intrinsics__(fun, length(args)) ->
+        expand_intrinsics(loc, module, fun, args, state, env)
+
+      module in [MLIR.Type] ->
+        if fun in [:unranked_tensor, :complex, :vector] do
+          args
+        else
+          args ++ [[ctx: state.mlir.ctx]]
+        end
+        |> then(&{apply(module, fun, &1), state, env})
+
+      true ->
+        raise_compile_error(env, "function #{module}.#{fun}/#{length(args)} not found")
     end
   end
 
@@ -1314,29 +1324,18 @@ defmodule Charms.Defm.Expander do
     # A compiler may want to emit a :local_function trace in here.
     state = update_in(state.locals, &[{fun, length(args)} | &1])
     {args, state, env} = expand_list(args, state, env)
-    Code.ensure_loaded!(MLIR.Type)
-    loc = MLIR.Location.from_env(env)
 
-    if function_exported?(MLIR.Type, fun, 1) do
-      {apply(MLIR.Type, fun, [[ctx: state.mlir.ctx]]), state, env}
-    else
-      {params, state} = uniq_mlir_params(args, state)
-
-      case i =
-             Charms.Prelude.handle_intrinsic(fun, params, args,
-               ctx: state.mlir.ctx,
-               block: state.mlir.blk,
-               loc: loc
-             ) do
-        :not_handled ->
-          quote do
-            unquote(env.module).unquote(fun)(unquote_splicing(args))
-          end
-          |> expand_call_of_types([], state, env)
-
-        _ ->
-          {i, state, env}
+    try do
+      quote do
+        unquote(env.module).unquote(fun)(unquote_splicing(args))
       end
+      |> expand_call_of_types([], state, env)
+    rescue
+      e ->
+        raise_compile_error(
+          env,
+          "Failed to expand local function #{fun}/#{length(args)}: #{Exception.message(e)}"
+        )
     end
   end
 

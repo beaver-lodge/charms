@@ -8,13 +8,13 @@ defmodule VecAddTest do
   end
 
   test "wrong num of init values" do
-    assert_raise ArgumentError, "expected 8 values, got 6", fn ->
+    assert_raise CompileError, ~r"expected 8 values, got 6", fn ->
       defmodule SixInitValues do
         use Charms
         alias Charms.SIMD
 
         defm six(env, a, b, error) do
-          SIMD.new(i32(), 8).(1, 1, 1, 1, 1, 1)
+          SIMD.new(SIMD.t(i32(), 8), [1, 1, 1, 1, 1, 1])
         end
       end
     end

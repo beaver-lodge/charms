@@ -6,11 +6,12 @@ defmodule Charms do
   There are two ways to define a function with `defm/2` or implement callbacks of `Charms.Intrinsic` behavior. The `defm/2` is a macro that generates a function definition in Charm. The intrinsic is a behavior that generates a function definition in MLIR.
 
   The intrinsic is more flexible than `defm` because:
-  - Intrinsic can be variadic and its argument can be anything
   - Intrinsic is suitable for the cases where directly writing or generating MLIR is more ideal
   - An intrinsic should be responsible for its type check while the Charm’s type system is responsible for function call’s type check
+  - It is possible for an intrinsic to return a MLIR type, while `defm` can only return value.
+  - Intrinsic function is always inline.
 
-  The `defm` is more suitable for simple functions because it is designed to be as close to vanilla Elixir as possible. As a rule of thumb, use `defm` for simple functions and intrinsic for complex functions or higher-order(generic) function with type as argument.
+  The `defm` is more suitable for simple functions because it is designed to be as close to vanilla Elixir as possible. As a rule of thumb, use `defm` for simple functions and intrinsic for complex functions or function with type as argument.
 
   ## `defm`'s differences from `Beaver.>>>/2` op expressions
   - In `Beaver.>>>/2`, MLIR code are expected to mixed with regular Elixir code. While in `defm/2`, there is only Elixir code (a subset of Elixir, to be more precise).
@@ -21,7 +22,6 @@ defmodule Charms do
   ## Caveats and limitations
 
   - We need a explicit `call` in function call because the `::` special form has a parser priority  that is too low so a `call` macro is introduced to ensure proper scope.
-  - Being variadic, intrinsic must be called with the module name. `import` doesn't work with intrinsic functions while `alias` is supported.
 
   ## Glossary of modules
 
@@ -36,6 +36,7 @@ defmodule Charms do
       import Charms
       use Beaver
       import Beaver.MLIR.Type
+      import Charms.Prelude
       @doc false
       def __use_ir__, do: nil
       @before_compile Charms
