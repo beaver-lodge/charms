@@ -49,7 +49,7 @@ defmodule DefmTest do
 
   test "invalid return of absent alias" do
     assert_raise CompileError,
-                 "test/defm_test.exs:#{__ENV__.line + 5}: invalid return type",
+                 ~r"test/defm_test.exs:#{__ENV__.line + 5}: invalid return type",
                  fn ->
                    defmodule InvalidRet do
                      use Charms
@@ -63,13 +63,13 @@ defmodule DefmTest do
 
   test "invalid arg of absent alias" do
     assert_raise CompileError,
-                 "test/defm_test.exs:#{__ENV__.line + 6}: invalid argument type #2",
+                 ~r"test/defm_test.exs:#{__ENV__.line + 6}: invalid argument type #2",
                  fn ->
-                   defmodule InvalidRet do
+                   defmodule InvalidArgType do
                      use Charms
                      alias Charms.Term
 
-                     defm my_function(env, arg1 :: Pointer.t(), arg2) :: Term.t() do
+                     defm my_function(env, arg1 :: Invalid.t(), arg2) :: Term.t() do
                        func.return(arg2)
                      end
                    end
@@ -171,5 +171,36 @@ defmodule DefmTest do
         end
       end
     end
+  end
+
+  test "negate" do
+    assert_raise CompileError, ~r/Not an integer type to negate, unsupported type: f32/, fn ->
+      defmodule NegateFloatType do
+        use Charms
+        alias Charms.Term
+
+        defm foo() do
+          zero = const 0.0 :: f32()
+          !zero
+        end
+      end
+    end
+  end
+
+  test "type of" do
+    defmodule TypeOf do
+      use Charms
+      alias Charms.{Term, Pointer}
+
+      defm foo(env, a) :: Term.t() do
+        b = const 1 :: i32()
+        i_ptr = Pointer.allocate(type_of(b))
+        enif_get_int(env, a, i_ptr)
+        sum = Pointer.load(type_of(b), i_ptr) + b
+        enif_make_int(env, sum)
+      end
+    end
+
+    assert TypeOf.foo(2) == 3
   end
 end

@@ -5,27 +5,43 @@ defmodule Charms.SIMD do
   use Charms.Intrinsic
   alias MLIR.Dialect.Arith
   alias MLIR.Type
+  alias Charms.Intrinsic.Opts
 
-  @impl true
-  def handle_intrinsic(:new, params, [type, width], opts) do
-    fn literal_values ->
-      mlir ctx: opts[:ctx], block: opts[:block] do
-        values = Enum.map(literal_values, &Attribute.integer(type, &1))
+  @doc """
+  Return the constant value of the given `type` and `literal_values`
+  """
+  defintrinsic new(_type, _literal_values), %Opts{
+    args: [type, literal_values],
+    ctx: ctx,
+    block: block
+  } do
+    mlir ctx: ctx, block: block do
+      element_type = MLIR.CAPI.mlirShapedTypeGetElementType(type)
 
-        if Enum.count(values) != width do
-          raise ArgumentError, "expected #{width} values, got #{length(values)}"
-        end
-
-        t = handle_intrinsic(:t, params, [type, width], opts)
-        value = Attribute.dense_elements(values, t, opts)
-        Arith.constant(value: value) >>> t
+      if MLIR.is_null(element_type) do
+        raise "element type is null"
       end
+
+      width = MLIR.CAPI.mlirShapedTypeGetDimSize(type, 0) |> Beaver.Native.to_term()
+
+      if Enum.count(literal_values) != width do
+        raise ArgumentError, "expected #{width} values, got #{length(literal_values)}"
+      end
+
+      if width <= 0 do
+        raise ArgumentError, "width must be a positive integer"
+      end
+
+      values = Enum.map(literal_values, &Attribute.integer(element_type, &1))
+      value = Attribute.dense_elements(values, type, ctx: ctx)
+      Arith.constant(value: value) >>> type
     end
   end
 
-  def handle_intrinsic(:t, _params, [type, width], _opts) do
+  @doc """
+  Return the vector type of the given `type` and `width`
+  """
+  defintrinsic t(_type, _width), %Opts{args: [type, width]} do
     Type.vector([width], type)
   end
-
-  defintrinsic [:new, :t]
 end

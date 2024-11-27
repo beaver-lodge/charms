@@ -4,7 +4,6 @@ locals_without_parens = [
   value: 1,
   call: 1,
   const: 1,
-  defintrinsic: 1,
   defm: 2
 ]
 

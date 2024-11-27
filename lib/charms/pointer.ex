@@ -4,42 +4,38 @@ defmodule Charms.Pointer do
   """
   alias Charms.Pointer
   use Charms.Intrinsic
-  alias Beaver.MLIR.{Type, Attribute}
-  alias Beaver.MLIR.Dialect.{Arith, LLVM, Index}
+  alias Charms.Intrinsic.Opts
+  alias Beaver.MLIR.{Type}
+  alias Beaver.MLIR.Dialect.{LLVM}
 
-  @impl true
-  def handle_intrinsic(:allocate, params, [elem_type], opts) do
-    handle_intrinsic(:allocate, params, [elem_type, 1], opts)
-  end
-
-  def handle_intrinsic(:allocate, _params, [elem_type, size], opts) when is_integer(size) do
-    mlir ctx: opts[:ctx], block: opts[:block] do
-      size = Arith.constant(value: Attribute.integer(Type.i(32), size)) >>> ~t<i32>
-
-      size =
-        if MLIR.CAPI.mlirTypeIsAIndex(MLIR.Value.type(size)) |> Beaver.Native.to_term() do
-          Index.casts(size) >>> Type.i64()
-        else
-          size
-        end
-
-      LLVM.alloca(size, elem_type: elem_type) >>> ~t{!llvm.ptr}
+  @doc """
+  Allocates a single element of the given `elem_type`, returning a pointer to it.
+  """
+  defintrinsic allocate(elem_type) do
+    quote do
+      Charms.Pointer.allocate(unquote(elem_type), 1)
     end
   end
 
-  def handle_intrinsic(
-        :allocate,
-        [elem_type, size],
-        [_elem_type = %MLIR.Type{}, size_v = %MLIR.Value{}],
-        opts
-      ) do
+  @doc """
+  Allocates an array of `size` elements of the given `elem_type`, returning a pointer to it.
+  """
+  defintrinsic allocate(elem_type, size), %Opts{ctx: ctx, args: [_elem_type, size_v]} do
     cast =
-      if MLIR.equal?(MLIR.Value.type(size_v), Type.i64(ctx: opts[:ctx])) do
-        size
-      else
-        quote do
-          size = value arith.extsi(unquote(size)) :: i64()
-        end
+      case size_v do
+        i when is_integer(i) ->
+          quote do
+            const unquote(size_v) :: i64()
+          end
+
+        %MLIR.Value{} ->
+          if MLIR.equal?(MLIR.Value.type(size_v), Type.i64(ctx: ctx)) do
+            size
+          else
+            quote do
+              value arith.extsi(unquote(size)) :: i64()
+            end
+          end
       end
 
     quote do
@@ -48,20 +44,33 @@ defmodule Charms.Pointer do
     end
   end
 
-  def handle_intrinsic(:load, _params, [type, ptr], opts) do
-    mlir ctx: opts[:ctx], block: opts[:block] do
-      LLVM.load(ptr) >>> type
+  @doc """
+  Loads a value of `type` from the given pointer `ptr`.
+  """
+  defintrinsic load(type, ptr) do
+    quote do
+      value llvm.load(unquote(ptr)) :: unquote(type)
     end
   end
 
-  def handle_intrinsic(:store, _params, [val, ptr], opts) do
-    mlir ctx: opts[:ctx], block: opts[:block] do
-      LLVM.store(val, ptr) >>> []
+  @doc """
+  Stores a value `val` at the given pointer `ptr`.
+  """
+  defintrinsic store(val, ptr) do
+    quote do
+      llvm.store(unquote(val), unquote(ptr))
     end
   end
 
-  def handle_intrinsic(:element_ptr, _params, [elem_type, ptr, n], opts) do
-    mlir ctx: opts[:ctx], block: opts[:block] do
+  @doc """
+  Gets the element pointer of `elem_type` for the given base pointer `ptr` and index `n`.
+  """
+  defintrinsic element_ptr(_elem_type, _ptr, _n), %Opts{
+    ctx: ctx,
+    block: block,
+    args: [elem_type, ptr, n]
+  } do
+    mlir ctx: ctx, block: block do
       LLVM.getelementptr(ptr, n,
         elem_type: elem_type,
         rawConstantIndices: ~a{array<i32: -2147483648>}
@@ -69,9 +78,10 @@ defmodule Charms.Pointer do
     end
   end
 
-  def handle_intrinsic(:t, _params, [], opts) do
-    Beaver.Deferred.from_opts(opts, ~t{!llvm.ptr})
+  @doc """
+  Return the pointer type
+  """
+  defintrinsic t(), %Opts{ctx: ctx} do
+    Beaver.Deferred.create(~t{!llvm.ptr}, ctx)
   end
-
-  defintrinsic [:t, :allocate, :load, :store, :element_ptr]
 end

@@ -1,13 +1,14 @@
 defmodule Charms.Term do
   @moduledoc """
-  Intrinsic module for SIMD type.
+  Intrinsic module for Erlang term type.
   """
   use Charms.Intrinsic
+  alias Charms.Intrinsic.Opts
 
-  @impl true
-  def handle_intrinsic(:t, _params, [], opts) do
-    Beaver.ENIF.Type.term(opts)
+  @doc """
+  Return the Erlang term type.
+  """
+  defintrinsic t(), %Opts{ctx: ctx} do
+    Beaver.ENIF.Type.term(ctx: ctx)
   end
-
-  defintrinsic [:t]
 end
