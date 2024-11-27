@@ -50,6 +50,9 @@ defmodule Charms.Kernel do
 
         :* ->
           Arith.muli(operands, loc: loc) >>> type
+
+        _ ->
+          raise ArgumentError, "Unsupported operator: #{inspect(op)}"
       end
     end
   end
@@ -71,6 +74,10 @@ defmodule Charms.Kernel do
             end
 
             [left, right]
+
+          _ ->
+            raise ArgumentError,
+                  "Invalid arguments for binary operator: #{inspect(left)}, #{inspect(right)}"
         end
         |> then(fn [left, _] = operands -> {operands, MLIR.CAPI.mlirValueGetType(left)} end)
 
@@ -78,11 +85,13 @@ defmodule Charms.Kernel do
     end
   end
 
-  defintrinsic !(_value), %Opts{args: [v]} do
+  defintrinsic !_value, %Opts{args: [v]} do
     t = MLIR.Value.type(v)
+
     unless MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
       raise ArgumentError, "Not an integer type to negate, unsupported type: #{to_string(t)}"
     end
+
     quote bind_quoted: [v: v, t: t] do
       one = const 1 :: t
       value arith.xori(v, one) :: t

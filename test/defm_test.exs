@@ -65,11 +65,11 @@ defmodule DefmTest do
     assert_raise CompileError,
                  ~r"test/defm_test.exs:#{__ENV__.line + 6}: invalid argument type #2",
                  fn ->
-                   defmodule InvalidRet1 do
+                   defmodule InvalidArgType do
                      use Charms
                      alias Charms.Term
 
-                     defm my_function(env, arg1 :: P.t(), arg2) :: Term.t() do
+                     defm my_function(env, arg1 :: Invalid.t(), arg2) :: Term.t() do
                        func.return(arg2)
                      end
                    end

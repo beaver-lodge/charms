@@ -20,9 +20,7 @@ defmodule Charms.Pointer do
   @doc """
   Allocates an array of `size` elements of the given `elem_type`, returning a pointer to it.
   """
-  defintrinsic allocate(elem_type, size), %Opts{ctx: ctx, args: args} do
-    [_elem_type, size_v] = args
-
+  defintrinsic allocate(elem_type, size), %Opts{ctx: ctx, args: [_elem_type, size_v]} do
     cast =
       case size_v do
         i when is_integer(i) ->
@@ -35,7 +33,7 @@ defmodule Charms.Pointer do
             size
           else
             quote do
-              size = value arith.extsi(unquote(size)) :: i64()
+              value arith.extsi(unquote(size)) :: i64()
             end
           end
       end

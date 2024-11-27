@@ -28,6 +28,10 @@ defmodule Charms.SIMD do
         raise ArgumentError, "expected #{width} values, got #{length(literal_values)}"
       end
 
+      if width <= 0 do
+        raise ArgumentError, "width must be a positive integer"
+      end
+
       values = Enum.map(literal_values, &Attribute.integer(element_type, &1))
       value = Attribute.dense_elements(values, type, ctx: ctx)
       Arith.constant(value: value) >>> type

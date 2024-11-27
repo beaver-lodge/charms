@@ -468,57 +468,53 @@ defmodule Charms.Defm.Expander do
     |> then(&{List.last(elem(&1, 0)), state, env})
   end
 
-  defp expand_intrinsics(loc, module, fun, args, state, env) do
+  defp expand_intrinsics(loc, module, intrinsic_impl, args, state, env) do
     {args, state, env} = expand(args, state, env)
     {params, state} = uniq_mlir_params(args, state)
 
-    if f = module.__intrinsics__(fun, length(args)) do
-      v =
-        apply(module, f, [
-          params,
-          %Charms.Intrinsic.Opts{
-            ctx: state.mlir.ctx,
-            args: args,
-            block: state.mlir.blk,
-            loc: loc,
-            eval: fn ast ->
-              expand(
-                ast,
-                state,
-                env
-              )
-            end
-          }
-        ])
+    v =
+      apply(module, intrinsic_impl, [
+        params,
+        %Charms.Intrinsic.Opts{
+          ctx: state.mlir.ctx,
+          args: args,
+          block: state.mlir.blk,
+          loc: loc,
+          eval: fn ast ->
+            expand(
+              ast,
+              state,
+              env
+            )
+          end
+        }
+      ])
 
-      case v do
-        %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
-          {v, state, env}
+    case v do
+      %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
+        {v, state, env}
 
-        f when is_function(f) ->
-          {f, state, env}
+      f when is_function(f) ->
+        {f, state, env}
 
-        {:__block__, _, list} ->
-          # do not leak variables created in the macro
-          {v, _, _} = expand_list(list, state, env)
+      {:__block__, _, list} ->
+        # do not leak variables created in the macro
+        {v, _, _} = expand_list(list, state, env)
 
-          v
-          |> List.last()
-          |> then(&{&1, state, env})
+        v
+        |> List.last()
+        |> then(&{&1, state, env})
 
-        ast = {_, _, _} ->
-          # do not leak variables created in the macro
-          {v, _state, _env} = expand(ast, state, env)
-          {v, state, env}
+      ast = {_, _, _} ->
+        # do not leak variables created in the macro
+        {v, _state, _env} = expand(ast, state, env)
+        {v, state, env}
 
-        other ->
-          raise_compile_error(
-            env,
-            "Unexpected return type from intrinsic #{module}.#{fun}: #{inspect(other)}"
-          )
-      end
-    else
-      raise_compile_error(env, "Intrinsic #{module}.#{fun}/#{length(args)} not found")
+      other ->
+        raise_compile_error(
+          env,
+          "Unexpected return type from intrinsic #{module}.#{intrinsic_impl}: #{inspect(other)}"
+        )
     end
   end
 
@@ -526,7 +522,8 @@ defmodule Charms.Defm.Expander do
     cond do
       Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 2) and
           module.__intrinsics__(fun, arity) ->
-        expand_intrinsics(loc, module, fun, args, state, env)
+        intrinsic_impl = module.__intrinsics__(fun, arity)
+        expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
 
       mfa == {Module, :__get_attribute__, 4} ->
         expand_get_attribute(args, state, env)
@@ -558,7 +555,7 @@ defmodule Charms.Defm.Expander do
       e ->
         raise_compile_error(
           env,
-          "Failed to expand macro #{module}.#{fun}/#{arity}: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
+          "Failed to expand macro #{module}.#{fun}/#{arity}: #{Exception.message(e)}"
         )
     end
   end
@@ -711,7 +708,8 @@ defmodule Charms.Defm.Expander do
     loc = MLIR.Location.from_env(env)
 
     try do
-      expand_intrinsics(loc, Charms.Kernel, fun, args, state, env)
+      intrinsic_impl = Charms.Kernel.__intrinsics__(fun, length(args))
+      expand_intrinsics(loc, Charms.Kernel, intrinsic_impl, args, state, env)
       |> then(fn {v, _, _} ->
         if is_list(v) do
           List.last(v)
@@ -1305,7 +1303,8 @@ defmodule Charms.Defm.Expander do
     cond do
       Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 2) and
           module.__intrinsics__(fun, length(args)) ->
-        expand_intrinsics(loc, module, fun, args, state, env)
+        intrinsic_impl = module.__intrinsics__(fun, length(args))
+        expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
 
       module in [MLIR.Type] ->
         if fun in [:unranked_tensor, :complex, :vector] do

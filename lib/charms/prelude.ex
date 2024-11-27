@@ -28,23 +28,25 @@ defmodule Charms.Prelude do
   end
 
   defintrinsic result_at(_entity, _index),
-               %Opts{args: [%MLIR.Operation{} = op, i]} do
-    MLIR.CAPI.mlirOperationGetResult(op, i)
-  end
+               %Opts{args: [%MLIR.Operation{} = op, i]} when is_integer(i) do
+    num_results = MLIR.CAPI.mlirOperationGetNumResults(op)
 
-  defintrinsic result_at(_entity, _index),
-               %Opts{args: [l, i]} when is_list(l) do
-    l |> Enum.at(i)
+    if i < num_results do
+      MLIR.CAPI.mlirOperationGetResult(op, i)
+    else
+      raise ArgumentError,
+            "Index #{i} is out of bounds for operation results, num results: #{num_results}"
+    end
   end
 
   defintrinsic type_of(_value), %Opts{args: [v]} do
     MLIR.Value.type(v)
   end
 
-  ctx = MLIR.Context.create()
+  signature_ctx = MLIR.Context.create()
 
   for name <- @enif_functions do
-    {arg_types, _} = Beaver.ENIF.signature(ctx, name)
+    {arg_types, _} = Beaver.ENIF.signature(signature_ctx, name)
     args = Macro.generate_arguments(length(arg_types), __MODULE__)
 
     defintrinsic unquote(name)(unquote_splicing(args)),
@@ -65,7 +67,7 @@ defmodule Charms.Prelude do
     end
   end
 
-  MLIR.Context.destroy(ctx)
+  MLIR.Context.destroy(signature_ctx)
 
   @doc false
   def intrinsics() do
