@@ -3,15 +3,13 @@ defmodule Charms.Intrinsic do
     @moduledoc """
     Options for intrinsic functions.
     """
-    defstruct [:ctx, :args, :block, :loc, :eval]
+    defstruct [:ctx, :block, :loc]
   end
 
   @moduledoc """
   Behaviour to define intrinsic functions.
   """
   alias Beaver
-  @type opt :: {:ctx, MLIR.Context.t()} | {:block, MLIR.Block.t() | {:loc, MLIR.Location.t()}}
-  @type opts :: [opt | {atom(), term()}]
   @type ir_return :: MLIR.Value.t() | MLIR.Operation.t()
   @type intrinsic_return :: ir_return() | (any() -> ir_return())
   Module.register_attribute(__MODULE__, :defintrinsic, accumulate: true)
@@ -25,12 +23,6 @@ defmodule Charms.Intrinsic do
     end
   end
 
-  defmacro defintrinsic(call, do: body) do
-    quote do
-      defintrinsic(unquote(call), %Charms.Intrinsic.Opts{}, do: unquote(body))
-    end
-  end
-
   defp unwrap_unquote(name) do
     case name do
       {:unquote, _, [name]} ->
@@ -41,9 +33,14 @@ defmodule Charms.Intrinsic do
     end
   end
 
-  defp recompose_when_clauses(name, args, opts) do
+  defp recompose_when_clauses(name, args) do
     intrinsic_name_ast =
       {:unquote, [], [quote(do: :"__defintrinsic_#{unquote(unwrap_unquote(name))}__")]}
+
+    opts =
+      quote do
+        %Charms.Intrinsic.Opts{} = var!(charms_intrinsic_internal_opts)
+      end
 
     case opts do
       {:when, when_meta, [opts | clauses]} ->
@@ -81,9 +78,9 @@ defmodule Charms.Intrinsic do
   @doc """
   To implement an intrinsic function
   """
-  defmacro defintrinsic(call, opts, do: body) do
+  defmacro defintrinsic(call, do: body) do
     {name, _meta, args} = call
-    call = recompose_when_clauses(name, args, opts)
+    call = recompose_when_clauses(name, args)
     placeholder_args = normalize_arg_names(args)
 
     # can't get the arity from length(args), because it might be an unquote_splicing, whose length is 1
@@ -96,10 +93,22 @@ defmodule Charms.Intrinsic do
         end
       end
 
+    body =
+      Macro.postwalk(body, fn
+        {:__IR__, _, args} when args == [] or args == nil ->
+          quote do
+            var!(charms_intrinsic_internal_opts)
+          end
+
+        ast ->
+          ast
+      end)
+
     quote do
       unquote(placeholder)
       @doc false
       def unquote(call) do
+        %Charms.Intrinsic.Opts{ctx: ctx} = var!(charms_intrinsic_internal_opts)
         unquote(body)
       end
 

@@ -10,11 +10,9 @@ defmodule Charms.SIMD do
   @doc """
   Return the constant value of the given `type` and `literal_values`
   """
-  defintrinsic new(_type, _literal_values), %Opts{
-    args: [type, literal_values],
-    ctx: ctx,
-    block: block
-  } do
+  defintrinsic new(type, literal_values) do
+    %Opts{ctx: ctx, block: block} = __IR__
+
     mlir ctx: ctx, block: block do
       element_type = MLIR.CAPI.mlirShapedTypeGetElementType(type)
 
@@ -41,7 +39,7 @@ defmodule Charms.SIMD do
   @doc """
   Return the vector type of the given `type` and `width`
   """
-  defintrinsic t(_type, _width), %Opts{args: [type, width]} do
+  defintrinsic t(type, width) do
     Type.vector([width], type)
   end
 end

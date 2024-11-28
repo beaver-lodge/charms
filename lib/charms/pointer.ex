@@ -12,35 +12,36 @@ defmodule Charms.Pointer do
   Allocates a single element of the given `elem_type`, returning a pointer to it.
   """
   defintrinsic allocate(elem_type) do
-    quote do
-      Charms.Pointer.allocate(unquote(elem_type), 1)
+    quote bind_quoted: [elem_type: elem_type] do
+      Charms.Pointer.allocate(elem_type, 1)
     end
   end
 
   @doc """
   Allocates an array of `size` elements of the given `elem_type`, returning a pointer to it.
   """
-  defintrinsic allocate(elem_type, size), %Opts{ctx: ctx, args: [_elem_type, size_v]} do
+  defintrinsic allocate(elem_type, size) do
+    %Opts{ctx: ctx} = __IR__
+
     cast =
-      case size_v do
+      case size do
         i when is_integer(i) ->
-          quote do
-            const unquote(size_v) :: i64()
+          quote bind_quoted: [size: i] do
+            const size :: i64()
           end
 
         %MLIR.Value{} ->
-          if MLIR.equal?(MLIR.Value.type(size_v), Type.i64(ctx: ctx)) do
+          if MLIR.equal?(MLIR.Value.type(size), Type.i64(ctx: ctx)) do
             size
           else
-            quote do
-              value arith.extsi(unquote(size)) :: i64()
+            quote bind_quoted: [size: size] do
+              value arith.extsi(size) :: i64()
             end
           end
       end
 
-    quote do
-      size = unquote(cast)
-      value llvm.alloca(size, elem_type: unquote(elem_type)) :: Pointer.t()
+    quote bind_quoted: [elem_type: elem_type, size: cast] do
+      value llvm.alloca(size, elem_type: elem_type) :: Pointer.t()
     end
   end
 
@@ -48,8 +49,8 @@ defmodule Charms.Pointer do
   Loads a value of `type` from the given pointer `ptr`.
   """
   defintrinsic load(type, ptr) do
-    quote do
-      value llvm.load(unquote(ptr)) :: unquote(type)
+    quote bind_quoted: [type: type, ptr: ptr] do
+      value llvm.load(ptr) :: type
     end
   end
 
@@ -57,19 +58,17 @@ defmodule Charms.Pointer do
   Stores a value `val` at the given pointer `ptr`.
   """
   defintrinsic store(val, ptr) do
-    quote do
-      llvm.store(unquote(val), unquote(ptr))
+    quote bind_quoted: [val: val, ptr: ptr] do
+      llvm.store(val, ptr)
     end
   end
 
   @doc """
   Gets the element pointer of `elem_type` for the given base pointer `ptr` and index `n`.
   """
-  defintrinsic element_ptr(_elem_type, _ptr, _n), %Opts{
-    ctx: ctx,
-    block: block,
-    args: [elem_type, ptr, n]
-  } do
+  defintrinsic element_ptr(elem_type, ptr, n) do
+    %Opts{ctx: ctx, block: block} = __IR__
+
     mlir ctx: ctx, block: block do
       LLVM.getelementptr(ptr, n,
         elem_type: elem_type,
@@ -81,7 +80,8 @@ defmodule Charms.Pointer do
   @doc """
   Return the pointer type
   """
-  defintrinsic t(), %Opts{ctx: ctx} do
+  defintrinsic t() do
+    %Opts{ctx: ctx} = __IR__
     Beaver.Deferred.create(~t{!llvm.ptr}, ctx)
   end
 end

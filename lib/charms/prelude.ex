@@ -27,20 +27,29 @@ defmodule Charms.Prelude do
     v
   end
 
-  defintrinsic result_at(_entity, _index),
-               %Opts{args: [%MLIR.Operation{} = op, i]} when is_integer(i) do
+  defintrinsic result_at(%MLIR.Operation{} = op, index) do
     num_results = MLIR.CAPI.mlirOperationGetNumResults(op)
 
-    if i < num_results do
-      MLIR.CAPI.mlirOperationGetResult(op, i)
+    if index < num_results do
+      MLIR.CAPI.mlirOperationGetResult(op, index)
     else
       raise ArgumentError,
-            "Index #{i} is out of bounds for operation results, num results: #{num_results}"
+            "Index #{index} is out of bounds for operation results, num results: #{num_results}"
     end
   end
 
-  defintrinsic type_of(_value), %Opts{args: [v]} do
-    MLIR.Value.type(v)
+  @doc """
+  Get the MLIR type of the given value.
+  """
+  defintrinsic type_of(value) do
+    MLIR.Value.type(value)
+  end
+
+  @doc """
+  Dump the MLIR entity at compile time with `IO.puts/1`
+  """
+  defintrinsic dump(entity) do
+    entity |> tap(&IO.puts(MLIR.to_string(&1)))
   end
 
   signature_ctx = MLIR.Context.create()
@@ -49,10 +58,10 @@ defmodule Charms.Prelude do
     {arg_types, _} = Beaver.ENIF.signature(signature_ctx, name)
     args = Macro.generate_arguments(length(arg_types), __MODULE__)
 
-    defintrinsic unquote(name)(unquote_splicing(args)),
-                 opts = %Opts{args: args, ctx: ctx, block: block, loc: loc} do
+    defintrinsic unquote(name)(unquote_splicing(args)) do
+      opts = %Opts{ctx: ctx, block: block, loc: loc} = __IR__
       {arg_types, ret_types} = Beaver.ENIF.signature(ctx, unquote(name))
-      args = args |> Enum.zip(arg_types) |> Enum.map(&wrap_arg(&1, opts))
+      args = [unquote_splicing(args)] |> Enum.zip(arg_types) |> Enum.map(&wrap_arg(&1, opts))
 
       mlir ctx: ctx, block: block do
         Func.call(args, callee: Attribute.flat_symbol_ref("#{unquote(name)}"), loc: loc) >>>

@@ -58,8 +58,9 @@ defmodule Charms.Kernel do
   end
 
   for name <- @binary_ops ++ @binary_macro_ops do
-    defintrinsic unquote(name)(_left, _right),
-                 opts = %Opts{args: [left, right], ctx: ctx, block: block, loc: loc} do
+    defintrinsic unquote(name)(left, right) do
+      opts = %Opts{ctx: ctx, block: block, loc: loc} = __IR__
+
       {operands, type} =
         case {left, right} do
           {%MLIR.Value{} = v, i} when is_integer(i) ->
@@ -85,14 +86,14 @@ defmodule Charms.Kernel do
     end
   end
 
-  defintrinsic !_value, %Opts{args: [v]} do
-    t = MLIR.Value.type(v)
+  defintrinsic !value do
+    t = MLIR.Value.type(value)
 
     unless MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
       raise ArgumentError, "Not an integer type to negate, unsupported type: #{to_string(t)}"
     end
 
-    quote bind_quoted: [v: v, t: t] do
+    quote bind_quoted: [v: value, t: t] do
       one = const 1 :: t
       value arith.xori(v, one) :: t
     end

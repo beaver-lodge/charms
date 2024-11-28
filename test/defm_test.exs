@@ -41,6 +41,7 @@ defmodule AddTwoInt do
 end
 
 defmodule DefmTest do
+  import ExUnit.CaptureIO
   use ExUnit.Case, async: true
 
   test "referenced modules" do
@@ -202,5 +203,19 @@ defmodule DefmTest do
     end
 
     assert TypeOf.foo(2) == 3
+  end
+
+  test "dump" do
+    assert capture_io(fn ->
+             defmodule DumpTerm do
+               use Charms
+               alias Charms.Term
+
+               defm d(env, a) :: Term.t() do
+                 dump(a)
+                 func.return(a)
+               end
+             end
+           end) =~ ~r"block argument.+i64"
   end
 end

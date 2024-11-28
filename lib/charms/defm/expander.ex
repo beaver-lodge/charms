@@ -333,7 +333,7 @@ defmodule Charms.Defm.Expander do
 
               # expand the body
               {body, _state, _env} = expand(body, state, env)
-              SCF.yield(List.last(body)) >>> []
+              SCF.yield(body) >>> []
             end
           end
         end >>> result_t
@@ -465,45 +465,24 @@ defmodule Charms.Defm.Expander do
       Pointer.load(Term.t(), term_ptr)
     end
     |> expand(state, env)
-    |> then(&{List.last(elem(&1, 0)), state, env})
   end
 
   defp expand_intrinsics(loc, module, intrinsic_impl, args, state, env) do
     {args, state, env} = expand(args, state, env)
-    {params, state} = uniq_mlir_params(args, state)
 
     v =
       apply(module, intrinsic_impl, [
-        params,
+        args,
         %Charms.Intrinsic.Opts{
           ctx: state.mlir.ctx,
-          args: args,
           block: state.mlir.blk,
-          loc: loc,
-          eval: fn ast ->
-            expand(
-              ast,
-              state,
-              env
-            )
-          end
+          loc: loc
         }
       ])
 
     case v do
       %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
         {v, state, env}
-
-      f when is_function(f) ->
-        {f, state, env}
-
-      {:__block__, _, list} ->
-        # do not leak variables created in the macro
-        {v, _, _} = expand_list(list, state, env)
-
-        v
-        |> List.last()
-        |> then(&{&1, state, env})
 
       ast = {_, _, _} ->
         # do not leak variables created in the macro
@@ -612,6 +591,11 @@ defmodule Charms.Defm.Expander do
 
   defp expand({:__block__, _, list}, state, env) do
     expand_list(list, state, env)
+    |> then(fn
+      {[], _, e} -> raise_compile_error(e, "empty block cannot be expanded")
+      {l, s, e} when is_list(l) -> {List.last(l), s, e}
+      {l, _, e} -> raise_compile_error(e, "Expected a list, got: #{inspect(l)}")
+    end)
   end
 
   ## __aliases__
@@ -709,6 +693,11 @@ defmodule Charms.Defm.Expander do
 
     try do
       intrinsic_impl = Charms.Kernel.__intrinsics__(fun, length(args))
+
+      unless intrinsic_impl do
+        raise_compile_error(env, "intrinsic implementation not found for #{fun}/#{length(args)}")
+      end
+
       expand_intrinsics(loc, Charms.Kernel, intrinsic_impl, args, state, env)
       |> then(fn {v, _, _} ->
         if is_list(v) do
@@ -792,22 +781,6 @@ defmodule Charms.Defm.Expander do
     else
       [{dialect, _, _}, op] = [module, fun]
       expand_call_as_op(dialect, op, args, state, env)
-    end
-  end
-
-  # Parameterized function call
-  defp expand(
-         {{:., _parameterized_meta, [parameterized]}, _meta, args},
-         state,
-         env
-       ) do
-    {args, state, env} = expand(args, state, env)
-    {parameterized, state, env} = expand(parameterized, state, env)
-
-    if is_function(parameterized) do
-      {parameterized.(args), state, env}
-    else
-      raise_compile_error(env, "Expected a function, got: #{inspect(parameterized)}")
     end
   end
 
@@ -920,7 +893,7 @@ defmodule Charms.Defm.Expander do
     mlir ctx: state.mlir.ctx, block: state.mlir.blk do
       {ret, _, _} = expand(clause_body, state, env)
 
-      case ret |> List.wrap() |> List.last() do
+      case ret do
         %MLIR.Operation{} ->
           SCF.yield() >>> []
           []
@@ -1418,14 +1391,6 @@ defmodule Charms.Defm.Expander do
 
   defp uniq_mlir_var(val, state) do
     uniq_mlir_var() |> then(&{&1, put_mlir_var(state, &1, val)})
-  end
-
-  defp uniq_mlir_params(args, state) when is_list(args) do
-    for param <- args, reduce: {[], state} do
-      {params, %{mlir: _} = state} ->
-        {param, %{mlir: _} = state} = uniq_mlir_var(param, state)
-        {params ++ [param], state}
-    end
   end
 
   @doc """
