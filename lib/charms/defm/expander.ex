@@ -281,9 +281,9 @@ defmodule Charms.Defm.Expander do
         result_t = MLIR.Value.type(init)
 
         {{tail_ptr, head_ptr}, state, env} =
-          quote bind_quoted: [list_term_ptr: l] do
+          quote do
             tail_ptr = Charms.Pointer.allocate(Term.t())
-            Pointer.store(list_term_ptr, tail_ptr)
+            Pointer.store(unquote(l), tail_ptr)
             head_ptr = Charms.Pointer.allocate(Term.t())
             {tail_ptr, head_ptr}
           end
