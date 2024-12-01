@@ -280,7 +280,7 @@ defmodule Charms.Defm.Expander do
         {init, state, env} = expand(init, state, env)
         result_t = MLIR.Value.type(init)
 
-        {{tail_ptr, head_ptr}, state, env} =
+        {{tail_ptr, head_ptr}, _state, _env} =
           quote do
             tail_ptr = Charms.Pointer.allocate(Term.t())
             Pointer.store(unquote(l), tail_ptr)
