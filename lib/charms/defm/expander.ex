@@ -279,15 +279,13 @@ defmodule Charms.Defm.Expander do
         {l, state, env} = expand(l, state, env)
         {init, state, env} = expand(init, state, env)
         result_t = MLIR.Value.type(init)
-        {list_term_ptr, state} = uniq_mlir_var(l, state)
-        tail_ptr = uniq_mlir_var()
-        head_ptr = uniq_mlir_var()
 
-        {_, state, env} =
-          quote do
-            unquote(tail_ptr) = Charms.Pointer.allocate(Term.t())
-            Pointer.store(unquote(list_term_ptr), unquote(tail_ptr))
-            unquote(head_ptr) = Charms.Pointer.allocate(Term.t())
+        {{tail_ptr, head_ptr}, state, env} =
+          quote bind_quoted: [list_term_ptr: l] do
+            tail_ptr = Charms.Pointer.allocate(Term.t())
+            Pointer.store(list_term_ptr, tail_ptr)
+            head_ptr = Charms.Pointer.allocate(Term.t())
+            {tail_ptr, head_ptr}
           end
           |> expand(state, env)
 
@@ -298,13 +296,13 @@ defmodule Charms.Defm.Expander do
               state = put_in(state.mlir.blk, Beaver.Env.block())
 
               # getting the BEAM env, assuming it is a regular defm with env as the first argument
-              {env_var, state} = beam_env_from_defm!(env, state)
+              env_ptr = beam_env_from_defm!(env, state)
 
               # the condition of the while loop, consuming the list with enif_get_list_cell
               {condition, _state, _env} =
                 quote do
                   enif_get_list_cell(
-                    unquote(env_var),
+                    unquote(env_ptr),
                     Pointer.load(Term.t(), unquote(tail_ptr)),
                     unquote(head_ptr),
                     unquote(tail_ptr)
@@ -447,7 +445,7 @@ defmodule Charms.Defm.Expander do
   defp expand_get_attribute(args, state, env) do
     {args, state, env} = expand(args, state, env)
     attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
-    {env_var, state} = beam_env_from_defm!(env, state)
+    env_ptr = beam_env_from_defm!(env, state)
 
     # there is no nested do-block to expand, so it is safe to use regular variable names, as long as the updated state and env are not leaked
     quote do
@@ -461,7 +459,7 @@ defmodule Charms.Defm.Expander do
       buffer = ptr_to_memref(buffer_ptr, size)
       memref.copy(attr, buffer)
       zero = const 0 :: i32()
-      enif_binary_to_term(unquote(env_var), buffer_ptr, size, term_ptr, zero)
+      enif_binary_to_term(unquote(env_ptr), buffer_ptr, size, term_ptr, zero)
       Pointer.load(Term.t(), term_ptr)
     end
     |> expand(state, env)
@@ -1378,19 +1376,10 @@ defmodule Charms.Defm.Expander do
 
   defp beam_env_from_defm!(env, state) do
     if e = state.mlir.enif_env do
-      uniq_mlir_var(e, state)
+      e
     else
       raise_compile_error(env, "must be a defm with beam env as the first argument")
     end
-  end
-
-  @var_prefix "chv"
-  defp uniq_mlir_var() do
-    Macro.var(:"#{@var_prefix}#{System.unique_integer([:positive])}", nil)
-  end
-
-  defp uniq_mlir_var(val, state) do
-    uniq_mlir_var() |> then(&{&1, put_mlir_var(state, &1, val)})
   end
 
   @doc """
