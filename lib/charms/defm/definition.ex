@@ -153,8 +153,7 @@ defmodule Charms.Defm.Definition do
           end
 
         if msg = Beaver.Walker.attributes(op)["msg"] do
-          MLIR.Attribute.unwrap(msg)
-          |> MLIR.StringRef.to_string()
+          MLIR.Attribute.unwrap(msg) |> MLIR.to_string()
         else
           "Poison operation detected in the IR. #{to_string(op)}"
         end
@@ -180,12 +179,12 @@ defmodule Charms.Defm.Definition do
            |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
            |> Beaver.Native.to_term() do
         0 ->
-          mlir ctx: MLIR.CAPI.mlirOperationGetContext(func), block: b do
+          mlir ctx: MLIR.CAPI.mlirOperationGetContext(func), blk: b do
             Func.return(loc: MLIR.Operation.location(func)) >>> []
           end
 
         1 ->
-          mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), block: b do
+          mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), blk: b do
             results = Beaver.Walker.results(last_op) |> Enum.to_list()
             Func.return(results, loc: MLIR.Operation.location(last_op)) >>> []
           end
@@ -225,10 +224,13 @@ defmodule Charms.Defm.Definition do
     |> then(fn {_, acc} -> MapSet.to_list(acc) end)
   end
 
-  def do_compile(ctx, definitions, diagnostic_server) do
-    m = MLIR.Module.create(ctx, "")
+  def do_compile(ctx, definitions) do
+    # this function might be called at compile time, so we need to ensure the application is started
+    :ok = Application.ensure_started(:kinda)
+    :ok = Application.ensure_started(:beaver)
+    m = MLIR.Module.create("", ctx: ctx)
 
-    mlir ctx: ctx, block: MLIR.Module.body(m) do
+    mlir ctx: ctx, blk: MLIR.Module.body(m) do
       mlir_expander = %Charms.Defm.Expander{
         ctx: ctx,
         blk: Beaver.Env.block(),
@@ -266,20 +268,20 @@ defmodule Charms.Defm.Definition do
 
     m
     |> Charms.Debug.print_ir_pass()
-    |> MLIR.Pass.Composer.nested(
+    |> Beaver.Composer.nested(
       "func.func",
       {"append_missing_return", "func.func", &append_missing_return/1}
     )
-    |> MLIR.Pass.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
-    |> MLIR.Pass.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
-    |> MLIR.Transforms.canonicalize()
+    |> Beaver.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
+    |> Beaver.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
+    |> MLIR.Transform.canonicalize()
     |> then(fn op ->
-      case MLIR.Pass.Composer.run(op, print: Charms.Debug.step_print?()) do
+      case Beaver.Composer.run(op, print: Charms.Debug.step_print?()) do
         {:ok, op} ->
           op
 
         {:error, msg} ->
-          raise_compile_error(__ENV__, diagnostic_server, msg)
+          raise_compile_error(__ENV__, msg)
       end
     end)
     |> then(&{MLIR.to_string(&1, bytecode: true), referenced_modules(&1)})
@@ -296,15 +298,28 @@ defmodule Charms.Defm.Definition do
   """
   def compile(definitions) when is_list(definitions) do
     ctx = MLIR.Context.create()
-    {:ok, diagnostic_server} = GenServer.start(Beaver.Diagnostic.Server, [])
-    diagnostic_handler_id = Beaver.Diagnostic.attach(ctx, diagnostic_server)
+    {res, msg} = MLIR.Context.with_diagnostics(
+      ctx,
+      fn ->
+        try do
+          {:ok, do_compile(ctx, definitions)}
+        rescue
+          err ->
+            {:error, err}
+        end
+      end,
+      fn d, _acc -> Charms.Diagnostic.compile_error_message(d) end
+    )
+    case {res, msg} do
+      {{:ok, {mlir, mods}}, nil} ->
+        MLIR.Context.destroy(ctx)
+        {mlir, mods}
 
-    try do
-      do_compile(ctx, definitions, diagnostic_server)
-    after
-      Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
-      MLIR.Context.destroy(ctx)
-      :ok = GenServer.stop(diagnostic_server)
+      {_, {:ok, d_msg}} ->
+        raise CompileError, d_msg
+
+      {{:error, err}, _} ->
+        raise err
     end
   end
 

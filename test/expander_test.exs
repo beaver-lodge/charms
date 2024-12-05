@@ -55,9 +55,9 @@ defmodule POCTest do
   test "vars" do
     assert vars("var = 123") == [var: nil]
 
-    assert catch_error(vars("^var = 123") == []) == %Beaver.EnvNotFoundError{
-             message: "no valid Beaver.MLIR.Block in the environment"
-           }
+    assert_raise CompileError,
+                 ~r"Expected a block, got: ",
+                 fn -> vars("^var = 123") == [] end
   end
 
   test "remotes" do
@@ -135,7 +135,7 @@ defmodule POCTest do
       end
       |> compile()
       |> tap(fn ir -> assert to_string(ir) =~ "@Elixir.ReturnPassedArg" end)
-      |> MLIR.Operation.verify!()
+      |> MLIR.verify!()
       |> tap(fn m ->
         {_key, %Charms.JIT{}} = Charms.JIT.init(m, name: :return_this)
         engine = Charms.JIT.engine(:return_this)
@@ -161,7 +161,7 @@ defmodule POCTest do
       |> tap(fn m ->
         assert to_string(m) =~ "Unknown invocation: Foo.bar/1"
       end)
-      |> MLIR.Operation.verify!()
+      |> MLIR.verify!()
     end
 
     test "op not found" do

@@ -67,9 +67,9 @@ defmodule Charms.Pointer do
   Gets the element pointer of `elem_type` for the given base pointer `ptr` and index `n`.
   """
   defintrinsic element_ptr(elem_type, ptr, n) do
-    %Opts{ctx: ctx, block: block} = __IR__
+    %Opts{ctx: ctx, blk: blk} = __IR__
 
-    mlir ctx: ctx, block: block do
+    mlir ctx: ctx, blk: blk do
       LLVM.getelementptr(ptr, n,
         elem_type: elem_type,
         rawConstantIndices: ~a{array<i32: -2147483648>}

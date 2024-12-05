@@ -9,8 +9,8 @@ defmodule Charms.Kernel do
   @unary_ops [:!]
   @binary_macro_ops [:&&, :||]
 
-  defp constant_of_same_type(i, v, %Opts{ctx: ctx, block: block, loc: loc}) do
-    mlir ctx: ctx, block: block do
+  defp constant_of_same_type(i, v, %Opts{ctx: ctx, blk: blk, loc: loc}) do
+    mlir ctx: ctx, blk: blk do
       t = MLIR.CAPI.mlirValueGetType(v)
 
       if MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
@@ -29,8 +29,8 @@ defmodule Charms.Kernel do
   defp i_predicate(:<), do: :slt
   defp i_predicate(:<=), do: :sle
 
-  defp create_binary(op, operands, type, ctx, block, loc) do
-    mlir ctx: ctx, block: block do
+  defp create_binary(op, operands, type, ctx, blk, loc) do
+    mlir ctx: ctx, blk: blk do
       case op do
         op when op in @compare_ops ->
           Arith.cmpi(operands, predicate: Arith.cmp_i_predicate(i_predicate(op)), loc: loc) >>>
@@ -59,7 +59,7 @@ defmodule Charms.Kernel do
 
   for name <- @binary_ops ++ @binary_macro_ops do
     defintrinsic unquote(name)(left, right) do
-      opts = %Opts{ctx: ctx, block: block, loc: loc} = __IR__
+      opts = %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
       {operands, type} =
         case {left, right} do
@@ -82,7 +82,7 @@ defmodule Charms.Kernel do
         end
         |> then(fn [left, _] = operands -> {operands, MLIR.CAPI.mlirValueGetType(left)} end)
 
-      create_binary(unquote(name), operands, type, ctx, block, loc)
+      create_binary(unquote(name), operands, type, ctx, blk, loc)
     end
   end
 

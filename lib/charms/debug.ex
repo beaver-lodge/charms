@@ -9,7 +9,7 @@ defmodule Charms.Debug do
           MLIR.dump!(op)
 
         _ ->
-          MLIR.Transforms.print_ir(op)
+          MLIR.Transform.print_ir(op)
       end
     else
       op

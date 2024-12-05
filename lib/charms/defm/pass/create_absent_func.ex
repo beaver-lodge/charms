@@ -27,14 +27,14 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
 
   @default_visibility "private"
   # create absent if it is a function not found in the symbol table
-  defp create_func(ctx, block, symbol_table, ir, created) do
+  defp create_func(ctx, blk, symbol_table, ir, created) do
     with op = %MLIR.Operation{} <- ir,
          "func.call" <- MLIR.Operation.name(op),
          {name, arg_types, ret_types} <- decompose(op),
-         true <- MLIR.is_null(mlirSymbolTableLookup(symbol_table, name)),
-         name_str <- MLIR.StringRef.to_string(name),
+         true <- MLIR.null?(mlirSymbolTableLookup(symbol_table, name)),
+         name_str <- MLIR.to_string(name),
          false <- MapSet.member?(created, name_str) do
-      mlir ctx: ctx, block: block do
+      mlir ctx: ctx, blk: blk do
         {arg_types, ret_types} =
           if s = Beaver.ENIF.signature(ctx, String.to_atom(name_str)) do
             s

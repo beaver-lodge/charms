@@ -11,12 +11,12 @@ defmodule Charms.SIMD do
   Return the constant value of the given `type` and `literal_values`
   """
   defintrinsic new(type, literal_values) do
-    %Opts{ctx: ctx, block: block} = __IR__
+    %Opts{ctx: ctx, blk: blk} = __IR__
 
-    mlir ctx: ctx, block: block do
+    mlir ctx: ctx, blk: blk do
       element_type = MLIR.CAPI.mlirShapedTypeGetElementType(type)
 
-      if MLIR.is_null(element_type) do
+      if MLIR.null?(element_type) do
         raise "element type is null"
       end
 

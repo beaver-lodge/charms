@@ -4,7 +4,7 @@ defmodule Charms.MixProject do
   def project do
     [
       app: :charms,
-      version: "0.1.2-dev",
+      version: "0.1.3-dev",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -30,7 +30,7 @@ defmodule Charms.MixProject do
   def application do
     [
       mod: {Charms.Application, []},
-      extra_applications: [:logger]
+      extra_applications: [:logger, :beaver]
     ]
   end
 
@@ -75,7 +75,7 @@ defmodule Charms.MixProject do
   defp deps do
     [
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:beaver, "~> 0.3.10"},
+      {:beaver, "~> 0.4.0"},
       {:benchee, "~> 1.0", only: :dev},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
