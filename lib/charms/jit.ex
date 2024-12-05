@@ -7,24 +7,24 @@ defmodule Charms.JIT do
   alias Beaver.MLIR
   alias __MODULE__.LockedCache
 
-  defstruct ctx: nil, engine: nil, owner: true, diagnostic_server: nil, diagnostic_handler_id: nil
+  defstruct ctx: nil, engine: nil, owner: true
 
   defp jit_of_mod(m) do
-    import Beaver.MLIR.{Conversion, Transforms}
+    import Beaver.MLIR.{Conversion, Transform}
 
     m
-    |> MLIR.Operation.verify!(debug: true)
-    |> MLIR.Pass.Composer.nested("func.func", "llvm-request-c-wrappers")
-    |> MLIR.Pass.Composer.nested("func.func", loop_invariant_code_motion())
+    |> MLIR.verify!()
+    |> Beaver.Composer.nested("func.func", "llvm-request-c-wrappers")
+    |> Beaver.Composer.nested("func.func", loop_invariant_code_motion())
     |> convert_scf_to_cf
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
     |> convert_func_to_llvm()
-    |> MLIR.Pass.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
-    |> MLIR.Pass.Composer.append("finalize-memref-to-llvm")
+    |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
+    |> Beaver.Composer.append("finalize-memref-to-llvm")
     |> reconcile_unrealized_casts
     |> Charms.Debug.print_ir_pass()
-    |> MLIR.Pass.Composer.run!(print: Charms.Debug.step_print?())
+    |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
     |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true)
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
   end
@@ -38,10 +38,10 @@ defmodule Charms.JIT do
       found = mlirSymbolTableLookup(s_table, MLIR.Attribute.unwrap(sym))
       body = MLIR.Module.body(to)
 
-      if MLIR.is_null(found) do
+      if MLIR.null?(found) do
         mlirBlockAppendOwnedOperation(body, mlirOperationClone(op))
       else
-        unless Func.is_external(op) do
+        unless Func.external?(op) do
           mlirOperationDestroy(found)
           mlirBlockAppendOwnedOperation(body, mlirOperationClone(op))
         end
@@ -56,7 +56,7 @@ defmodule Charms.JIT do
     [head | tail] = modules
 
     for module <- tail do
-      if MLIR.is_null(module), do: raise("can't merge a null module")
+      if MLIR.null?(module), do: raise("can't merge a null module")
       clone_ops(head, module)
       if destroy, do: MLIR.Module.destroy(module)
     end
@@ -66,16 +66,13 @@ defmodule Charms.JIT do
 
   defp do_init(modules) when is_list(modules) do
     ctx = MLIR.Context.create()
-    {:ok, diagnostic_server} = GenServer.start(Beaver.Diagnostic.Server, [])
-    diagnostic_handler_id = Beaver.Diagnostic.attach(ctx, diagnostic_server)
-
     modules
     |> Enum.map(fn
       m when is_atom(m) ->
-        m.__ir__() |> then(&MLIR.Module.create(ctx, &1))
+        m.__ir__() |> then(&MLIR.Module.create(&1, ctx: ctx))
 
       s when is_binary(s) ->
-        s |> then(&MLIR.Module.create(ctx, &1))
+        s |> then(&MLIR.Module.create(&1, ctx: ctx))
 
       %MLIR.Module{} = m ->
         m
@@ -84,27 +81,27 @@ defmodule Charms.JIT do
         raise ArgumentError, "Unexpected module type: #{inspect(other)}"
     end)
     |> then(fn op ->
-      try do
-        op
-        |> merge_modules()
-        |> jit_of_mod
-      rescue
-        e ->
-          case Charms.Diagnostic.compile_error_message(diagnostic_server) do
-            {:ok, dm} ->
-              reraise CompileError, dm, __STACKTRACE__
-
-            {:error, _} ->
-              reraise e, __STACKTRACE__
+      {res, _} = MLIR.Context.with_diagnostics(
+        ctx,
+        fn ->
+          try do
+            {:ok, op |> merge_modules() |> jit_of_mod()}
+          rescue
+            err ->
+              {:error, err}
           end
+        end,
+        fn d, _acc -> Charms.Diagnostic.compile_error_message(d) end
+      )
+      case res do
+        {:ok, jit} -> jit
+        {:error, err} -> raise err
       end
     end)
     |> then(
       &%__MODULE__{
         ctx: ctx,
-        engine: &1,
-        diagnostic_server: diagnostic_server,
-        diagnostic_handler_id: diagnostic_handler_id
+        engine: &1
       }
     )
     |> then(&{:ok, &1})
@@ -173,14 +170,10 @@ defmodule Charms.JIT do
       %__MODULE__{
         ctx: ctx,
         engine: engine,
-        owner: true,
-        diagnostic_server: diagnostic_server,
-        diagnostic_handler_id: diagnostic_handler_id
+        owner: true
       } ->
-        Beaver.Diagnostic.detach(ctx, diagnostic_handler_id)
         MLIR.ExecutionEngine.destroy(engine)
         MLIR.Context.destroy(ctx)
-        :ok = GenServer.stop(diagnostic_server)
 
       nil ->
         :not_found

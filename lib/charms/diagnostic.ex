@@ -1,42 +1,29 @@
 defmodule Charms.Diagnostic do
   @moduledoc false
   @doc false
-  def compile_error_message(diagnostic_server) when is_pid(diagnostic_server) do
-    case txt = Beaver.Diagnostic.Server.flush(diagnostic_server) do
-      "[Beaver] [Diagnostic] [" <> _suffix ->
-        c =
-          Regex.named_captures(
-            ~r/\[Beaver\] \[Diagnostic\] \[(?<file>.+):(?<line>\d+):(?<column>\d+)\] (?<note>.*)/,
-            txt
-          )
-
-        {:ok, [file: c["file"], line: c["line"] || 0, description: c["note"] || txt]}
-
+  alias Beaver.MLIR
+  def compile_error_message(%Beaver.MLIR.Diagnostic{} = d) do
+    loc = to_string(MLIR.location(d))
+    txt = to_string(d)
+    case txt do
       "" ->
         {:error, "No diagnostic message"}
+
+      note ->
+        c =
+          Regex.named_captures(
+            ~r/(?<file>.+):(?<line>\d+):(?<column>\d+)/,
+            loc
+          )
+
+        {:ok, [file: c["file"], line: c["line"] || 0, description: note]}
     end
   end
 
-  defmacro raise_compile_error(env, description) do
+  defmacro raise_compile_error(env, diagnostic) do
     quote do
       raise CompileError,
-            Charms.Diagnostic.compile_error_message_from_env(unquote(env), unquote(description))
-    end
-  end
-
-  defmacro raise_compile_error(env, diagnostic_server, fallback_description) do
-    quote do
-      case Charms.Diagnostic.compile_error_message(unquote(diagnostic_server)) do
-        {:ok, dm} ->
-          dm
-
-        {:error, _} ->
-          Charms.Diagnostic.compile_error_message_from_env(
-            unquote(env),
-            unquote(fallback_description)
-          )
-      end
-      |> then(&raise(CompileError, &1))
+            Charms.Diagnostic.compile_error_message_from_env(unquote(env), unquote(diagnostic))
     end
   end
 

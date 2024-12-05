@@ -7,8 +7,8 @@ defmodule Charms.Prelude do
   alias Beaver.MLIR.Dialect.{Arith, Func}
   @enif_functions Beaver.ENIF.functions()
 
-  defp wrap_arg({i, t}, %Opts{ctx: ctx, block: block}) when is_integer(i) do
-    mlir ctx: ctx, block: block do
+  defp wrap_arg({i, t}, %Opts{ctx: ctx, blk: blk}) when is_integer(i) do
+    mlir ctx: ctx, blk: blk do
       case i do
         %MLIR.Value{} ->
           i
@@ -59,11 +59,11 @@ defmodule Charms.Prelude do
     args = Macro.generate_arguments(length(arg_types), __MODULE__)
 
     defintrinsic unquote(name)(unquote_splicing(args)) do
-      opts = %Opts{ctx: ctx, block: block, loc: loc} = __IR__
+      opts = %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
       {arg_types, ret_types} = Beaver.ENIF.signature(ctx, unquote(name))
       args = [unquote_splicing(args)] |> Enum.zip(arg_types) |> Enum.map(&wrap_arg(&1, opts))
 
-      mlir ctx: ctx, block: block do
+      mlir ctx: ctx, blk: blk do
         Func.call(args, callee: Attribute.flat_symbol_ref("#{unquote(name)}"), loc: loc) >>>
           case ret_types do
             [ret] ->
