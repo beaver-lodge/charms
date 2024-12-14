@@ -16,6 +16,8 @@ defmodule AddTwoInt do
         a = Pointer.load(i32(), ptr_a)
         b = Pointer.load(i32(), ptr_b)
         sum = value llvm.add(a, b) :: i32()
+        sum = sum / 1
+        sum = sum + 1 - 1
         term = enif_make_int(env, sum)
         func.return(term)
       else

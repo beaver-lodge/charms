@@ -2,21 +2,21 @@ defmodule Charms.Diagnostic do
   @moduledoc false
   @doc false
   alias Beaver.MLIR
+
+  def meta_from_loc(%MLIR.Location{} = loc) do
+    c = Regex.named_captures(~r/(?<file>.+):(?<line>\d+):(?<column>\d+)/, MLIR.to_string(loc))
+    [file: c["file"], line: c["line"] || 0]
+  end
+
   def compile_error_message(%Beaver.MLIR.Diagnostic{} = d) do
-    loc = to_string(MLIR.location(d))
     txt = to_string(d)
+
     case txt do
       "" ->
         {:error, "No diagnostic message"}
 
       note ->
-        c =
-          Regex.named_captures(
-            ~r/(?<file>.+):(?<line>\d+):(?<column>\d+)/,
-            loc
-          )
-
-        {:ok, [file: c["file"], line: c["line"] || 0, description: note]}
+        {:ok, meta_from_loc(MLIR.location(d)) ++ [description: note]}
     end
   end
 
