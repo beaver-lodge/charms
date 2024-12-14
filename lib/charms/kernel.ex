@@ -5,21 +5,9 @@ defmodule Charms.Kernel do
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
   alias Beaver.MLIR.Dialect.Arith
-  @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :*]
+  @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :*, :/]
   @unary_ops [:!]
   @binary_macro_ops [:&&, :||]
-
-  defp constant_of_same_type(i, v, %Opts{ctx: ctx, blk: blk, loc: loc}) do
-    mlir ctx: ctx, blk: blk do
-      t = MLIR.CAPI.mlirValueGetType(v)
-
-      if MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
-        Arith.constant(value: Attribute.integer(t, i), loc: loc) >>> t
-      else
-        raise ArgumentError, "Not an integer type for constant, #{to_string(t)}"
-      end
-    end
-  end
 
   @compare_ops [:!=, :==, :>, :>=, :<, :<=]
   defp i_predicate(:!=), do: :ne
@@ -51,6 +39,9 @@ defmodule Charms.Kernel do
         :* ->
           Arith.muli(operands, loc: loc) >>> type
 
+        :/ ->
+          Arith.divsi(operands, loc: loc) >>> type
+
         _ ->
           raise ArgumentError, "Unsupported operator: #{inspect(op)}"
       end
@@ -59,15 +50,15 @@ defmodule Charms.Kernel do
 
   for name <- @binary_ops ++ @binary_macro_ops do
     defintrinsic unquote(name)(left, right) do
-      opts = %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+      %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
       {operands, type} =
         case {left, right} do
           {%MLIR.Value{} = v, i} when is_integer(i) ->
-            [v, constant_of_same_type(i, v, opts)]
+            [v, Charms.Constant.from_literal(i, v, ctx, blk, loc)]
 
           {i, %MLIR.Value{} = v} when is_integer(i) ->
-            [constant_of_same_type(i, v, opts), v]
+            [Charms.Constant.from_literal(i, v, ctx, blk, loc), v]
 
           {%MLIR.Value{}, %MLIR.Value{}} ->
             if not MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) do

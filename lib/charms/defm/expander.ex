@@ -1210,17 +1210,7 @@ defmodule Charms.Defm.Expander do
     value =
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
         loc = MLIR.Location.from_env(env)
-
-        cond do
-          MLIR.CAPI.mlirTypeIsAInteger(type) |> Beaver.Native.to_term() ->
-            Arith.constant(value: Attribute.integer(type, value), loc: loc) >>> type
-
-          MLIR.CAPI.mlirTypeIsAFloat(type) |> Beaver.Native.to_term() ->
-            Arith.constant(value: Attribute.float(type, value), loc: loc) >>> type
-
-          true ->
-            raise_compile_error(env, "Unsupported type for const macro: #{to_string(type)}")
-        end
+        Charms.Constant.from_literal(value, type, state.mlir.ctx, state.mlir.blk, loc)
       end
 
     {value, state, env}

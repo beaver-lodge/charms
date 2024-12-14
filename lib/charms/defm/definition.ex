@@ -298,18 +298,21 @@ defmodule Charms.Defm.Definition do
   """
   def compile(definitions) when is_list(definitions) do
     ctx = MLIR.Context.create()
-    {res, msg} = MLIR.Context.with_diagnostics(
-      ctx,
-      fn ->
-        try do
-          {:ok, do_compile(ctx, definitions)}
-        rescue
-          err ->
-            {:error, err}
-        end
-      end,
-      fn d, _acc -> Charms.Diagnostic.compile_error_message(d) end
-    )
+
+    {res, msg} =
+      MLIR.Context.with_diagnostics(
+        ctx,
+        fn ->
+          try do
+            {:ok, do_compile(ctx, definitions)}
+          rescue
+            err ->
+              {:error, err}
+          end
+        end,
+        fn d, _acc -> Charms.Diagnostic.compile_error_message(d) end
+      )
+
     case {res, msg} do
       {{:ok, {mlir, mods}}, nil} ->
         MLIR.Context.destroy(ctx)
