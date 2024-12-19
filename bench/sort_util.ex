@@ -1,4 +1,5 @@
 defmodule SortUtil do
+  @moduledoc false
   use Charms
   alias Charms.{Pointer, Term}
 
