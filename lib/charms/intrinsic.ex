@@ -7,7 +7,7 @@ defmodule Charms.Intrinsic do
   end
 
   @moduledoc """
-  Behaviour to define intrinsic functions.
+  Define intrinsic functions.
   """
   alias Beaver
   @type ir_return :: MLIR.Value.t() | MLIR.Operation.t()
