@@ -3,11 +3,10 @@ defmodule ENIFMergeSort do
   use Charms
   alias Charms.{Pointer, Term}
 
-  defm do_sort(arr :: Pointer.t(), l :: i32(), r :: i32()) do
+  defm do_sort(arr :: Pointer.t(Term.t()), l :: i32(), r :: i32()) do
     if l < r do
       two = const 2 :: i32()
-      m = op arith.divsi(l + r, two) :: i32()
-      m = result_at(m, 0)
+      m = value arith.divsi(l + r, two) :: i32()
       do_sort(arr, l, m)
       do_sort(arr, m + 1, r)
       SortUtil.merge(arr, l, m, r)

@@ -4,26 +4,17 @@ defmodule Charms.Prelude do
   """
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
-  alias Beaver.MLIR.Dialect.{Arith, Func}
+  alias Beaver.MLIR.Dialect.{Arith, Func, LLVM, MemRef, Index}
   @enif_functions Beaver.ENIF.functions()
 
-  defp wrap_arg({i, t}, %Opts{ctx: ctx, blk: blk}) when is_integer(i) do
+  defp literal_to_constant(v, t, %Opts{ctx: ctx, blk: blk, loc: loc})
+       when is_integer(v) or is_float(v) do
     mlir ctx: ctx, blk: blk do
-      case i do
-        %MLIR.Value{} ->
-          i
-
-        i when is_integer(i) ->
-          if MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
-            Arith.constant(value: Attribute.integer(t, i)) >>> t
-          else
-            raise ArgumentError, "Not an integer type, #{to_string(t)}"
-          end
-      end
+      Charms.Constant.from_literal(v, t, ctx, blk, loc)
     end
   end
 
-  defp wrap_arg({v, _}, _) do
+  defp literal_to_constant(v, _, _) do
     v
   end
 
@@ -45,6 +36,15 @@ defmodule Charms.Prelude do
     MLIR.Value.type(value)
   end
 
+  defintrinsic const(ast) do
+    {:"::", _type_meta, [value, type]} = ast
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      Charms.Constant.from_literal(value, type, ctx, blk, loc)
+    end
+  end
+
   @doc """
   Dump the MLIR entity at compile time with `IO.puts/1`
   """
@@ -52,27 +52,78 @@ defmodule Charms.Prelude do
     entity |> tap(&IO.puts(MLIR.to_string(&1)))
   end
 
+  def extract_raw_pointer(arg, arg_type, %Opts{ctx: ctx, blk: blk, loc: loc}) do
+    mlir ctx: ctx, blk: blk do
+      t = MLIR.Value.type(arg)
+
+      if MLIR.equal?(~t{!llvm.ptr}.(ctx), arg_type) and Charms.Pointer.memref_ptr?(arg) do
+        elem_t = MLIR.CAPI.mlirShapedTypeGetElementType(t)
+
+        width =
+          cond do
+            MLIR.Type.integer?(elem_t) ->
+              MLIR.CAPI.mlirIntegerTypeGetWidth(elem_t) |> Beaver.Native.to_term()
+
+            MLIR.Type.float?(elem_t) ->
+              MLIR.CAPI.mlirFloatTypeGetWidth(elem_t) |> Beaver.Native.to_term()
+
+            true ->
+              raise ArgumentError, "Expected a shaped type, got #{to_string(t)}"
+          end
+
+        width = Index.constant(value: Attribute.index(width), loc: loc) >>> Type.index()
+        ptr_i = MemRef.extract_aligned_pointer_as_index(arg, loc: loc) >>> Type.index()
+        [_, offset, _, _] = MemRef.extract_strided_metadata(arg, loc: loc) >>> :infer
+        offset = Arith.muli(offset, width, loc: loc) >>> Type.index()
+        ptr_i = Arith.addi(ptr_i, offset, loc: loc) >>> Type.index()
+        ptr_i = Arith.index_cast(ptr_i, loc: loc) >>> Type.i64()
+        LLVM.inttoptr(ptr_i, loc: loc) >>> ~t{!llvm.ptr}
+      else
+        arg
+      end
+    end
+  end
+
+  defp preprocess_args(args, arg_types, []) do
+    for {arg, arg_type} <- args |> Enum.zip(arg_types) do
+      if not MLIR.equal?(MLIR.Value.type(arg), arg_type) do
+        raise ArgumentError,
+              "Expected a value of type #{MLIR.to_string(arg_type)}, got #{MLIR.to_string(MLIR.Value.type(arg))}"
+      end
+
+      arg
+    end
+  end
+
+  defp preprocess_args(args, arg_types, [preprocessor | tail]) do
+    for {arg, arg_type} <- args |> Enum.zip(arg_types) do
+      preprocessor.(arg, arg_type)
+    end
+    |> preprocess_args(arg_types, tail)
+  end
+
+  defp call_enif(name, args, %Opts{ctx: ctx, blk: blk, loc: loc} = opts) do
+    {arg_types, ret_types} = Beaver.ENIF.signature(ctx, name)
+
+    args =
+      preprocess_args(args, arg_types, [
+        &literal_to_constant(&1, &2, opts),
+        &extract_raw_pointer(&1, &2, opts)
+      ])
+
+    mlir ctx: ctx, blk: blk do
+      Func.call(args, callee: Attribute.flat_symbol_ref(name), loc: loc) >>> ret_types
+    end
+  end
+
   signature_ctx = MLIR.Context.create()
 
   for name <- @enif_functions do
-    {arg_types, _} = Beaver.ENIF.signature(signature_ctx, name)
-    args = Macro.generate_arguments(length(arg_types), __MODULE__)
+    arity = Beaver.ENIF.signature(signature_ctx, name) |> elem(0) |> length()
+    args = Macro.generate_arguments(arity, __MODULE__)
 
     defintrinsic unquote(name)(unquote_splicing(args)) do
-      opts = %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
-      {arg_types, ret_types} = Beaver.ENIF.signature(ctx, unquote(name))
-      args = [unquote_splicing(args)] |> Enum.zip(arg_types) |> Enum.map(&wrap_arg(&1, opts))
-
-      mlir ctx: ctx, blk: blk do
-        Func.call(args, callee: Attribute.flat_symbol_ref("#{unquote(name)}"), loc: loc) >>>
-          case ret_types do
-            [ret] ->
-              ret
-
-            [] ->
-              []
-          end
-      end
+      call_enif(unquote(name), unquote(args), __IR__)
     end
   end
 

@@ -22,11 +22,6 @@ defmodule Charms.Defm do
   defmacro value(_expr), do: :implemented_in_expander
 
   @doc """
-  syntax sugar to create an MLIR value from an Elixir value
-  """
-  defmacro const(_), do: :implemented_in_expander
-
-  @doc """
   call a local function with return
   """
   defmacro call({:"::", _, [_call, _types]}), do: :implemented_in_expander

@@ -19,7 +19,7 @@ defmodule Charms.Defm.Expander do
   """
   use Beaver
   alias MLIR.Attribute
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB}
   require Func
   import Charms.Diagnostic, only: :macros
   # Define the environment we will use for expansion.
@@ -34,6 +34,7 @@ defmodule Charms.Defm.Expander do
             region: nil,
             enif_env: nil,
             dependence_modules: Map.new(),
+            required_intrinsic_modules: MapSet.new(),
             return_types: Map.new()
 
   @env %{
@@ -466,6 +467,7 @@ defmodule Charms.Defm.Expander do
 
   defp expand_intrinsics(loc, module, intrinsic_impl, args, state, env) do
     {args, state, env} = expand(args, state, env)
+    state = update_in(state.mlir.required_intrinsic_modules, &MapSet.put(&1, module))
 
     v =
       apply(module, intrinsic_impl, [
@@ -496,8 +498,7 @@ defmodule Charms.Defm.Expander do
 
   defp expand_magic_macros(loc, {module, fun, arity} = mfa, args, state, env) do
     cond do
-      Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 2) and
-          module.__intrinsics__(fun, arity) ->
+      export_intrinsics?(module, fun, arity) ->
         intrinsic_impl = module.__intrinsics__(fun, arity)
         expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
 
@@ -685,7 +686,6 @@ defmodule Charms.Defm.Expander do
 
   @intrinsics Charms.Kernel.macro_intrinsics() ++ Charms.Kernel.intrinsics()
   defp expand({fun, _meta, args}, state, env) when fun in @intrinsics do
-    {args, state, env} = expand(args, state, env)
     loc = MLIR.Location.from_env(env)
 
     try do
@@ -779,6 +779,13 @@ defmodule Charms.Defm.Expander do
       [{dialect, _, _}, op] = [module, fun]
       expand_call_as_op(dialect, op, args, state, env)
     end
+  end
+
+  ## Auxiliary containers
+  defp expand({:"::", meta, [param, type]}, state, env) do
+    {param, state, env} = expand(param, state, env)
+    {type, state, env} = expand(type, state, env)
+    {{:"::", meta, [param, type]}, state, env}
   end
 
   ## Imported or local call
@@ -965,11 +972,14 @@ defmodule Charms.Defm.Expander do
         {arg_types, state, env} = arg_types |> expand(state, env)
 
         if i = Enum.find_index(arg_types, &(!is_struct(&1, MLIR.Type))) do
-          raise_compile_error(env, "invalid argument type ##{i + 1}")
+          raise_compile_error(
+            env,
+            "invalid argument type ##{i + 1}, #{inspect(Enum.at(arg_types, i))}"
+          )
         end
 
         if Enum.find(List.wrap(ret_types), &(!is_struct(&1, MLIR.Type))) do
-          raise_compile_error(env, "invalid return type")
+          raise_compile_error(env, "invalid return type, #{inspect(ret_types)}")
         end
 
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
@@ -1112,10 +1122,11 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms.Defm, :for_loop, [expr, [do: body]], _callback, state, env) do
-    {:<-, _, [{element, index}, {:{}, _, [t, ptr, len]}]} = expr
+    {:<-, _, [{element, index}, {ptr, len}]} = expr
     {len, state, env} = expand(len, state, env)
-    {t, state, env} = expand(t, state, env)
     {ptr, state, env} = expand(ptr, state, env)
+    t = MLIR.Value.type(ptr) |> MLIR.CAPI.mlirShapedTypeGetElementType()
+    loc = MLIR.Location.from_env(env)
 
     v =
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
@@ -1124,18 +1135,10 @@ defmodule Charms.Defm.Expander do
         upper_bound = Index.casts(len) >>> Type.index()
         step = Index.constant(value: Attribute.index(1)) >>> Type.index()
 
-        SCF.for [lower_bound, upper_bound, step] do
+        SCF.for [lower_bound, upper_bound, step, loc: loc] do
           region do
             block _body(index_val >>> Type.index()) do
-              index_casted = Index.casts(index_val) >>> Type.i64()
-
-              element_ptr =
-                LLVM.getelementptr(ptr, index_casted,
-                  elem_type: t,
-                  rawConstantIndices: ~a{array<i32: -2147483648>}
-                ) >>> ~t{!llvm.ptr}
-
-              element_val = LLVM.load(element_ptr) >>> t
+              element_val = MemRef.load(ptr, index_val, loc: loc) >>> t
               state = put_mlir_var(state, element, element_val)
               state = put_mlir_var(state, index, index_val)
               expand(body, put_in(state.mlir.blk, Beaver.Env.block()), env)
@@ -1193,29 +1196,6 @@ defmodule Charms.Defm.Expander do
     expand_call_of_types(call, [], state, env)
   end
 
-  defp expand_macro(
-         meta,
-         Charms.Defm,
-         :const,
-         [{:"::", type_meta, [value, type]}],
-         _callback,
-         state,
-         env
-       ) do
-    env = %{env | line: type_meta[:line] || meta[:line] || env.line}
-
-    {value, state, env} = expand(value, state, env)
-    {type, state, env} = expand(type, state, env)
-
-    value =
-      mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
-        loc = MLIR.Location.from_env(env)
-        Charms.Constant.from_literal(value, type, state.mlir.ctx, state.mlir.blk, loc)
-      end
-
-    {value, state, env}
-  end
-
   defp expand_macro(meta, module, fun, args, callback, state, env) do
     expand_macro_callback(meta, module, fun, args, callback, state, env)
   end
@@ -1254,19 +1234,24 @@ defmodule Charms.Defm.Expander do
 
   ## Helpers
 
+  defp export_intrinsics?(module, fun, arity) do
+    match?({:module, _}, Code.ensure_compiled(module)) and Code.ensure_loaded?(module) and
+      function_exported?(module, :__intrinsics__, 2) and module.__intrinsics__(fun, arity)
+  end
+
   defp expand_remote(_meta, module, fun, args, state, env) do
     # A compiler may want to emit a :remote_function trace in here.
     state = update_in(state.remotes, &[{module, fun, length(args)} | &1])
-    {args, state, env} = expand_list(args, state, env)
     loc = MLIR.Location.from_env(env)
 
     cond do
-      Code.ensure_loaded?(module) and function_exported?(module, :__intrinsics__, 2) and
-          module.__intrinsics__(fun, length(args)) ->
+      export_intrinsics?(module, fun, length(args)) ->
         intrinsic_impl = module.__intrinsics__(fun, length(args))
         expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
 
       module in [MLIR.Type] ->
+        {args, state, env} = expand_list(args, state, env)
+
         if fun in [:unranked_tensor, :complex, :vector] do
           args
         else

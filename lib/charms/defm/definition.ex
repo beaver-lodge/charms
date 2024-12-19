@@ -259,11 +259,17 @@ defmodule Charms.Defm.Definition do
 
       mlir_expander = %Charms.Defm.Expander{mlir_expander | return_types: return_types}
 
-      for %__MODULE__{env: env, call: call, ret_types: ret_types, body: body} <- definitions do
-        quote(do: unquote(call) :: unquote(ret_types))
-        |> then(&quote(do: defm(unquote(&1), unquote(body))))
-        |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
-      end
+      required_intrinsic_modules =
+        for %__MODULE__{env: env, call: call, ret_types: ret_types, body: body} <- definitions,
+            reduce: MapSet.new() do
+          required_intrinsic_modules ->
+            {_, state, _} =
+              quote(do: unquote(call) :: unquote(ret_types))
+              |> then(&quote(do: defm(unquote(&1), unquote(body))))
+              |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
+
+            MapSet.union(state.mlir.required_intrinsic_modules, required_intrinsic_modules)
+        end
     end
 
     m
@@ -284,7 +290,9 @@ defmodule Charms.Defm.Definition do
           raise_compile_error(__ENV__, msg)
       end
     end)
-    |> then(&{MLIR.to_string(&1, bytecode: true), referenced_modules(&1)})
+    |> then(
+      &{MLIR.to_string(&1, bytecode: true), referenced_modules(&1), required_intrinsic_modules}
+    )
   end
 
   @doc """
@@ -307,22 +315,22 @@ defmodule Charms.Defm.Definition do
             {:ok, do_compile(ctx, definitions)}
           rescue
             err ->
-              {:error, err}
+              {:error, err, __STACKTRACE__}
           end
         end,
         fn d, _acc -> Charms.Diagnostic.compile_error_message(d) end
       )
 
     case {res, msg} do
-      {{:ok, {mlir, mods}}, nil} ->
-        MLIR.Context.destroy(ctx)
-        {mlir, mods}
+      {{:ok, {mlir, mods, i_mods}}, nil} ->
+        # MLIR.Context.destroy(ctx)
+        {mlir, mods, i_mods}
 
-      {_, {:ok, d_msg}} ->
-        raise CompileError, d_msg
+      {{:error, _, st}, {:ok, d_msg}} ->
+        reraise CompileError, d_msg, st
 
-      {{:error, err}, _} ->
-        raise err
+      {{:error, err, st}, _} ->
+        reraise err, st
     end
   end
 

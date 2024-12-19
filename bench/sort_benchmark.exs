@@ -10,12 +10,8 @@ Benchee.run(
     "enif_merge_sort" => &ENIFMergeSort.sort(&1),
     "enif_tim_sort" => &ENIFTimSort.sort(&1)
   },
-  inputs: %{
-    "array size 10" => 10,
-    "array size 100" => 100,
-    "array size 1000" => 1000,
-    "array size 10000" => 10000
-  },
+  parallel: 2,
+  inputs: [10, 100, 1000, 10000] |> Enum.map(&{"array size #{&1}", &1}) |> Enum.into(%{}),
   before_scenario: fn i ->
     Enum.to_list(1..i) |> Enum.shuffle()
   end
