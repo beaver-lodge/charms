@@ -20,6 +20,7 @@ defmodule Charms.Intrinsic do
       @before_compile Charms.Intrinsic
       import Charms.Intrinsic, only: :macros
       Module.register_attribute(__MODULE__, :intrinsic, accumulate: true)
+      def __use_intrinsic__, do: nil
     end
   end
 

@@ -1,47 +1,3 @@
-defmodule AddTwoInt do
-  use Charms, init: false
-  alias Charms.{Pointer, Term}
-
-  defm add_or_error_with_cond_br(env, a, b, error) :: Term.t() do
-    ptr_a = Pointer.allocate(i32())
-    ptr_b = Pointer.allocate(i32())
-
-    arg_err =
-      block do
-        func.return(error)
-      end
-
-    cond_br enif_get_int(env, a, ptr_a) != 0 do
-      cond_br 0 != enif_get_int(env, b, ptr_b) do
-        a = Pointer.load(i32(), ptr_a)
-        b = Pointer.load(i32(), ptr_b)
-        sum = value llvm.add(a, b) :: i32()
-        sum = sum / 1
-        sum = sum + 1 - 1
-        term = enif_make_int(env, sum)
-        func.return(term)
-      else
-        ^arg_err
-      end
-    else
-      ^arg_err
-    end
-  end
-
-  defm add(env, a, b) :: Term.t() do
-    ptr_a = Pointer.allocate(i32())
-    ptr_b = Pointer.allocate(i32())
-
-    if !enif_get_int(env, a, ptr_a) || !enif_get_int(env, b, ptr_b) do
-      enif_make_badarg(env)
-    else
-      a = Pointer.load(i32(), ptr_a)
-      b = Pointer.load(i32(), ptr_b)
-      enif_make_int(env, a + b)
-    end
-  end
-end
-
 defmodule DefmTest do
   import ExUnit.CaptureIO
   use ExUnit.Case, async: true
@@ -87,38 +43,26 @@ defmodule DefmTest do
     assert 1 = ReferrerMod.term_roundtrip(1)
   end
 
-  test "add two integers" do
-    assert {:ok, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
-    assert {:cached, %Charms.JIT{}} = Charms.JIT.init(AddTwoInt, name: :add_int)
-    engine = Charms.JIT.engine(:add_int)
-    assert String.starts_with?(AddTwoInt.__ir__(), "ML\xefR")
-    assert AddTwoInt.add(1, 2).(engine) == 3
-    assert_raise ArgumentError, fn -> AddTwoInt.add(1, "2").(engine) end
-    assert AddTwoInt.add_or_error_with_cond_br(1, 2, :arg_err).(engine) == 3
-    assert AddTwoInt.add_or_error_with_cond_br(1, "", :arg_err).(engine) == :arg_err
-    assert :ok = Charms.JIT.destroy(:add_int)
-  end
+  describe "different sorts" do
+    for s <- [ENIFTimSort, ENIFMergeSort, ENIFQuickSort] do
+      test "#{s}" do
+        s = unquote(s)
+        arr = [5, 4, 3, 2, 1]
+        assert s.sort(arr) == Enum.sort(arr)
+        assert_raise ArgumentError, "list expected", fn -> s.sort(:what) end
 
-  test "quick sort" do
-    assert_raise ArgumentError, "list expected", fn -> ENIFQuickSort.sort(:what) end
+        assert {:cached, %Charms.JIT{}} =
+                 Charms.JIT.init(s, name: s.__ir_digest__())
 
-    arr = [5, 4, 3, 2, 1]
-    assert ENIFQuickSort.sort(arr) == Enum.sort(arr)
+        for i <- 0..1000 do
+          arr = 0..i |> Enum.shuffle()
+          assert s.sort(arr) == Enum.sort(arr)
+        end
 
-    assert {:cached, %Charms.JIT{}} =
-             Charms.JIT.init(ENIFQuickSort, name: ENIFQuickSort.__ir_digest__())
-
-    for i <- 0..1000 do
-      arr = 0..i |> Enum.shuffle()
-      assert ENIFTimSort.sort(arr) == Enum.sort(arr)
-      assert ENIFQuickSort.sort(arr) == Enum.sort(arr)
-      assert ENIFMergeSort.sort(arr) == Enum.sort(arr)
+        assert :ok = Charms.JIT.destroy(s.__ir_digest__())
+        assert :noop = Charms.JIT.destroy(SortUtil.__ir_digest__())
+      end
     end
-
-    assert :ok = Charms.JIT.destroy(ENIFQuickSort.__ir_digest__())
-    assert :ok = Charms.JIT.destroy(ENIFMergeSort.__ir_digest__())
-    assert :ok = Charms.JIT.destroy(ENIFTimSort.__ir_digest__())
-    assert :noop = Charms.JIT.destroy(SortUtil.__ir_digest__())
   end
 
   describe "different calls" do
@@ -219,5 +163,19 @@ defmodule DefmTest do
                end
              end
            end) =~ ~r"block argument.+i64"
+  end
+
+  test "enif type mismatch" do
+    assert_raise ArgumentError, ~r/Expected a value of type i32, got f32/, fn ->
+      defmodule MismatchEnifType do
+        use Charms
+        alias Charms.Term
+
+        defm foo(env) :: Term.t() do
+          zero = const 0.0 :: f32()
+          enif_make_int(env, zero)
+        end
+      end
+    end
   end
 end

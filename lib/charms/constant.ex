@@ -22,7 +22,10 @@ defmodule Charms.Constant do
 
         true ->
           loc = Beaver.Deferred.create(loc, ctx)
-          raise CompileError, Charms.Diagnostic.meta_from_loc(loc) ++ [description: "Not a supported type for constant, #{to_string(t)}"]
+
+          raise CompileError,
+                Charms.Diagnostic.meta_from_loc(loc) ++
+                  [description: "Not a supported type for constant, #{to_string(t)}"]
       end
     end
   end

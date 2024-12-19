@@ -48,7 +48,9 @@ defmodule Charms do
 
   defmacro __before_compile__(env) do
     defm_decls = Module.get_attribute(env.module, :defm) || []
-    {ir, referenced_modules} = defm_decls |> Enum.reverse() |> Charms.Defm.Definition.compile()
+
+    {ir, referenced_modules, required_intrinsic_modules} =
+      defm_decls |> Enum.reverse() |> Charms.Defm.Definition.compile()
 
     # create uses in Elixir, to disallow loop reference
     r =
@@ -58,10 +60,18 @@ defmodule Charms do
         end
       end
 
+    i =
+      for r <- required_intrinsic_modules, r != env.module do
+        quote do
+          unquote(r).__use_intrinsic__
+        end
+      end
+
     quote do
       @ir unquote(ir)
       @referenced_modules unquote(referenced_modules)
       unquote_splicing(r)
+      unquote_splicing(i)
 
       @ir_hash [
                  :erlang.phash2(@ir)

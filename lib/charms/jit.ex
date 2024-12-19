@@ -20,8 +20,8 @@ defmodule Charms.JIT do
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
     |> convert_func_to_llvm()
-    |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> Beaver.Composer.append("finalize-memref-to-llvm")
+    |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> reconcile_unrealized_casts
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
@@ -82,30 +82,7 @@ defmodule Charms.JIT do
         raise ArgumentError, "Unexpected module type: #{inspect(other)}"
     end)
     |> then(fn op ->
-      {res, msg} =
-        MLIR.Context.with_diagnostics(
-          ctx,
-          fn ->
-            try do
-              {:ok, op |> merge_modules() |> jit_of_mod()}
-            rescue
-              err ->
-                {:error, err, __STACKTRACE__}
-            end
-          end,
-          fn d, _acc -> Charms.Diagnostic.compile_error_message(d) end
-        )
-
-      case {res, msg} do
-        {{:ok, jit}, nil} ->
-          jit
-
-        {{:error, _, st}, {:ok, d_msg}} ->
-          reraise CompileError, d_msg, st
-
-        {{:error, err, st}, _} ->
-          reraise err, st
-      end
+      op |> merge_modules() |> jit_of_mod()
     end)
     |> then(
       &%__MODULE__{

@@ -5,18 +5,16 @@ defmodule AddTwoIntVec do
 
   defm load_list(env, l :: Term.t()) :: SIMD.t(i32(), 8) do
     i_ptr = Pointer.allocate(i32())
-    # TODO: remove the const here, when pointer's type can be inferred
-    Pointer.store(const(0 :: i32()), i_ptr)
+    zero = const 0 :: Pointer.element_type(i_ptr)
+    Pointer.store(zero, i_ptr)
     init = SIMD.new(SIMD.t(i32(), 8), [0, 0, 0, 0, 0, 0, 0, 0])
 
     Enum.reduce(l, init, fn x, acc ->
       v_ptr = Pointer.allocate(i32())
       enif_get_int(env, x, v_ptr)
-      i = Pointer.load(i32(), i_ptr)
+      i = Pointer.load(i_ptr)
       Pointer.store(i + 1, i_ptr)
-
-      Pointer.load(i32(), v_ptr)
-      |> vector.insertelement(acc, i)
+      Pointer.load(v_ptr) |> vector.insertelement(acc, i)
     end)
   end
 
