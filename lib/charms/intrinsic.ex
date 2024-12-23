@@ -43,20 +43,8 @@ defmodule Charms.Intrinsic do
         %Charms.Intrinsic.Opts{} = var!(charms_intrinsic_internal_opts)
       end
 
-    case opts do
-      {:when, when_meta, [opts | clauses]} ->
-        {:when, when_meta,
-         [
-           quote do
-             unquote(intrinsic_name_ast)(unquote(args), unquote(opts))
-           end
-           | clauses
-         ]}
-
-      _ ->
-        quote do
-          unquote(intrinsic_name_ast)(unquote(args), unquote(opts))
-        end
+    quote do
+      unquote(intrinsic_name_ast)(unquote(args), unquote(opts))
     end
   end
 

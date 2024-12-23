@@ -228,7 +228,10 @@ defmodule Charms.Defm.Expander do
 
   defp expand_call_of_types(call, types, state, env) do
     {mod, name, args, state, env} = decompose_and_expand_call(call, state, env)
+    create_call_of_types(mod, name, args, types, state, env)
+  end
 
+  defp create_call_of_types(mod, name, args, types, state, env) do
     arity = length(args)
 
     # By elixir's evaluation order, we should expand the arguments first even the function is not found.
@@ -283,11 +286,11 @@ defmodule Charms.Defm.Expander do
         {{tail_ptr, head_ptr}, _state, _env} =
           quote do
             tail_ptr = Charms.Pointer.allocate(Term.t())
-            Pointer.store(unquote(l), tail_ptr)
+            Pointer.store(l, tail_ptr)
             head_ptr = Charms.Pointer.allocate(Term.t())
             {tail_ptr, head_ptr}
           end
-          |> expand(state, env)
+          |> expand_with_bindings(state, env, l: l)
 
         # we compile the Enum.reduce/3 to a scf.while in MLIR
         SCF.while [init] do
@@ -302,13 +305,17 @@ defmodule Charms.Defm.Expander do
               {condition, _state, _env} =
                 quote do
                   enif_get_list_cell(
-                    unquote(env_ptr),
-                    Pointer.load(Term.t(), unquote(tail_ptr)),
-                    unquote(head_ptr),
-                    unquote(tail_ptr)
+                    env_ptr,
+                    Pointer.load(Term.t(), tail_ptr),
+                    head_ptr,
+                    tail_ptr
                   ) > 0
                 end
-                |> expand(state, env)
+                |> expand_with_bindings(state, env,
+                  tail_ptr: tail_ptr,
+                  head_ptr: head_ptr,
+                  env_ptr: env_ptr
+                )
 
               SCF.condition(condition, acc) >>> []
             end
@@ -324,11 +331,10 @@ defmodule Charms.Defm.Expander do
               state = put_mlir_var(state, arg_acc, acc)
 
               {head_val, state, env} =
-                quote(do: Charms.Pointer.load(Charms.Term.t(), unquote(head_ptr)))
-                |> expand(state, env)
+                quote(do: Charms.Pointer.load(Charms.Term.t(), head_ptr))
+                |> expand_with_bindings(state, env, head_ptr: head_ptr)
 
               state = put_mlir_var(state, arg_element, head_val)
-
               # expand the body
               {body, _state, _env} = expand(body, state, env)
               SCF.yield(body) >>> []
@@ -349,10 +355,6 @@ defmodule Charms.Defm.Expander do
     end
 
     {len, state, env}
-  end
-
-  defp expand_std(_module, _fun, _args, _state, _env) do
-    :not_implemented
   end
 
   defp expand_body(body, args, arg_types, state, env) do
@@ -409,7 +411,7 @@ defmodule Charms.Defm.Expander do
         end
 
       invalid_arg ->
-        raise_compile_error(env, "Invalid operand: #{Macro.to_string(invalid_arg)}")
+        raise_compile_error(env, "Invalid operand: #{inspect(invalid_arg)}")
     end
   end
 
@@ -442,16 +444,73 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  defp expand_get_attribute(args, state, env) do
+  # expand with bindings that are not leaked
+  defp expand_with_bindings(ast, state, env, bindings) do
+    state_with_bindings =
+      for {var, val} <- bindings, reduce: state do
+        state -> put_mlir_var(state, var, val)
+      end
+
+    {v, _state, _env} = expand(ast, state_with_bindings, env)
+    {v, state, env}
+  end
+
+  defp expand_intrinsics(loc, module, intrinsic_impl, args, state, env) do
+    try do
+      {args, state, env} = expand(args, state, env)
+      state = update_in(state.mlir.required_intrinsic_modules, &MapSet.put(&1, module))
+
+      v =
+        apply(module, intrinsic_impl, [
+          args,
+          %Charms.Intrinsic.Opts{
+            ctx: state.mlir.ctx,
+            blk: state.mlir.blk,
+            loc: loc
+          }
+        ])
+
+      case v do
+        %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
+          {v, state, env}
+
+        {ast = {_, _, _}, bindings} when is_list(bindings) ->
+          :ok = Macro.validate(ast)
+          expand_with_bindings(ast, state, env, bindings)
+
+        other ->
+          raise_compile_error(
+            env,
+            "Unexpected return type from intrinsic #{module}.#{intrinsic_impl}: #{inspect(other)}"
+          )
+      end
+    rescue
+      e ->
+        raise_compile_error(
+          env,
+          "Failed to expand intrinsic #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
+        )
+    end
+  end
+
+  defp expand_magic_macros(_loc, {module, fun, _arity} = {String, :length, 1}, args, state, env) do
     {args, state, env} = expand(args, state, env)
+    expand_std(module, fun, args, state, env)
+  end
+
+  defp expand_magic_macros(_loc, {module, fun, _arity} = {Enum, :reduce, 3}, args, state, env) do
+    expand_std(module, fun, args, state, env)
+  end
+
+  defp expand_magic_macros(_loc, {Module, :__get_attribute__, 4}, args, state, env) do
+    {args, _state, _env} = expand(args, state, env)
     attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
+    {attr, _state, _env} = expand(attr, state, env)
     env_ptr = beam_env_from_defm!(env, state)
 
-    # there is no nested do-block to expand, so it is safe to use regular variable names, as long as the updated state and env are not leaked
     quote do
       alias Charms.Pointer
       alias Charms.Term
-      attr = unquote(attr)
       term_ptr = Pointer.allocate(Term.t())
       size = String.length(attr)
       size = value index.casts(size) :: i64()
@@ -459,81 +518,35 @@ defmodule Charms.Defm.Expander do
       buffer = ptr_to_memref(buffer_ptr, size)
       memref.copy(attr, buffer)
       zero = const 0 :: i32()
-      enif_binary_to_term(unquote(env_ptr), buffer_ptr, size, term_ptr, zero)
+      enif_binary_to_term(env_ptr, buffer_ptr, size, term_ptr, zero)
       Pointer.load(Term.t(), term_ptr)
     end
-    |> expand(state, env)
+    |> expand_with_bindings(state, env, attr: attr, env_ptr: env_ptr)
   end
 
-  defp expand_intrinsics(loc, module, intrinsic_impl, args, state, env) do
-    {args, state, env} = expand(args, state, env)
-    state = update_in(state.mlir.required_intrinsic_modules, &MapSet.put(&1, module))
-
-    v =
-      apply(module, intrinsic_impl, [
-        args,
-        %Charms.Intrinsic.Opts{
-          ctx: state.mlir.ctx,
-          blk: state.mlir.blk,
-          loc: loc
-        }
-      ])
-
-    case v do
-      %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->
-        {v, state, env}
-
-      ast = {_, _, _} ->
-        # do not leak variables created in the macro
-        {v, _state, _env} = expand(ast, state, env)
-        {v, state, env}
-
-      other ->
-        raise_compile_error(
-          env,
-          "Unexpected return type from intrinsic #{module}.#{intrinsic_impl}: #{inspect(other)}"
-        )
-    end
-  end
-
-  defp expand_magic_macros(loc, {module, fun, arity} = mfa, args, state, env) do
+  defp expand_magic_macros(loc, {module, fun, arity}, args, state, env) do
     cond do
       export_intrinsics?(module, fun, arity) ->
         intrinsic_impl = module.__intrinsics__(fun, arity)
         expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
 
-      mfa == {Module, :__get_attribute__, 4} ->
-        expand_get_attribute(args, state, env)
-
-      (res = expand_std(module, fun, args, state, env)) != :not_implemented ->
-        res
-
       true ->
-        quote(do: unquote(module).unquote(fun)(unquote_splicing(args)))
-        |> expand_call_of_types([], state, env)
+        create_call_of_types(module, fun, args, [], state, env)
     end
   end
 
   defp expand_remote_macro(meta, {module, fun, arity} = mfa, args, state, env) do
     loc = MLIR.Location.from_env(env)
 
-    try do
-      case Macro.Env.expand_require(env, meta, module, fun, arity,
-             trace: true,
-             check_deprecations: false
-           ) do
-        {:macro, module, callback} ->
-          expand_macro(meta, module, fun, args, callback, state, env)
+    case Macro.Env.expand_require(env, meta, module, fun, arity,
+           trace: true,
+           check_deprecations: false
+         ) do
+      {:macro, module, callback} ->
+        expand_macro(meta, module, fun, args, callback, state, env)
 
-        :error ->
-          expand_magic_macros(loc, mfa, args, state, env)
-      end
-    rescue
-      e ->
-        raise_compile_error(
-          env,
-          "Failed to expand macro #{module}.#{fun}/#{arity}: #{Exception.message(e)}"
-        )
+      :error ->
+        expand_magic_macros(loc, mfa, args, state, env)
     end
   end
 
@@ -1270,15 +1283,12 @@ defmodule Charms.Defm.Expander do
     {args, state, env} = expand_list(args, state, env)
 
     try do
-      quote do
-        unquote(env.module).unquote(fun)(unquote_splicing(args))
-      end
-      |> expand_call_of_types([], state, env)
+      create_call_of_types(env.module, fun, args, [], state, env)
     rescue
       e ->
         raise_compile_error(
           env,
-          "Failed to expand local function #{fun}/#{length(args)}: #{Exception.message(e)}"
+          "Failed to expand local function #{fun}/#{length(args)}: #{Exception.message(e)}, #{Exception.format_stacktrace(__STACKTRACE__)}"
         )
     end
   end
@@ -1340,7 +1350,7 @@ defmodule Charms.Defm.Expander do
     put_mlir_var(state, name, val)
   end
 
-  defp get_mlir_var(state, {name, _meta, _ctx}) do
+  defp get_mlir_var(state, {name, _meta, ctx}) when is_atom(ctx) do
     Map.get(state.mlir.vars, name)
   end
 
