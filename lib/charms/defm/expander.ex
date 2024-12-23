@@ -525,13 +525,11 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_magic_macros(loc, {module, fun, arity}, args, state, env) do
-    cond do
-      export_intrinsics?(module, fun, arity) ->
-        intrinsic_impl = module.__intrinsics__(fun, arity)
-        expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
-
-      true ->
-        create_call_of_types(module, fun, args, [], state, env)
+    if export_intrinsics?(module, fun, arity) do
+      intrinsic_impl = module.__intrinsics__(fun, arity)
+      expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
+    else
+      create_call_of_types(module, fun, args, [], state, env)
     end
   end
 
