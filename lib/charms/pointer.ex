@@ -8,15 +8,15 @@ defmodule Charms.Pointer do
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
   alias Beaver.MLIR.{Type}
-  alias Beaver.MLIR.Dialect.{MemRef, Index, Arith}
+  alias Beaver.MLIR.Dialect.{MemRef, Index, Arith, LLVM}
 
   @doc """
   Allocates a single element of the given `elem_type`, returning a pointer to it.
   """
   defintrinsic allocate(elem_type) do
-    quote bind_quoted: [elem_type: elem_type] do
-      Charms.Pointer.allocate(elem_type, 1)
-    end
+    {quote do
+       Charms.Pointer.allocate(elem_type, 1)
+     end, elem_type: elem_type}
   end
 
   @doc """
@@ -52,24 +52,6 @@ defmodule Charms.Pointer do
     end
   end
 
-  @doc """
-  Loads a value of `type` from the given pointer `ptr`.
-  """
-  defintrinsic load(type, ptr) do
-    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
-
-    if MLIR.equal?(MLIR.Value.type(ptr), ~t{!llvm.ptr}) do
-      quote bind_quoted: [type: type, ptr: ptr] do
-        value llvm.load(ptr) :: type
-      end
-    else
-      mlir ctx: ctx, blk: blk do
-        zero = Index.constant(value: Attribute.index(0), loc: loc) >>> Type.index()
-        MemRef.load(ptr, zero, loc: loc) >>> type
-      end
-    end
-  end
-
   @doc false
   def memref_ptr?(%MLIR.Type{} = t) do
     MLIR.CAPI.mlirTypeIsAMemRef(t) |> Beaver.Native.to_term()
@@ -79,13 +61,31 @@ defmodule Charms.Pointer do
     MLIR.Value.type(ptr) |> memref_ptr?()
   end
 
+  @doc """
+  Loads a value of `type` from the given pointer `ptr`.
+  """
+  defintrinsic load(type, ptr) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    if MLIR.equal?(MLIR.Value.type(ptr), ~t{!llvm.ptr}) do
+      mlir ctx: ctx, blk: blk do
+        LLVM.load(ptr, loc: loc) >>> type
+      end
+    else
+      mlir ctx: ctx, blk: blk do
+        zero = Index.constant(value: Attribute.index(0), loc: loc) >>> Type.index()
+        MemRef.load(ptr, zero, loc: loc) >>> type
+      end
+    end
+  end
+
   defintrinsic load(%MLIR.Value{} = ptr) do
     t = MLIR.Value.type(ptr)
 
     if memref_ptr?(t) do
-      quote do
-        Charms.Pointer.load(unquote(MLIR.CAPI.mlirShapedTypeGetElementType(t)), unquote(ptr))
-      end
+      {quote do
+         Charms.Pointer.load(Charms.Pointer.element_type(ptr), ptr)
+       end, ptr: ptr}
     else
       raise ArgumentError, "Pointer is not typed, use load/2 to specify the pointer type"
     end
@@ -177,13 +177,9 @@ defmodule Charms.Pointer do
     t = MLIR.Value.type(ptr)
 
     if memref_ptr?(t) do
-      quote do
-        Charms.Pointer.element_ptr(
-          unquote(MLIR.CAPI.mlirShapedTypeGetElementType(t)),
-          unquote(ptr),
-          unquote(n)
-        )
-      end
+      {quote do
+         Charms.Pointer.element_ptr(elem_type, ptr, n)
+       end, ptr: ptr, n: n, elem_type: MLIR.CAPI.mlirShapedTypeGetElementType(t)}
     else
       raise ArgumentError, "Pointer is not typed, use element_ptr/3 to specify the pointer type"
     end

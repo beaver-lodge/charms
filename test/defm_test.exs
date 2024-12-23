@@ -78,7 +78,7 @@ defmodule DefmTest do
       line = __ENV__.line
 
       assert_raise CompileError,
-                   ~r"Failed to expand macro Elixir.DifferentCalls.something/1.+function something not found in module DifferentCalls",
+                   ~r"function something not found in module DifferentCalls",
                    fn ->
                      defmodule Undefined do
                        use Charms
@@ -166,7 +166,7 @@ defmodule DefmTest do
   end
 
   test "enif type mismatch" do
-    assert_raise ArgumentError, ~r/Expected a value of type i32, got f32/, fn ->
+    assert_raise CompileError, ~r/Expected a value of type i32, got f32/, fn ->
       defmodule MismatchEnifType do
         use Charms
         alias Charms.Term

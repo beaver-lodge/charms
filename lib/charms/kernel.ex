@@ -84,10 +84,10 @@ defmodule Charms.Kernel do
       raise ArgumentError, "Not an integer type to negate, unsupported type: #{to_string(t)}"
     end
 
-    quote bind_quoted: [v: value, t: t] do
-      one = const 1 :: t
-      value arith.xori(v, one) :: t
-    end
+    {quote do
+       one = const 1 :: t
+       value arith.xori(value, one) :: t
+     end, t: t, value: value}
   end
 
   @doc false
