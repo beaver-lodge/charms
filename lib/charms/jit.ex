@@ -29,7 +29,6 @@ defmodule Charms.JIT do
     |> Beaver.Composer.append("finalize-memref-to-llvm")
     |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> reconcile_unrealized_casts
-    |> Beaver.Composer.append(Charms.Defm.Pass.UseEnifMalloc)
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
     |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true, dirty: :cpu_bound)
