@@ -3,7 +3,7 @@ defmodule Charms.Debug do
   alias Beaver.MLIR
 
   def print_ir_pass(op) do
-    if System.get_env("DEFM_PRINT_IR") == "1" do
+    if System.get_env("DEFM_PRINT_IR") && !step_print?() do
       case op do
         %MLIR.Operation{} ->
           MLIR.dump!(op)

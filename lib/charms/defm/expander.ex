@@ -514,11 +514,8 @@ defmodule Charms.Defm.Expander do
       term_ptr = Pointer.allocate(Term.t())
       size = String.length(attr)
       size = value index.casts(size) :: i64()
-      buffer_ptr = Pointer.allocate(i8(), size)
-      buffer = ptr_to_memref(buffer_ptr, size)
-      memref.copy(attr, buffer)
       zero = const 0 :: i32()
-      enif_binary_to_term(env_ptr, buffer_ptr, size, term_ptr, zero)
+      enif_binary_to_term(env_ptr, attr, size, term_ptr, zero)
       Pointer.load(Term.t(), term_ptr)
     end
     |> expand_with_bindings(state, env, attr: attr, env_ptr: env_ptr)
@@ -920,6 +917,11 @@ defmodule Charms.Defm.Expander do
     end
   end
 
+  # convert op name ast to a string
+  defp normalize_dot_op_name(ast) do
+    ast |> Macro.to_string() |> String.replace([":", " "], "")
+  end
+
   ## Macro handling
 
   # This is going to be the function where you will intercept expansions
@@ -1165,6 +1167,7 @@ defmodule Charms.Defm.Expander do
   defp expand_macro(_meta, Charms.Defm, :op, [call], _callback, state, env) do
     {call, return_types} = decompose_call_signature(call)
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
+    dialect = normalize_dot_op_name(dialect)
     op = "#{dialect}.#{op}"
     {args, state, env} = expand(args, state, env)
     {return_types, state, env} = expand(return_types, state, env)
