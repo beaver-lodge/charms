@@ -32,7 +32,7 @@ defmodule Charms.JIT do
     |> Beaver.Composer.append(Charms.Defm.Pass.UseEnifMalloc)
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
-    |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true)
+    |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true, dirty: :cpu_bound)
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
   end
 
