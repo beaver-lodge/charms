@@ -4,7 +4,7 @@ defmodule Charms.MixProject do
   def project do
     [
       app: :charms,
-      version: "0.1.3-dev",
+      version: "0.1.4-dev",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
