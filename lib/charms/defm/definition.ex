@@ -167,6 +167,29 @@ defmodule Charms.Defm.Definition do
     :ok
   end
 
+  @default_visibility "private"
+  defp declare_enif(ctx, blk, name_str) do
+    mlir ctx: ctx, blk: blk do
+      {arg_types, ret_types} = Beaver.ENIF.signature(ctx, String.to_atom(name_str))
+
+      Func.func _(
+                  sym_name: MLIR.Attribute.string(name_str),
+                  sym_visibility: MLIR.Attribute.string(@default_visibility),
+                  function_type: Type.function(arg_types, ret_types)
+                ) do
+        region do
+        end
+      end
+    end
+  end
+
+  defp declared_required_enif(op) do
+    mlir ctx: MLIR.context(op), blk: MLIR.Module.body(MLIR.Module.from_operation(op)) do
+      declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_alloc")
+      declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_free")
+    end
+  end
+
   # if it is single block with no terminator, add a return
   defp append_missing_return(func) do
     with [r] <- Beaver.Walker.regions(func) |> Enum.to_list(),
@@ -279,6 +302,9 @@ defmodule Charms.Defm.Definition do
       {"append_missing_return", "func.func", &append_missing_return/1}
     )
     |> Beaver.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
+    |> Beaver.Composer.append(
+      {"declared-required-enif", "builtin.module", &declared_required_enif/1}
+    )
     |> Beaver.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> MLIR.Transform.canonicalize()
     |> then(fn op ->

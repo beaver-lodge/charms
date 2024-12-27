@@ -6,7 +6,6 @@ defmodule Charms.JIT do
   import Beaver.MLIR.CAPI
   alias Beaver.MLIR
   alias __MODULE__.LockedCache
-
   defstruct ctx: nil, engine: nil, owner: true
 
   defp jit_of_mod(m) do
@@ -14,9 +13,16 @@ defmodule Charms.JIT do
 
     m
     |> MLIR.verify!()
+    |> MLIR.Transform.canonicalize()
+    |> Beaver.Composer.append("ownership-based-buffer-deallocation")
+    |> Beaver.Composer.append("buffer-deallocation-simplification")
+    |> Beaver.Composer.append("bufferization-lower-deallocations")
+    |> MLIR.Transform.canonicalize()
+    |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested("func.func", "llvm-request-c-wrappers")
     |> Beaver.Composer.nested("func.func", loop_invariant_code_motion())
     |> convert_scf_to_cf
+    |> convert_cf_to_llvm()
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
     |> convert_func_to_llvm()
@@ -25,7 +31,7 @@ defmodule Charms.JIT do
     |> reconcile_unrealized_casts
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
-    |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true)
+    |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true, dirty: :cpu_bound)
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
   end
 
@@ -147,8 +153,8 @@ defmodule Charms.JIT do
     if jit = LockedCache.get(key), do: jit.engine
   end
 
-  def invoke(%MLIR.ExecutionEngine{ref: ref}, {mod, func, args}) do
-    beaver_raw_jit_invoke_with_terms(ref, to_string(Charms.Defm.mangling(mod, func)), args)
+  def invoke(%MLIR.ExecutionEngine{} = engine, {mod, func, args}) do
+    Beaver.ENIF.invoke(engine, to_string(Charms.Defm.mangling(mod, func)), args)
   end
 
   def destroy(key) do

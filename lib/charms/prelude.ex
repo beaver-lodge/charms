@@ -4,7 +4,7 @@ defmodule Charms.Prelude do
   """
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
-  alias Beaver.MLIR.Dialect.{Arith, Func, LLVM, MemRef, Index}
+  alias Beaver.MLIR.Dialect.Func
   @enif_functions Beaver.ENIF.functions()
 
   defp literal_to_constant(v, t, %Opts{ctx: ctx, blk: blk, loc: loc})
@@ -52,35 +52,11 @@ defmodule Charms.Prelude do
     entity |> tap(&IO.puts(MLIR.to_string(&1)))
   end
 
-  def extract_raw_pointer(arg, arg_type, %Opts{ctx: ctx, blk: blk, loc: loc}) do
-    mlir ctx: ctx, blk: blk do
-      t = MLIR.Value.type(arg)
-
-      if MLIR.equal?(~t{!llvm.ptr}.(ctx), arg_type) and Charms.Pointer.memref_ptr?(arg) do
-        elem_t = MLIR.CAPI.mlirShapedTypeGetElementType(t)
-
-        width =
-          cond do
-            MLIR.Type.integer?(elem_t) ->
-              MLIR.CAPI.mlirIntegerTypeGetWidth(elem_t) |> Beaver.Native.to_term()
-
-            MLIR.Type.float?(elem_t) ->
-              MLIR.CAPI.mlirFloatTypeGetWidth(elem_t) |> Beaver.Native.to_term()
-
-            true ->
-              raise ArgumentError, "Expected a shaped type, got #{to_string(t)}"
-          end
-
-        width = Index.constant(value: Attribute.index(width), loc: loc) >>> Type.index()
-        ptr_i = MemRef.extract_aligned_pointer_as_index(arg, loc: loc) >>> Type.index()
-        [_, offset, _, _] = MemRef.extract_strided_metadata(arg, loc: loc) >>> :infer
-        offset = Arith.muli(offset, width, loc: loc) >>> Type.index()
-        ptr_i = Arith.addi(ptr_i, offset, loc: loc) >>> Type.index()
-        ptr_i = Arith.index_cast(ptr_i, loc: loc) >>> Type.i64()
-        LLVM.inttoptr(ptr_i, loc: loc) >>> ~t{!llvm.ptr}
-      else
-        arg
-      end
+  defp extract_raw_pointer(arg, arg_type, %Opts{ctx: ctx} = opts) do
+    if MLIR.equal?(~t{!llvm.ptr}.(ctx), arg_type) and Charms.Pointer.memref_ptr?(arg) do
+      Charms.Pointer.extract_raw_pointer(arg, opts)
+    else
+      arg
     end
   end
 

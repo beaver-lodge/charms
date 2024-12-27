@@ -29,8 +29,14 @@ defmodule Charms.Pointer do
       zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
 
       case size do
-        i when is_integer(i) ->
+        1 ->
           MemRef.alloca(
+            loc: loc,
+            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
+          ) >>> Type.memref([1], elem_type)
+
+        i when is_integer(i) ->
+          MemRef.alloc(
             loc: loc,
             operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
           ) >>> Type.memref([i], elem_type)
@@ -43,7 +49,7 @@ defmodule Charms.Pointer do
               Index.casts(size, loc: loc) >>> Type.index()
             end
 
-          MemRef.alloca(size,
+          MemRef.alloc(size,
             loc: loc,
             operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([1, 0])
           ) >>> Type.memref([:dynamic], elem_type)
@@ -206,5 +212,53 @@ defmodule Charms.Pointer do
   defintrinsic t(elem_t) do
     %Opts{ctx: ctx} = __IR__
     ptr_type(elem_t, ctx)
+  end
+
+  @doc false
+  def extract_raw_pointer(%MLIR.Value{} = ptr, %Opts{ctx: ctx, blk: blk, loc: loc}) do
+    t = MLIR.Value.type(ptr)
+
+    cond do
+      MLIR.equal?(~t{!llvm.ptr}.(ctx), t) ->
+        ptr
+
+      Charms.Pointer.memref_ptr?(t) ->
+        mlir ctx: ctx, blk: blk do
+          elem_t = MLIR.CAPI.mlirShapedTypeGetElementType(t)
+
+          width =
+            cond do
+              MLIR.Type.integer?(elem_t) ->
+                MLIR.CAPI.mlirIntegerTypeGetWidth(elem_t) |> Beaver.Native.to_term()
+
+              MLIR.Type.float?(elem_t) ->
+                MLIR.CAPI.mlirFloatTypeGetWidth(elem_t) |> Beaver.Native.to_term()
+
+              true ->
+                raise ArgumentError, "Expected a shaped type, got #{to_string(t)}"
+            end
+
+          width = Index.constant(value: Attribute.index(width), loc: loc) >>> Type.index()
+          ptr_i = MemRef.extract_aligned_pointer_as_index(ptr, loc: loc) >>> Type.index()
+          [_, offset, _, _] = MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
+          offset = Arith.muli(offset, width, loc: loc) >>> Type.index()
+          ptr_i = Arith.addi(ptr_i, offset, loc: loc) >>> Type.index()
+          ptr_i = Arith.index_cast(ptr_i, loc: loc) >>> Type.i64()
+          LLVM.inttoptr(ptr_i, loc: loc) >>> ~t{!llvm.ptr}
+        end
+
+      true ->
+        raise ArgumentError, "Expected a pointer, got #{MLIR.to_string(t)}"
+    end
+  end
+
+  defintrinsic copy(source, destination, bytes_count) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+    source = extract_raw_pointer(source, __IR__)
+    destination = extract_raw_pointer(destination, __IR__)
+
+    mlir ctx: ctx, blk: blk do
+      LLVM.intr_memcpy(destination, source, bytes_count, isVolatile: ~a{false}, loc: loc) >>> []
+    end
   end
 end
