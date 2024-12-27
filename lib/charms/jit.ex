@@ -154,8 +154,8 @@ defmodule Charms.JIT do
     if jit = LockedCache.get(key), do: jit.engine
   end
 
-  def invoke(%MLIR.ExecutionEngine{ref: ref}, {mod, func, args}) do
-    beaver_raw_jit_invoke_with_terms(ref, to_string(Charms.Defm.mangling(mod, func)), args)
+  def invoke(%MLIR.ExecutionEngine{} = engine, {mod, func, args}) do
+    Beaver.ENIF.invoke(engine, to_string(Charms.Defm.mangling(mod, func)), args)
   end
 
   def destroy(key) do
