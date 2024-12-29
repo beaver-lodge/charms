@@ -67,7 +67,7 @@ defmodule Charms.Intrinsic do
   @doc """
   To implement an intrinsic function
   """
-  defmacro defintrinsic(call, do: body) do
+  defmacro defintr(call, do: body) do
     {name, _meta, args} = call
     call = recompose_when_clauses(name, args)
     placeholder_args = normalize_arg_names(args)

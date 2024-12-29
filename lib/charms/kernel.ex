@@ -49,7 +49,7 @@ defmodule Charms.Kernel do
   end
 
   for name <- @binary_ops ++ @binary_macro_ops do
-    defintrinsic unquote(name)(left, right) do
+    defintr unquote(name)(left, right) do
       %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
       {operands, type} =
@@ -77,7 +77,7 @@ defmodule Charms.Kernel do
     end
   end
 
-  defintrinsic !value do
+  defintr !value do
     t = MLIR.Value.type(value)
 
     unless MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
