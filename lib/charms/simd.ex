@@ -10,7 +10,7 @@ defmodule Charms.SIMD do
   @doc """
   Return the constant value of the given `type` and `literal_values`
   """
-  defintrinsic new(type, literal_values) do
+  defintr new(type, literal_values) do
     %Opts{ctx: ctx, blk: blk} = __IR__
 
     mlir ctx: ctx, blk: blk do
@@ -39,7 +39,7 @@ defmodule Charms.SIMD do
   @doc """
   Return the vector type of the given `type` and `width`
   """
-  defintrinsic t(type, width) do
+  defintr t(type, width) do
     Type.vector([width], type)
   end
 end

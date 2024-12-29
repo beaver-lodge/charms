@@ -18,7 +18,7 @@ defmodule Charms.Prelude do
     v
   end
 
-  defintrinsic result_at(%MLIR.Operation{} = op, index) do
+  defintr result_at(%MLIR.Operation{} = op, index) do
     num_results = MLIR.CAPI.mlirOperationGetNumResults(op)
 
     if index < num_results do
@@ -32,11 +32,11 @@ defmodule Charms.Prelude do
   @doc """
   Get the MLIR type of the given value.
   """
-  defintrinsic type_of(value) do
+  defintr type_of(value) do
     MLIR.Value.type(value)
   end
 
-  defintrinsic const(ast) do
+  defintr const(ast) do
     {:"::", _type_meta, [value, type]} = ast
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
@@ -48,7 +48,7 @@ defmodule Charms.Prelude do
   @doc """
   Dump the MLIR entity at compile time with `IO.puts/1`
   """
-  defintrinsic dump(entity) do
+  defintr dump(entity) do
     entity |> tap(&IO.puts(MLIR.to_string(&1)))
   end
 
@@ -98,7 +98,7 @@ defmodule Charms.Prelude do
     arity = Beaver.ENIF.signature(signature_ctx, name) |> elem(0) |> length()
     args = Macro.generate_arguments(arity, __MODULE__)
 
-    defintrinsic unquote(name)(unquote_splicing(args)) do
+    defintr unquote(name)(unquote_splicing(args)) do
       call_enif(unquote(name), unquote(args), __IR__)
     end
   end

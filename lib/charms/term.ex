@@ -8,7 +8,7 @@ defmodule Charms.Term do
   @doc """
   Return the Erlang term type.
   """
-  defintrinsic t() do
+  defintr t() do
     %Opts{ctx: ctx} = __IR__
     Beaver.ENIF.Type.term(ctx: ctx)
   end

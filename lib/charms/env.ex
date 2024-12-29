@@ -5,7 +5,7 @@ defmodule Charms.Env do
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
 
-  defintrinsic t() do
+  defintr t() do
     %Opts{ctx: ctx} = __IR__
     Beaver.ENIF.Type.env(ctx: ctx)
   end

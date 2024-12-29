@@ -13,7 +13,7 @@ defmodule Charms.Pointer do
   @doc """
   Allocates a single element of the given `elem_type`, returning a pointer to it.
   """
-  defintrinsic allocate(elem_type) do
+  defintr allocate(elem_type) do
     {quote do
        Charms.Pointer.allocate(elem_type, 1)
      end, elem_type: elem_type}
@@ -22,7 +22,7 @@ defmodule Charms.Pointer do
   @doc """
   Allocates an array of `size` elements of the given `elem_type`, returning a pointer to it.
   """
-  defintrinsic allocate(elem_type, size) do
+  defintr allocate(elem_type, size) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
@@ -70,7 +70,7 @@ defmodule Charms.Pointer do
   @doc """
   Loads a value of `type` from the given pointer `ptr`.
   """
-  defintrinsic load(type, ptr) do
+  defintr load(type, ptr) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     if MLIR.equal?(MLIR.Value.type(ptr), ~t{!llvm.ptr}) do
@@ -85,7 +85,7 @@ defmodule Charms.Pointer do
     end
   end
 
-  defintrinsic load(%MLIR.Value{} = ptr) do
+  defintr load(%MLIR.Value{} = ptr) do
     t = MLIR.Value.type(ptr)
 
     if memref_ptr?(t) do
@@ -100,7 +100,7 @@ defmodule Charms.Pointer do
   @doc """
   Stores a value `val` at the given pointer `ptr`.
   """
-  defintrinsic store(val, ptr) do
+  defintr store(val, ptr) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
@@ -147,7 +147,7 @@ defmodule Charms.Pointer do
     end
   end
 
-  defintrinsic element_ptr(%MLIR.Type{} = elem_type, ptr, n) do
+  defintr element_ptr(%MLIR.Type{} = elem_type, ptr, n) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     t = MLIR.Value.type(ptr)
@@ -179,7 +179,7 @@ defmodule Charms.Pointer do
   @doc """
   Gets the element pointer of `elem_type` for the given base pointer `ptr` and index `n`.
   """
-  defintrinsic element_ptr(%MLIR.Value{} = ptr, n) do
+  defintr element_ptr(%MLIR.Value{} = ptr, n) do
     t = MLIR.Value.type(ptr)
 
     if memref_ptr?(t) do
@@ -191,7 +191,7 @@ defmodule Charms.Pointer do
     end
   end
 
-  defintrinsic element_type(%MLIR.Value{} = ptr) do
+  defintr element_type(%MLIR.Value{} = ptr) do
     t = MLIR.Value.type(ptr)
 
     if memref_ptr?(t) do
@@ -204,12 +204,12 @@ defmodule Charms.Pointer do
   @doc """
   Return the pointer type
   """
-  defintrinsic t() do
+  defintr t() do
     %Opts{ctx: ctx} = __IR__
     Beaver.Deferred.create(~t{!llvm.ptr}, ctx)
   end
 
-  defintrinsic t(elem_t) do
+  defintr t(elem_t) do
     %Opts{ctx: ctx} = __IR__
     ptr_type(elem_t, ctx)
   end
@@ -252,7 +252,7 @@ defmodule Charms.Pointer do
     end
   end
 
-  defintrinsic copy(source, destination, bytes_count) do
+  defintr copy(source, destination, bytes_count) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
     source = extract_raw_pointer(source, __IR__)
     destination = extract_raw_pointer(destination, __IR__)
