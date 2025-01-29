@@ -33,13 +33,13 @@ defmodule Charms.Pointer do
           MemRef.alloca(
             loc: loc,
             operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
-          ) >>> Type.memref([1], elem_type)
+          ) >>> Type.memref!([1], elem_type)
 
         i when is_integer(i) ->
           MemRef.alloc(
             loc: loc,
             operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
-          ) >>> Type.memref([i], elem_type)
+          ) >>> Type.memref!([i], elem_type)
 
         %MLIR.Value{} ->
           size =
@@ -52,7 +52,7 @@ defmodule Charms.Pointer do
           MemRef.alloc(size,
             loc: loc,
             operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([1, 0])
-          ) >>> Type.memref([:dynamic], elem_type)
+          ) >>> Type.memref!([:dynamic], elem_type)
       end
       |> offset_ptr(elem_type, zero, ctx, blk, loc)
     end
@@ -118,7 +118,7 @@ defmodule Charms.Pointer do
         Beaver.Native.array([1], Beaver.Native.I64)
       )
 
-    Type.memref([:dynamic], elem_type, layout: layout, ctx: ctx)
+    Type.memref!([:dynamic], elem_type, layout: layout, ctx: ctx)
   end
 
   # cast ptr to a pointer of the given element type with offset

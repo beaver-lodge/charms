@@ -40,6 +40,6 @@ defmodule Charms.SIMD do
   Return the vector type of the given `type` and `width`
   """
   defintr t(type, width) do
-    Type.vector([width], type)
+    Type.vector!([width], type)
   end
 end

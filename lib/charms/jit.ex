@@ -6,7 +6,7 @@ defmodule Charms.JIT do
   import Beaver.MLIR.CAPI
   alias Beaver.MLIR
   alias __MODULE__.LockedCache
-  defstruct ctx: nil, engine: nil, owner: true
+  defstruct engine: nil, owner: true
 
   defp jit_of_mod(m) do
     import Beaver.MLIR.{Conversion, Transform}
@@ -70,16 +70,14 @@ defmodule Charms.JIT do
     head
   end
 
-  defp do_init(modules) when is_list(modules) do
-    ctx = MLIR.Context.create()
-
+  defp do_init(ctx, modules) when is_list(modules) do
     modules
     |> Enum.map(fn
       m when is_atom(m) ->
-        m.__ir__() |> then(&MLIR.Module.create(&1, ctx: ctx))
+        m.__ir__() |> then(&MLIR.Module.create!(&1, ctx: ctx))
 
       s when is_binary(s) ->
-        s |> then(&MLIR.Module.create(&1, ctx: ctx))
+        s |> then(&MLIR.Module.create!(&1, ctx: ctx))
 
       %MLIR.Module{} = m ->
         m
@@ -92,7 +90,6 @@ defmodule Charms.JIT do
     end)
     |> then(
       &%__MODULE__{
-        ctx: ctx,
         engine: &1
       }
     )
@@ -128,7 +125,12 @@ defmodule Charms.JIT do
     {modules, jit} =
       LockedCache.run(key, fn ->
         modules = collect_modules(module)
-        {:ok, jit} = do_init(modules)
+
+        {:ok, jit} =
+          NimblePool.checkout!(Charms.ContextPool, :checkout, fn _, ctx ->
+            {do_init(ctx, modules), ctx}
+          end)
+
         {modules, jit}
       end)
 
@@ -160,12 +162,10 @@ defmodule Charms.JIT do
   def destroy(key) do
     case LockedCache.get(key) do
       %__MODULE__{
-        ctx: ctx,
         engine: engine,
         owner: true
       } ->
         MLIR.ExecutionEngine.destroy(engine)
-        MLIR.Context.destroy(ctx)
 
       nil ->
         :not_found

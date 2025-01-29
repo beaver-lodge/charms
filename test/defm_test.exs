@@ -110,7 +110,6 @@ defmodule DefmTest do
       assert_raise CompileError, ~r/type of return operand 0.+/, fn ->
         defmodule DoesNotMatchRetType do
           use Charms
-          alias Charms.Term
 
           defm add(env, i) :: i32() do
             func.return(i)

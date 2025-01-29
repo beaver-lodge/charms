@@ -6,7 +6,7 @@ defmodule CallTest do
     file = "test/call_test.exs"
     line = __ENV__.line + 10
 
-    assert_raise CompileError, fn ->
+    assert_raise ArgumentError, ~r"Unknown invocation: AbsentMod.absent_fun/2", fn ->
       defmodule CallingAbsentFunc do
         use Charms
         alias Charms.{Pointer, Term}
