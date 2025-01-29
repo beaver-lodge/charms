@@ -93,7 +93,6 @@ defmodule Charms.Defm.Definition do
 
   @doc """
   Declare a function that can be JIT compiled and generate Elixir invoker function.
-  Declare a function that can be JIT compiled and generate Elixir invoker function.
 
   The call signature will be decomposed and transformed into a normalized form.
   """
@@ -251,7 +250,7 @@ defmodule Charms.Defm.Definition do
     # this function might be called at compile time, so we need to ensure the application is started
     :ok = Application.ensure_started(:kinda)
     :ok = Application.ensure_started(:beaver)
-    m = MLIR.Module.create("", ctx: ctx)
+    m = MLIR.Module.create!("", ctx: ctx)
 
     mlir ctx: ctx, blk: MLIR.Module.body(m) do
       mlir_expander = %Charms.Defm.Expander{
@@ -301,19 +300,21 @@ defmodule Charms.Defm.Definition do
       "func.func",
       {"append_missing_return", "func.func", &append_missing_return/1}
     )
-    |> Beaver.Composer.nested("func.func", Charms.Defm.Pass.CreateAbsentFunc)
+    |> Beaver.Composer.append(Charms.Defm.Pass.CreateAbsentFunc)
+    |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.append(
       {"declared-required-enif", "builtin.module", &declared_required_enif/1}
     )
     |> Beaver.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
+    |> Beaver.Composer.run!(print: Charms.Debug.step_print?(), verifier: false)
     |> MLIR.Transform.canonicalize()
     |> then(fn op ->
-      case Beaver.Composer.run(op, print: Charms.Debug.step_print?()) do
+      case Beaver.Composer.run(op, print: Charms.Debug.step_print?(), verifier: true) do
         {:ok, op} ->
           op
 
-        {:error, msg} ->
-          raise_compile_error(__ENV__, msg)
+        {:error, diagnostics} ->
+          raise_compile_error(__ENV__, Beaver.MLIR.Diagnostic.format(diagnostics))
       end
     end)
     |> then(
@@ -333,30 +334,10 @@ defmodule Charms.Defm.Definition do
   def compile(definitions) when is_list(definitions) do
     ctx = MLIR.Context.create()
 
-    {res, msg} =
-      MLIR.Context.with_diagnostics(
-        ctx,
-        fn ->
-          try do
-            {:ok, do_compile(ctx, definitions)}
-          rescue
-            err ->
-              {:error, err, __STACKTRACE__}
-          end
-        end,
-        fn d, _acc -> Charms.Diagnostic.compile_error_message(d) end
-      )
-
-    case {res, msg} do
-      {{:ok, {mlir, mods, i_mods}}, nil} ->
-        # MLIR.Context.destroy(ctx)
-        {mlir, mods, i_mods}
-
-      {{:error, _, st}, {:ok, d_msg}} ->
-        reraise CompileError, d_msg, st
-
-      {{:error, err, st}, _} ->
-        reraise err, st
+    try do
+      do_compile(ctx, definitions)
+    after
+      MLIR.Context.destroy(ctx)
     end
   end
 

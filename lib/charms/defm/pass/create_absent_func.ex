@@ -1,7 +1,7 @@
 defmodule Charms.Defm.Pass.CreateAbsentFunc do
   @moduledoc false
   use Beaver
-  use MLIR.Pass, on: "func.func"
+  use MLIR.Pass, on: "builtin.module"
   alias MLIR.Dialect.Func
   require Func
   import MLIR.CAPI
@@ -59,21 +59,19 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
     end
   end
 
-  def run(func) do
-    ctx = mlirOperationGetContext(func)
-    block = mlirOperationGetBlock(func)
-    symbol_table = mlirSymbolTableCreate(mlirOperationGetParentOperation(func))
+  def run(mod, _state) do
+    ctx = MLIR.context(mod)
+    block = mod |> MLIR.Module.from_operation() |> MLIR.Module.body()
+    symbol_table = mlirSymbolTableCreate(mod)
 
     try do
       Beaver.Walker.postwalk(
-        func,
+        mod,
         MapSet.new(),
         &{&1, create_func(ctx, block, symbol_table, &1, &2)}
       )
     after
       mlirSymbolTableDestroy(symbol_table)
     end
-
-    :ok
   end
 end

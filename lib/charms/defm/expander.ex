@@ -67,23 +67,24 @@ defmodule Charms.Defm.Expander do
   Note that this function will not do any resource management, like destroying MLIR context or module. So this function should be used with care, and mainly for testing or debugging purpose.
   """
   def expand(ast, file) do
-    ctx = MLIR.Context.create()
-    available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
+    NimblePool.checkout!(Charms.ContextPool, :checkout, fn _, ctx ->
+      available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
 
-    mlir = %__MODULE__{
-      ctx: ctx,
-      blk: MLIR.Block.create(),
-      available_ops: available_ops,
-      vars: Map.new(),
-      region: nil,
-      enif_env: nil
-    }
+      mlir = %__MODULE__{
+        ctx: ctx,
+        blk: MLIR.Block.create(),
+        available_ops: available_ops,
+        vars: Map.new(),
+        region: nil,
+        enif_env: nil
+      }
 
-    expand(
-      ast,
-      %{attrs: [], remotes: [], locals: [], definitions: [], vars: [], mlir: mlir},
-      %{env() | file: file}
-    )
+      {expand(
+         ast,
+         %{attrs: [], remotes: [], locals: [], definitions: [], vars: [], mlir: mlir},
+         %{env() | file: file}
+       ), ctx}
+    end)
   end
 
   @doc """
@@ -130,7 +131,7 @@ defmodule Charms.Defm.Expander do
     update_in(
       state.mlir.dependence_modules,
       &Map.put_new_lazy(&1, module, fn ->
-        MLIR.Module.create(module.__ir__(), ctx: state.mlir.ctx) |> MLIR.Operation.from_module()
+        MLIR.Module.create!(module.__ir__(), ctx: state.mlir.ctx) |> MLIR.Operation.from_module()
       end)
     )
     |> then(&{&1.mlir.dependence_modules[module], &1})
@@ -1266,12 +1267,17 @@ defmodule Charms.Defm.Expander do
       module in [MLIR.Type] ->
         {args, state, env} = expand_list(args, state, env)
 
-        if fun in [:unranked_tensor, :complex, :vector] do
+        if fun in [:unranked_tensor, :unranked_tensor!, :vector, :vector!, :complex] do
           args
         else
           args ++ [[ctx: state.mlir.ctx]]
         end
-        |> then(&{apply(module, fun, &1), state, env})
+        |> then(
+          &{case apply(module, fun, &1) do
+             {:ok, t} -> t
+             t -> t
+           end, state, env}
+        )
 
       true ->
         raise_compile_error(env, "function #{module}.#{fun}/#{length(args)} not found")

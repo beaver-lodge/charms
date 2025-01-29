@@ -8,18 +8,6 @@ defmodule Charms.Diagnostic do
     [file: c["file"], line: c["line"] || 0]
   end
 
-  def compile_error_message(%Beaver.MLIR.Diagnostic{} = d) do
-    txt = to_string(d)
-
-    case txt do
-      "" ->
-        {:error, "No diagnostic message"}
-
-      note ->
-        {:ok, meta_from_loc(MLIR.location(d)) ++ [description: note]}
-    end
-  end
-
   defmacro raise_compile_error(env, diagnostic) do
     quote do
       raise CompileError,
