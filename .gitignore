@@ -25,3 +25,4 @@ charms-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 *.so
+*.exe
