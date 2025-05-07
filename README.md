@@ -3,8 +3,9 @@
 # Charms
 [![Package](https://img.shields.io/badge/-Package-important)](https://hex.pm/packages/charms) [![Documentation](https://img.shields.io/badge/-Documentation-blueviolet)](https://hexdocs.pm/charms)
 
-Elixir compiler to compile a subset of Elixir to native targets
+Charms is an Elixir compiler that compiles a subset of Elixir to optimized native code using MLIR. It enables writing performance-critical Elixir code that gets compiled to efficient native binaries while maintaining Elixir's syntax and development workflow.
 
+# Features
 - [x] `defm` to define native functions, some examples
   - [quick sort](/bench/enif_quick_sort.ex)
   - [vector add](/bench/vec_add_int_list.ex)

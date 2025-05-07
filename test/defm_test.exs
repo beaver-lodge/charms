@@ -3,7 +3,7 @@ defmodule DefmTest do
   use ExUnit.Case, async: true
 
   test "referenced modules" do
-    assert [RefereeMod] == ReferrerMod.referenced_modules()
+    assert [RefereeMod] = ReferrerMod.referenced_modules()
   end
 
   test "invalid return of absent alias" do
@@ -165,7 +165,7 @@ defmodule DefmTest do
   end
 
   test "enif type mismatch" do
-    assert_raise CompileError, ~r/Expected a value of type i32, got f32/, fn ->
+    assert_raise CompileError, ~r/Expected arg#1 of type i32, got f32/, fn ->
       defmodule MismatchEnifType do
         use Charms
         alias Charms.Term

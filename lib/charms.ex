@@ -43,6 +43,12 @@ defmodule Charms do
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
       Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
       @init_at_fun_call Keyword.get(unquote(opts), :init, true)
+
+      def dynamic_libraries() do
+        []
+      end
+
+      defoverridable dynamic_libraries: 0
     end
   end
 
@@ -103,7 +109,23 @@ defmodule Charms do
   @doc """
   define a function that can be JIT compiled
   """
-  defmacro defm(call, body \\ []) do
+  defmacro defm(call, body) do
     Charms.Defm.Definition.declare(__CALLER__, call, body)
+  end
+
+  @doc """
+  Define a Charms function that binds to a C function in a shared library.
+
+  ## Example
+
+      defbind sqrt_c(x: f64) :: f64, c_name: "sqrt_wrapper", lib: "test/support/libsqrt.so"
+
+  """
+  defmacro defbind(call) do
+    Charms.Defm.Definition.declare(__CALLER__, call,
+      do:
+        quote do
+        end
+    )
   end
 end

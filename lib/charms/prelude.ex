@@ -61,10 +61,10 @@ defmodule Charms.Prelude do
   end
 
   defp preprocess_args(args, arg_types, []) do
-    for {arg, arg_type} <- args |> Enum.zip(arg_types) do
+    for {{arg, arg_type}, i} <- args |> Enum.zip(arg_types) |> Enum.with_index() do
       if not MLIR.equal?(MLIR.Value.type(arg), arg_type) do
         raise ArgumentError,
-              "Expected a value of type #{MLIR.to_string(arg_type)}, got #{MLIR.to_string(MLIR.Value.type(arg))}"
+              "Expected arg##{i} of type #{MLIR.to_string(arg_type)}, got #{MLIR.to_string(MLIR.Value.type(arg))}"
       end
 
       arg
