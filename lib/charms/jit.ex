@@ -76,7 +76,7 @@ defmodule Charms.JIT do
   end
 
   defp do_init(ctx, modules) when is_list(modules) do
-    dynamic_libraries = Enum.flat_map(modules, &collect_dynamic_libraries/1)
+    dynamic_libraries = Enum.flat_map(modules, &collect_dynamic_libraries/1) |> Enum.uniq()
 
     modules
     |> Enum.map(fn
