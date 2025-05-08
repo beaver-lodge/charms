@@ -34,7 +34,6 @@ defmodule Charms.JIT do
     |> MLIR.ExecutionEngine.create!(
       opt_level: 3,
       object_dump: true,
-      dirty: :cpu_bound,
       shared_lib_paths: dynamic_libraries
     )
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
