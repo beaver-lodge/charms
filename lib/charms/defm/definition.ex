@@ -228,8 +228,8 @@ defmodule Charms.Defm.Definition do
         with "func.call" <- MLIR.Operation.name(op),
              callee when not is_nil(callee) <- Beaver.Walker.attributes(op)["callee"] do
           case callee |> to_string do
-            "@Elixir." <> _ = name ->
-              acc |> MapSet.put(extract_mangled_mod(name))
+            "@Elixir$" <> _ = name ->
+              acc |> MapSet.put(Charms.Defm.extract_mangled_mod(name))
 
             _ ->
               acc
@@ -339,13 +339,5 @@ defmodule Charms.Defm.Definition do
     after
       MLIR.Context.destroy(ctx)
     end
-  end
-
-  defp extract_mangled_mod("@" <> name) do
-    name
-    |> String.split(".")
-    |> then(&Enum.take(&1, length(&1) - 1))
-    |> Enum.join(".")
-    |> String.to_atom()
   end
 end

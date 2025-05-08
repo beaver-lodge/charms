@@ -48,6 +48,15 @@ defmodule Charms.Defm do
 
   @doc false
   def mangling(mod, func) do
-    Module.concat(mod, func)
+    Module.concat(mod, func) |> to_string() |> String.replace(".", "$")
+  end
+
+  @doc false
+  def extract_mangled_mod("@" <> name) do
+    name
+    |> String.split("$")
+    |> then(&Enum.take(&1, length(&1) - 1))
+    |> Enum.join(".")
+    |> String.to_atom()
   end
 end

@@ -8,7 +8,7 @@ defmodule Charms.JIT do
   alias __MODULE__.LockedCache
   defstruct engine: nil, owner: true
 
-  defp jit_of_mod(m) do
+  defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
 
     m
@@ -31,7 +31,11 @@ defmodule Charms.JIT do
     |> reconcile_unrealized_casts
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
-    |> MLIR.ExecutionEngine.create!(opt_level: 3, object_dump: true, dirty: :cpu_bound)
+    |> MLIR.ExecutionEngine.create!(
+      opt_level: 3,
+      object_dump: true,
+      shared_lib_paths: dynamic_libraries
+    )
     |> tap(&beaver_raw_jit_register_enif(&1.ref))
   end
 
@@ -71,6 +75,8 @@ defmodule Charms.JIT do
   end
 
   defp do_init(ctx, modules) when is_list(modules) do
+    dynamic_libraries = Enum.flat_map(modules, &collect_dynamic_libraries/1) |> Enum.uniq()
+
     modules
     |> Enum.map(fn
       m when is_atom(m) ->
@@ -86,7 +92,7 @@ defmodule Charms.JIT do
         raise ArgumentError, "Unexpected module type: #{inspect(other)}"
     end)
     |> then(fn op ->
-      op |> merge_modules() |> jit_of_mod()
+      op |> merge_modules() |> jit_of_mod(dynamic_libraries)
     end)
     |> then(
       &%__MODULE__{
@@ -112,6 +118,16 @@ defmodule Charms.JIT do
   end
 
   defp collect_modules(module, acc), do: [module | acc]
+
+  defp collect_dynamic_libraries(module) when is_atom(module) do
+    if function_exported?(module, :dynamic_libraries, 0) do
+      module.dynamic_libraries()
+    else
+      []
+    end
+  end
+
+  defp collect_dynamic_libraries(_), do: []
 
   def init(module, opts \\ [])
 

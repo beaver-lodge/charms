@@ -106,7 +106,7 @@ defmodule Charms.Defm.Expander do
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
         %Beaver.SSA{
           op: "func.call",
-          arguments: args ++ [callee: Attribute.flat_symbol_ref(mangling(mod, name))],
+          arguments: args ++ [callee: Attribute.flat_symbol_ref(Charms.Defm.mangling(mod, name))],
           ctx: Beaver.Env.context(),
           blk: Beaver.Env.block(),
           loc: MLIR.Location.from_env(env)
@@ -173,7 +173,7 @@ defmodule Charms.Defm.Expander do
     sym =
       MLIR.CAPI.mlirSymbolTableLookup(
         symbol_table,
-        MLIR.StringRef.create(mangling(mod, name))
+        MLIR.StringRef.create(Charms.Defm.mangling(mod, name))
       )
 
     if MLIR.null?(sym) do
@@ -889,10 +889,6 @@ defmodule Charms.Defm.Expander do
     |> elem(0)
   end
 
-  defp mangling(mod, func) do
-    Module.concat(mod, func)
-  end
-
   # Expands a nil clause body in an if statement, yielding no value.
   defp expand_if_clause_body(nil, state, _env) do
     mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
@@ -921,6 +917,72 @@ defmodule Charms.Defm.Expander do
   # convert op name ast to a string
   defp normalize_dot_op_name(ast) do
     ast |> Macro.to_string() |> String.replace([":", " "], "")
+  end
+
+  defp expand_defm(call, body, state, env) do
+    {:"::", _, [call, ret_types]} = call
+
+    {name, args} = Macro.decompose_call(call)
+    name = Charms.Defm.mangling(env.module, name)
+
+    {args, arg_types} =
+      for {:"::", _, [a, t]} <- args do
+        {a, t}
+      end
+      |> Enum.unzip()
+
+    parent_block = state.mlir.blk
+
+    f =
+      mlir ctx: state.mlir.ctx, blk: parent_block do
+        {ret_types, state, env} = ret_types |> expand(state, env)
+        {arg_types, state, env} = arg_types |> expand(state, env)
+
+        if i = Enum.find_index(arg_types, &(!is_struct(&1, MLIR.Type))) do
+          raise_compile_error(
+            env,
+            "invalid argument type ##{i + 1}, #{inspect(Enum.at(arg_types, i))}"
+          )
+        end
+
+        if Enum.find(List.wrap(ret_types), &(!is_struct(&1, MLIR.Type))) do
+          raise_compile_error(env, "invalid return type, #{inspect(ret_types)}")
+        end
+
+        ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
+
+        Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
+          region do
+          end
+        end
+      end
+
+    r0 = Beaver.Walker.regions(f) |> Enum.at(0)
+    state = put_in(state.mlir.region, r0)
+
+    {_, state, env} =
+      case body do
+        {:__block__, _, []} ->
+          MLIR.CAPI.mlirOperationSetInherentAttributeByName(
+            f,
+            MLIR.StringRef.create("sym_visibility"),
+            MLIR.Attribute.string("private", ctx: state.mlir.ctx)
+          )
+
+          {[], state, env}
+
+        _ ->
+          # create and insert the entry block to expose the state variable
+          {blk_entry, state, env} =
+            body |> List.wrap() |> expand_body(args, arg_types, state, env)
+
+          MLIR.CAPI.mlirRegionInsertOwnedBlock(r0, 0, blk_entry)
+          {blk_entry, state, env}
+      end
+
+    # restore the block back to parent, otherwise consecutive functions will be created nested
+    state = put_in(state.mlir.blk, parent_block)
+    {f, state, env}
   end
 
   ## Macro handling
@@ -963,57 +1025,7 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms, :defm, [call, [do: body]], _callback, state, env) do
-    {:"::", _, [call, ret_types]} = call
-
-    {name, args} = Macro.decompose_call(call)
-    name = mangling(env.module, name)
-
-    body =
-      body
-      |> List.wrap()
-
-    {args, arg_types} =
-      for {:"::", _, [a, t]} <- args do
-        {a, t}
-      end
-      |> Enum.unzip()
-
-    parent_block = state.mlir.blk
-
-    f =
-      mlir ctx: state.mlir.ctx, blk: parent_block do
-        {ret_types, state, env} = ret_types |> expand(state, env)
-        {arg_types, state, env} = arg_types |> expand(state, env)
-
-        if i = Enum.find_index(arg_types, &(!is_struct(&1, MLIR.Type))) do
-          raise_compile_error(
-            env,
-            "invalid argument type ##{i + 1}, #{inspect(Enum.at(arg_types, i))}"
-          )
-        end
-
-        if Enum.find(List.wrap(ret_types), &(!is_struct(&1, MLIR.Type))) do
-          raise_compile_error(env, "invalid return type, #{inspect(ret_types)}")
-        end
-
-        ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
-
-        Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
-          region do
-          end
-        end
-      end
-
-    r0 = Beaver.Walker.regions(f) |> Enum.at(0)
-    state = put_in(state.mlir.region, r0)
-
-    # create and insert the entry block to expose the state variable
-    {blk_entry, state, env} = expand_body(body, args, arg_types, state, env)
-    # restore the block back to parent, otherwise consecutive functions will be created nested
-    state = put_in(state.mlir.blk, parent_block)
-
-    MLIR.CAPI.mlirRegionInsertOwnedBlock(r0, 0, blk_entry)
-    {f, state, env}
+    expand_defm(call, body, state, env)
   end
 
   defp expand_macro(_meta, Beaver, :block, args, _callback, state, env) do
