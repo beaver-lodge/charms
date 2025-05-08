@@ -1,5 +1,5 @@
 defmodule CtypesTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   test "calls C sqrt function" do
     # Define a Charms function that binds to the C sqrt function
