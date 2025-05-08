@@ -44,6 +44,7 @@ defmodule Charms do
       Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
       @init_at_fun_call Keyword.get(unquote(opts), :init, true)
 
+      @spec dynamic_libraries() :: [String.t()]
       def dynamic_libraries() do
         []
       end
