@@ -121,7 +121,11 @@ defmodule Charms.JIT do
   defp collect_modules(module, acc), do: [module | acc]
 
   defp collect_dynamic_libraries(module) when is_atom(module) do
-    module.dynamic_libraries()
+    if function_exported?(module, :dynamic_libraries, 0) do
+      module.dynamic_libraries()
+    else
+      []
+    end
   end
 
   defp collect_dynamic_libraries(_), do: []
