@@ -78,7 +78,7 @@ defmodule Dangerous do
 
   defm use_a_pointer(env, value :: Term.t()) :: Term.t() do
     ptr = Pointer.allocate(Term.t())
-    Pointer.store(value, ptr)
+    set! ptr[0], value
     Pointer.load(Term.t(), ptr)
   end
 end
@@ -160,7 +160,7 @@ defmodule ControlFlowWhile do
 
   defm loop_example(env, list :: Term.t()) :: Term.t() do
     movable_list_ptr = Pointer.allocate(Term.t())
-    Pointer.store(list, movable_list_ptr)
+    set! movable_list_ptr[0], list
     head_ptr = Pointer.allocate(Term.t())
     min_ptr = Pointer.allocate(Term.t())
 
@@ -182,7 +182,7 @@ defmodule ControlFlowWhile do
       min = Pointer.load(Term.t(), min_ptr)
       head = Pointer.load(Term.t(), head_ptr)
       min = ControlFlowIf.if_example(env, min, head)
-      Pointer.store(min, min_ptr)
+      set! min_ptr[0], min
     end
 
     Pointer.load(Term.t(), min_ptr)

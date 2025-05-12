@@ -7,21 +7,20 @@ defmodule SortUtil do
     head = Pointer.allocate(Term.t())
     zero = const 0 :: i32()
     i_ptr = Pointer.allocate(i32())
-    Pointer.store(zero, i_ptr)
+    set! i_ptr[0], zero
 
     while(
       enif_get_list_cell(
         env,
-        Pointer.load(movable_list_ptr),
+        movable_list_ptr[0],
         head,
         movable_list_ptr
       ) > 0
     ) do
-      head_val = Pointer.load(head)
-      i = Pointer.load(i_ptr)
-      ith_term_ptr = Pointer.element_ptr(arr, i)
-      Pointer.store(head_val, ith_term_ptr)
-      Pointer.store(i + 1, i_ptr)
+      head_val = head[0]
+      i = i_ptr[0]
+      set! arr[i], head_val
+      set! i_ptr[0], i + 1
     end
   end
 
@@ -32,12 +31,12 @@ defmodule SortUtil do
     left_temp = Pointer.allocate(Term.t(), n1)
     right_temp = Pointer.allocate(Term.t(), n2)
 
-    for_loop {element, i} <- {Pointer.element_ptr(arr, l), n1} do
-      Pointer.store(element, Pointer.element_ptr(left_temp, i))
+    for_loop {element, i} <- {arr + l, n1} do
+      set! left_temp[i], element
     end
 
-    for_loop {element, j} <- {Pointer.element_ptr(arr, m + 1), n2} do
-      Pointer.store(element, Pointer.element_ptr(right_temp, j))
+    for_loop {element, j} <- {arr + m + 1, n2} do
+      set! right_temp[j], element
     end
 
     i_ptr = Pointer.allocate(i32())
@@ -45,61 +44,43 @@ defmodule SortUtil do
     k_ptr = Pointer.allocate(i32())
 
     zero = const 0 :: i32()
-    Pointer.store(zero, i_ptr)
-    Pointer.store(zero, j_ptr)
-    Pointer.store(l, k_ptr)
+    set! i_ptr[0], zero
+    set! j_ptr[0], zero
+    set! k_ptr[0], l
 
-    while Pointer.load(i32(), i_ptr) < n1 && Pointer.load(i32(), j_ptr) < n2 do
-      i = Pointer.load(i32(), i_ptr)
-      j = Pointer.load(i32(), j_ptr)
-      k = Pointer.load(i32(), k_ptr)
+    while i_ptr[0] < n1 && j_ptr[0] < n2 do
+      i = i_ptr[0]
+      j = j_ptr[0]
+      k = k_ptr[0]
 
-      left_term = Pointer.load(Term.t(), Pointer.element_ptr(left_temp, i))
-      right_term = Pointer.load(Term.t(), Pointer.element_ptr(right_temp, j))
+      left_term = left_temp[i]
+      right_term = right_temp[j]
 
       if enif_compare(left_term, right_term) <= 0 do
-        Pointer.store(
-          Pointer.load(Term.t(), Pointer.element_ptr(left_temp, i)),
-          Pointer.element_ptr(arr, k)
-        )
-
-        Pointer.store(i + 1, i_ptr)
+        set! arr[k], left_temp[i]
+        set! i_ptr[0], i + 1
       else
-        Pointer.store(
-          Pointer.load(Term.t(), Pointer.element_ptr(right_temp, j)),
-          Pointer.element_ptr(arr, k)
-        )
-
-        Pointer.store(j + 1, j_ptr)
+        set! arr[k], right_temp[j]
+        set! j_ptr[0], j + 1
       end
 
-      Pointer.store(k + 1, k_ptr)
+      set! k_ptr[0], k + 1
     end
 
-    while Pointer.load(i32(), i_ptr) < n1 do
-      i = Pointer.load(i32(), i_ptr)
-      k = Pointer.load(i32(), k_ptr)
-
-      Pointer.store(
-        Pointer.load(Term.t(), Pointer.element_ptr(left_temp, i)),
-        Pointer.element_ptr(arr, k)
-      )
-
-      Pointer.store(i + 1, i_ptr)
-      Pointer.store(k + 1, k_ptr)
+    while i_ptr[0] < n1 do
+      i = i_ptr[0]
+      k = k_ptr[0]
+      set! arr[k], left_temp[i]
+      set! i_ptr[0], i + 1
+      set! k_ptr[0], k + 1
     end
 
-    while Pointer.load(i32(), j_ptr) < n2 do
-      j = Pointer.load(i32(), j_ptr)
-      k = Pointer.load(i32(), k_ptr)
-
-      Pointer.store(
-        Pointer.load(Term.t(), Pointer.element_ptr(right_temp, j)),
-        Pointer.element_ptr(arr, k)
-      )
-
-      Pointer.store(j + 1, j_ptr)
-      Pointer.store(k + 1, k_ptr)
+    while j_ptr[0] < n2 do
+      j = j_ptr[0]
+      k = k_ptr[0]
+      set! arr[k], right_temp[j]
+      set! j_ptr[0], j + 1
+      set! k_ptr[0], k + 1
     end
   end
 end

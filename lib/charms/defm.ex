@@ -46,6 +46,11 @@ defmodule Charms.Defm do
   """
   defmacro cond_br(_condition, _clauses), do: :implemented_in_expander
 
+  @doc """
+  setting value with a index expression
+  """
+  defmacro set!(_index_expression, _value), do: :implemented_in_expander
+
   @doc false
   def mangling(mod, func) do
     Module.concat(mod, func) |> to_string() |> String.replace(".", "$")

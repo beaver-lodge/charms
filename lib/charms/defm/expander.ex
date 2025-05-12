@@ -287,7 +287,7 @@ defmodule Charms.Defm.Expander do
         {{tail_ptr, head_ptr}, _state, _env} =
           quote do
             tail_ptr = Charms.Pointer.allocate(Term.t())
-            Pointer.store(l, tail_ptr)
+            Charms.Pointer.store(l, tail_ptr)
             head_ptr = Charms.Pointer.allocate(Term.t())
             {tail_ptr, head_ptr}
           end
@@ -489,7 +489,7 @@ defmodule Charms.Defm.Expander do
       e ->
         raise_compile_error(
           env,
-          "Failed to expand intrinsic #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
+          "Failed to expand intrinsic\n#{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
         )
     end
   end
@@ -773,6 +773,17 @@ defmodule Charms.Defm.Expander do
   end
 
   ## Remote call
+
+  defp expand({{:., dot_meta, [Access, :get]}, meta, args}, state, env) do
+    env = %{env | line: dot_meta[:line] || meta[:line] || env.line}
+    {[arr, i], state, env} = expand_list(args, state, env)
+
+    quote do
+      Charms.Pointer.element_ptr(arr, i)
+      |> Charms.Pointer.load()
+    end
+    |> expand_with_bindings(state, env, arr: arr, i: i)
+  end
 
   defp expand({{:., dot_meta, [module, fun]}, meta, args}, state, env)
        when is_atom(fun) and is_list(args) do
@@ -1175,6 +1186,19 @@ defmodule Charms.Defm.Expander do
       end
 
     {v, state, env}
+  end
+
+  defp expand_macro(_meta, Charms.Defm, :set!, [index_expression, value], _callback, state, env) do
+    {{:., dot_meta, [Access, :get]}, meta, [arr, i]} = index_expression
+    env = %{env | line: dot_meta[:line] || meta[:line] || env.line}
+    {value, state, env} = expand(value, state, env)
+    {i, state, env} = expand(i, state, env)
+    {arr, state, env} = expand(arr, state, env)
+
+    quote do
+      Charms.Pointer.store(value, Charms.Pointer.element_ptr(arr, i))
+    end
+    |> expand_with_bindings(state, env, arr: arr, i: i, value: value)
   end
 
   defp expand_macro(_meta, Charms.Defm, :op, [call], _callback, state, env) do

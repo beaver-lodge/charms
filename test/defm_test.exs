@@ -177,4 +177,41 @@ defmodule DefmTest do
       end
     end
   end
+
+  test "array index expression" do
+    defmodule ArrayIndexing do
+      use Charms
+      alias Charms.Term
+      alias Charms.Pointer
+
+      defm foo(env) :: Term.t() do
+        dst_arr = Pointer.allocate(f64(), 2)
+        val = const 1.1 :: f64()
+        src_arr = Pointer.allocate(f64())
+        set! src_arr[0], val
+        set! dst_arr[1], src_arr[0]
+        enif_make_double(env, dst_arr[1])
+      end
+    end
+
+    assert 1.1 = ArrayIndexing.foo()
+  end
+
+  test "Infer type when passing literal" do
+    defmodule InferLiteralTypeAtFuncCall do
+      use Charms
+      alias Charms.Term
+
+      defm id(x :: i32()) :: i32() do
+        x + 1
+      end
+
+      defm foo(env) :: Term.t() do
+        # TODO: infer type of literal, instead of using const
+        enif_make_int(env, id(const 99 :: i32()))
+      end
+    end
+
+    assert 100 = InferLiteralTypeAtFuncCall.foo()
+  end
 end

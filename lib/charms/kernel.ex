@@ -17,7 +17,7 @@ defmodule Charms.Kernel do
   defp i_predicate(:<), do: :slt
   defp i_predicate(:<=), do: :sle
 
-  defp create_binary(op, operands, type, ctx, blk, loc) do
+  defp i_create_binary(op, operands, type, ctx, blk, loc) do
     mlir ctx: ctx, blk: blk do
       case op do
         op when op in @compare_ops ->
@@ -48,39 +48,62 @@ defmodule Charms.Kernel do
     end
   end
 
+  defp create_binary(op, left, right, ctx, blk, loc) do
+    {operands, type} =
+      case {left, right} do
+        {%MLIR.Value{} = v, i} when is_integer(i) ->
+          [v, Charms.Constant.from_literal(i, v, ctx, blk, loc)]
+
+        {i, %MLIR.Value{} = v} when is_integer(i) ->
+          [Charms.Constant.from_literal(i, v, ctx, blk, loc), v]
+
+        {%MLIR.Value{}, %MLIR.Value{}} ->
+          if not MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) do
+            raise "args of binary op must be same type"
+          end
+
+          [left, right]
+
+        _ ->
+          raise ArgumentError,
+                "Invalid arguments for binary operator: #{inspect(left)}, #{inspect(right)}"
+      end
+      |> then(fn [left, _] = operands -> {operands, MLIR.CAPI.mlirValueGetType(left)} end)
+
+    if MLIR.Type.integer?(type) do
+      i_create_binary(op, operands, type, ctx, blk, loc)
+    else
+      raise ArgumentError,
+            "Unsupported type for binary operator: #{to_string(type)}. Only integer types are supported for now."
+    end
+  end
+
   for name <- @binary_ops ++ @binary_macro_ops do
     defintr unquote(name)(left, right) do
       %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
-      {operands, type} =
-        case {left, right} do
-          {%MLIR.Value{} = v, i} when is_integer(i) ->
-            [v, Charms.Constant.from_literal(i, v, ctx, blk, loc)]
+      if unquote(name) in [:+, :-] and Charms.Pointer.memref_ptr?(left) do
+        case unquote(name) do
+          :+ ->
+            {quote do
+               Charms.Pointer.element_ptr(ptr, offset)
+             end, ptr: left, offset: right}
 
-          {i, %MLIR.Value{} = v} when is_integer(i) ->
-            [Charms.Constant.from_literal(i, v, ctx, blk, loc), v]
-
-          {%MLIR.Value{}, %MLIR.Value{}} ->
-            if not MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) do
-              raise "args of binary op must be same type"
-            end
-
-            [left, right]
-
-          _ ->
-            raise ArgumentError,
-                  "Invalid arguments for binary operator: #{inspect(left)}, #{inspect(right)}"
+          :- ->
+            {quote do
+               Charms.Pointer.element_ptr(ptr, 0 - offset)
+             end, ptr: left, offset: right}
         end
-        |> then(fn [left, _] = operands -> {operands, MLIR.CAPI.mlirValueGetType(left)} end)
-
-      create_binary(unquote(name), operands, type, ctx, blk, loc)
+      else
+        create_binary(unquote(name), left, right, ctx, blk, loc)
+      end
     end
   end
 
   defintr !value do
     t = MLIR.Value.type(value)
 
-    unless MLIR.CAPI.mlirTypeIsAInteger(t) |> Beaver.Native.to_term() do
+    unless MLIR.Type.integer?(t) do
       raise ArgumentError, "Not an integer type to negate, unsupported type: #{to_string(t)}"
     end
 

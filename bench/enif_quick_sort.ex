@@ -4,29 +4,28 @@ defmodule ENIFQuickSort do
   alias Charms.{Pointer, Term}
 
   defm swap(a :: Pointer.t(Term.t()), b :: Pointer.t(Term.t())) do
-    val_a = Pointer.load(a)
-    val_b = Pointer.load(b)
-    Pointer.store(val_b, a)
-    Pointer.store(val_a, b)
+    val_a = a[0]
+    val_b = b[0]
+    set! a[0], val_b
+    set! b[0], val_a
   end
 
   defm partition(arr :: Pointer.t(Term.t()), low :: i32(), high :: i32()) :: i32() do
-    pivot_ptr = Pointer.element_ptr(arr, high)
-    pivot = Pointer.load(pivot_ptr)
+    pivot = arr[high]
     i_ptr = Pointer.allocate(i32())
-    Pointer.store(low - 1, i_ptr)
-    start = Pointer.element_ptr(arr, low)
+    set! i_ptr[0], low - 1
+    start = arr + low
 
     for_loop {element, j} <- {start, high - low} do
       if enif_compare(element, pivot) < 0 do
-        i = Pointer.load(i_ptr) + 1
-        Pointer.store(i, i_ptr)
-        swap(Pointer.element_ptr(arr, i), Pointer.element_ptr(start, j))
+        i = i_ptr[0] + 1
+        set! i_ptr[0], i
+        swap(arr + i, start + j)
       end
     end
 
-    i = Pointer.load(i_ptr)
-    swap(Pointer.element_ptr(arr, i + 1), Pointer.element_ptr(arr, high))
+    i = i_ptr[0]
+    swap(arr + i + 1, arr + high)
     func.return(i + 1)
   end
 
@@ -44,8 +43,8 @@ defmodule ENIFQuickSort do
 
     if enif_get_list_length(env, list, len_ptr) != 0 do
       movable_list_ptr = Pointer.allocate(Term.t())
-      Pointer.store(list, movable_list_ptr)
-      len = Pointer.load(len_ptr)
+      set! movable_list_ptr[0], list
+      len = len_ptr[0]
       arr = Pointer.allocate(Term.t(), len)
       SortUtil.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()

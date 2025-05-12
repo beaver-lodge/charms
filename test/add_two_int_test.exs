@@ -17,8 +17,8 @@ defmodule AddTwoIntTest do
 
         cond_br enif_get_int(env, a, ptr_a) != 0 do
           cond_br 0 != enif_get_int(env, b, ptr_b) do
-            a = Pointer.load(i32(), ptr_a)
-            b = Pointer.load(i32(), ptr_b)
+            a = ptr_a[0]
+            b = ptr_b[0]
             sum = value llvm.add(a, b) :: i32()
             sum = sum / 1
             sum = sum + 1 - 1
@@ -39,8 +39,8 @@ defmodule AddTwoIntTest do
         if !enif_get_int(env, a, ptr_a) || !enif_get_int(env, b, ptr_b) do
           enif_make_badarg(env)
         else
-          a = Pointer.load(i32(), ptr_a)
-          b = Pointer.load(i32(), ptr_b)
+          a = ptr_a[0]
+          b = ptr_b[0]
           enif_make_int(env, a + b)
         end
       end

@@ -13,7 +13,7 @@ defmodule StringTest do
         size = value index.casts(String.length(str)) :: i64()
         d_ptr = enif_make_new_binary(env, size, term_ptr)
         Pointer.copy(str, d_ptr, size)
-        Pointer.load(Term.t(), term_ptr)
+        term_ptr[0]
       end
     end
 

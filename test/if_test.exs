@@ -11,7 +11,7 @@ defmodule IfTest do
         one = const 1 :: i32()
         i_ptr = Pointer.allocate(i32())
         enif_get_int(env, i, i_ptr)
-        i = Pointer.load(i32(), i_ptr)
+        i = i_ptr[0]
 
         ret =
           if i > 0 do
