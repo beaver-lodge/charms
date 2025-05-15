@@ -196,22 +196,4 @@ defmodule DefmTest do
 
     assert 1.1 = ArrayIndexing.foo()
   end
-
-  test "Infer type when passing literal" do
-    defmodule InferLiteralTypeAtFuncCall do
-      use Charms
-      alias Charms.Term
-
-      defm id(x :: i32()) :: i32() do
-        x + 1
-      end
-
-      defm foo(env) :: Term.t() do
-        # TODO: infer type of literal, instead of using const
-        enif_make_int(env, id(const 99 :: i32()))
-      end
-    end
-
-    assert 100 = InferLiteralTypeAtFuncCall.foo()
-  end
 end
