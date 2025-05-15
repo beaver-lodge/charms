@@ -39,7 +39,7 @@ jobs:
       - run: mix test
       - run: mix
       - run: mix docs
-      - run: mix credo --ignore todo
+      - run: mix credo
       - run: mix archive.build
       - run: mix run bench/list_add_benchmark.exs
       - run: mix run bench/sort_benchmark.exs
