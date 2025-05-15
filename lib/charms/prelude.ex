@@ -52,6 +52,30 @@ defmodule Charms.Prelude do
     entity |> tap(&IO.puts(MLIR.to_string(&1)))
   end
 
+  @doc """
+  Syntactic sugar for `Charms.Pointer.allocate/1` to print the MLIR entity at compile time.
+  """
+  defintr ptr!(t) do
+    {
+      quote do
+        Charms.Pointer.allocate(t)
+      end,
+      t: t
+    }
+  end
+
+  @doc """
+  Syntactic sugar for `Charms.Pointer.allocate/2` to print the MLIR entity at compile time.
+  """
+  defintr ptr!(t, n) do
+    {
+      quote do
+        Charms.Pointer.allocate(t, n)
+      end,
+      t: t, n: n
+    }
+  end
+
   defp extract_raw_pointer(arg, arg_type, %Opts{ctx: ctx} = opts) do
     if MLIR.equal?(~t{!llvm.ptr}.(ctx), arg_type) and Charms.Pointer.memref_ptr?(arg) do
       Charms.Pointer.extract_raw_pointer(arg, opts)

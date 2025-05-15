@@ -109,7 +109,7 @@ defmodule Charms.Pointer do
     end
   end
 
-  defp ptr_type(elem_type, ctx) do
+  defp ptr_type(%MLIR.Type{} = elem_type, ctx) do
     layout =
       MLIR.CAPI.mlirStridedLayoutAttrGet(
         ctx,
@@ -122,7 +122,7 @@ defmodule Charms.Pointer do
   end
 
   # cast ptr to a pointer of the given element type with offset
-  defp offset_ptr(ptr, elem_type, offset, ctx, blk, loc) do
+  defp offset_ptr(ptr, %MLIR.Type{} = elem_type, offset, ctx, blk, loc) do
     mlir ctx: ctx, blk: blk do
       d = MLIR.CAPI.mlirShapedTypeGetDynamicStrideOrOffset() |> Beaver.Native.to_term()
       static_offsets_or_sizes = Attribute.dense_array([d], Beaver.Native.I64, ctx: ctx)
@@ -209,7 +209,7 @@ defmodule Charms.Pointer do
     Beaver.Deferred.create(~t{!llvm.ptr}, ctx)
   end
 
-  defintr t(elem_t) do
+  defintr t(%MLIR.Type{} = elem_t) do
     %Opts{ctx: ctx} = __IR__
     ptr_type(elem_t, ctx)
   end

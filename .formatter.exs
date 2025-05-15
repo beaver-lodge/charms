@@ -5,7 +5,8 @@ locals_without_parens = [
   call: 1,
   const: 1,
   defm: 2,
-  defbind: 1
+  defbind: 1,
+  set!: 2
 ]
 
 [

@@ -177,4 +177,23 @@ defmodule DefmTest do
       end
     end
   end
+
+  test "array index expression" do
+    defmodule ArrayIndexing do
+      use Charms
+      alias Charms.Term
+      alias Charms.Pointer
+
+      defm foo(env) :: Term.t() do
+        dst_arr = Pointer.allocate(f64(), 2)
+        val = const 1.1 :: f64()
+        src_arr = Pointer.allocate(f64())
+        set! src_arr[0], val
+        set! dst_arr[1], src_arr[0]
+        enif_make_double(env, dst_arr[1])
+      end
+    end
+
+    assert 1.1 = ArrayIndexing.foo()
+  end
 end

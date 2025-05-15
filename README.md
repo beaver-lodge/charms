@@ -5,7 +5,7 @@
 
 Charms is an Elixir compiler that compiles a subset of Elixir to optimized native code using MLIR. It enables writing performance-critical Elixir code that gets compiled to efficient native binaries while maintaining Elixir's syntax and development workflow.
 
-# Features
+## Features
 - [x] `defm` to define native functions, some examples
   - [quick sort](/bench/enif_quick_sort.ex)
   - [vector add](/bench/vec_add_int_list.ex)

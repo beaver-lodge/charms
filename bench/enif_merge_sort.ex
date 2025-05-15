@@ -19,8 +19,8 @@ defmodule ENIFMergeSort do
 
     if enif_get_list_length(env, list, len_ptr) != 0 do
       movable_list_ptr = Pointer.allocate(Term.t())
-      Pointer.store(list, movable_list_ptr)
-      len = Pointer.load(i32(), len_ptr)
+      set! movable_list_ptr[0], list
+      len = len_ptr[0]
       arr = Pointer.allocate(Term.t(), len)
       SortUtil.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()

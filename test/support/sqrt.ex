@@ -9,7 +9,7 @@ defmodule SqrtWrapper do
   defm sqrt(env, x :: Term.t()) :: Term.t() do
     f_ptr = Pointer.allocate(f64())
     enif_get_double(env, x, f_ptr)
-    f = Pointer.load(f_ptr)
+    f = f_ptr[0]
     r = sqrt_c(f)
     enif_make_double(env, r)
   end
