@@ -165,10 +165,17 @@ defmodule Charms.Pointer do
             Index.constant(value: Attribute.index(i)) >>> Type.index()
 
           %MLIR.Value{} ->
-            if Type.index?(MLIR.Value.type(n)) do
-              n
-            else
-              Index.casts(n, loc: loc) >>> Type.index()
+            t = MLIR.Value.type(n)
+
+            cond do
+              Type.index?(t) ->
+                n
+
+              Type.integer?(t) ->
+                Index.casts(n, loc: loc) >>> Type.index()
+
+              true ->
+                raise ArgumentError, "Expected an integer or index type, got #{MLIR.to_string(t)}"
             end
         end
 

@@ -19,7 +19,7 @@ defmodule Charms.Defm.Expander do
   """
   use Beaver
   alias MLIR.Attribute
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM}
   require Func
   import Charms.Diagnostic, only: :macros
   # Define the environment we will use for expansion.
@@ -131,7 +131,12 @@ defmodule Charms.Defm.Expander do
     update_in(
       state.mlir.dependence_modules,
       &Map.put_new_lazy(&1, module, fn ->
-        MLIR.Module.create!(module.__ir__(), ctx: state.mlir.ctx) |> MLIR.Operation.from_module()
+        if function_exported?(module, :__ir__, 0) do
+          MLIR.Module.create!(module.__ir__(), ctx: state.mlir.ctx)
+          |> MLIR.Operation.from_module()
+        else
+          nil
+        end
       end)
     )
     |> then(&{&1.mlir.dependence_modules[module], &1})
@@ -232,6 +237,32 @@ defmodule Charms.Defm.Expander do
     create_call_of_types(mod, name, args, types, state, env)
   end
 
+  defp create_call_of_types(module, :%, [mod, {:%{}, _struct_meta, fields}], types, state, env)
+       when is_atom(mod) do
+    loc = MLIR.Location.from_env(env)
+
+    [] = types
+
+    mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
+      {dependence, state} =
+        if module == mod do
+          {state.mlir.mod, state}
+        else
+          fetch_dependence_module(mod, state)
+        end
+
+      struct_type = Charms.Struct.retrieve_struct_type(dependence)
+      struct = LLVM.mlir_undef(loc: loc) >>> struct_type
+
+      for {k, v} <- fields, reduce: {struct, state, env} do
+        {struct, state, env} ->
+          position = Charms.Struct.position_of_field!(env, dependence, k)
+          struct = LLVM.insertvalue(struct, v, position: position, loc: loc) >>> struct_type
+          {struct, state, env}
+      end
+    end
+  end
+
   defp create_call_of_types(mod, name, args, types, state, env) do
     arity = length(args)
 
@@ -252,8 +283,17 @@ defmodule Charms.Defm.Expander do
         state = update_in(state.remotes, &[{mod, name, arity} | &1])
         {dependence, state} = fetch_dependence_module(mod, state)
 
-        infer_by_lookup(env, dependence, mod, name, types)
-        |> then(&create_call(mod, name, args, &1, state, env))
+        with :t <- name,
+             0 <- arity,
+             struct_type <-
+               Charms.Struct.retrieve_struct_type(dependence),
+             false <- is_nil(struct_type) do
+          {struct_type, state, env}
+        else
+          _ ->
+            infer_by_lookup(env, dependence, mod, name, types)
+            |> then(&create_call(mod, name, args, &1, state, env))
+        end
 
       # local call, resolve the expanding the type in callee's definition
       mod == env.module ->
@@ -523,11 +563,18 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_magic_macros(loc, {module, fun, arity}, args, state, env) do
-    if export_intrinsics?(module, fun, arity) do
-      intrinsic_impl = module.__intrinsics__(fun, arity)
-      expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
-    else
-      create_call_of_types(module, fun, args, [], state, env)
+    cond do
+      export_intrinsics?(module, fun, arity) ->
+        intrinsic_impl = module.__intrinsics__(fun, arity)
+        expand_intrinsics(loc, module, intrinsic_impl, args, state, env)
+
+      (struct_type =
+         Charms.Struct.retrieve_struct_type(state.mlir.mod)) && module == env.module && fun == :t &&
+          arity == 0 ->
+        {struct_type, state, env}
+
+      true ->
+        create_call_of_types(module, fun, args, [], state, env)
     end
   end
 
@@ -792,12 +839,44 @@ defmodule Charms.Defm.Expander do
     arity = length(args)
     mfa = {module, fun, arity}
     state = update_in(state.remotes, &[mfa | &1])
+    loc = MLIR.Location.from_env(env)
 
-    if is_atom(module) do
-      expand_remote_macro(meta, mfa, args, state, env)
-    else
-      [{dialect, _, _}, op] = [module, fun]
-      expand_call_as_op(dialect, op, args, state, env)
+    case module do
+      module when is_atom(module) ->
+        expand_remote_macro(meta, mfa, args, state, env)
+
+      %MLIR.Value{} = struct ->
+        mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
+          struct_type = MLIR.Value.type(struct)
+
+          unless MLIR.Type.llvm_struct?(struct_type) do
+            raise_compile_error(
+              env,
+              "Expected a struct type, got: #{MLIR.to_string(struct_type)}"
+            )
+          end
+
+          defining_module =
+            MLIR.CAPI.mlirLLVMStructTypeGetIdentifier(struct_type)
+            |> MLIR.to_string()
+            |> String.to_atom()
+
+          {dependence, state} =
+            if defining_module == env.module do
+              {state.mlir.mod, state}
+            else
+              fetch_dependence_module(defining_module, state)
+            end
+
+          position = Charms.Struct.position_of_field!(env, dependence, fun)
+          elem_t = MLIR.CAPI.mlirLLVMStructTypeGetElementType(struct_type, position[0])
+          field_value = LLVM.extractvalue(struct, position: position, loc: loc) >>> elem_t
+          {field_value, state, env}
+        end
+
+      _ ->
+        [{dialect, _, _}, op] = [module, fun]
+        expand_call_as_op(dialect, op, args, state, env)
     end
   end
 
@@ -971,16 +1050,11 @@ defmodule Charms.Defm.Expander do
     r0 = Beaver.Walker.regions(f) |> Enum.at(0)
     state = put_in(state.mlir.region, r0)
 
-    {_, state, env} =
+    {f, state, env} =
       case body do
         {:__block__, _, []} ->
-          MLIR.CAPI.mlirOperationSetInherentAttributeByName(
-            f,
-            MLIR.StringRef.create("sym_visibility"),
-            MLIR.Attribute.string("private", ctx: state.mlir.ctx)
-          )
-
-          {[], state, env}
+          f = put_in(f[:sym_visibility], MLIR.Attribute.string("private"))
+          {f, state, env}
 
         _ ->
           # create and insert the entry block to expose the state variable
@@ -988,7 +1062,7 @@ defmodule Charms.Defm.Expander do
             body |> List.wrap() |> expand_body(args, arg_types, state, env)
 
           MLIR.CAPI.mlirRegionInsertOwnedBlock(r0, 0, blk_entry)
-          {blk_entry, state, env}
+          {f, state, env}
       end
 
     # restore the block back to parent, otherwise consecutive functions will be created nested
@@ -1033,6 +1107,17 @@ defmodule Charms.Defm.Expander do
       {result, state, _env} = expand(block, state, env)
       {result, state, env}
     end
+  end
+
+  defp expand_macro(_meta, Charms, :defmstruct, [fields], _callback, state, env) do
+    {field_names, field_types} = Enum.unzip(fields)
+    {field_types, state, env} = expand(field_types, state, env)
+
+    struct_t =
+      Charms.Struct.llvm_struct_type_identified!(env.module, field_types, ctx: state.mlir.ctx)
+
+    Charms.Struct.save_as_module_attribute(state.mlir.ctx, state.mlir.mod, struct_t, field_names)
+    {nil, state, env}
   end
 
   defp expand_macro(_meta, Charms, :defm, [call, [do: body]], _callback, state, env) do
@@ -1331,7 +1416,7 @@ defmodule Charms.Defm.Expander do
       e ->
         raise_compile_error(
           env,
-          "Failed to expand local function #{fun}/#{length(args)}: #{Exception.message(e)}, #{Exception.format_stacktrace(__STACKTRACE__)}"
+          "Failed to expand local function #{fun}/#{length(args)}: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
         )
     end
   end

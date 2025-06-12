@@ -19,6 +19,12 @@ defmodule Charms do
   - In `Beaver.>>>/2` the management of MLIR context and other resources are done by the user, while in `defm/2`, the management of resources are done by the `Charms` compiler.
   - In `defm/2`, there is expected to be extra verifications built-in to the `Charms` compiler (both syntax and types), while in `Beaver.>>>/2`, there is none.
 
+  ## Macros in `Charms` module and `Charms.Defm.Expander`
+
+  `Charms.Defm.Expander` will do the job of expanding the macros like `defm/2` to its corespondent MLIR entity.
+  While the macro definitions in `Charms` module will generate the code to integrate with Elixir's compiler and module system.
+  For example, macro `defm/2` will generate the code to call the JIT function.
+
   ## Caveats and limitations
 
   - We need a explicit `call` in function call because the `::` special form has a parser priority  that is too low so a `call` macro is introduced to ensure proper scope.
@@ -41,6 +47,7 @@ defmodule Charms do
       def __use_ir__, do: nil
       @before_compile Charms
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
+      Module.register_attribute(__MODULE__, :defmstruct, accumulate: false)
       Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
       @init_at_fun_call Keyword.get(unquote(opts), :init, true)
 
@@ -54,10 +61,11 @@ defmodule Charms do
   end
 
   defmacro __before_compile__(env) do
-    defm_decls = Module.get_attribute(env.module, :defm) || []
+    defm_definitions = Module.get_attribute(env.module, :defm) || []
+    defmstruct_definition = Module.get_attribute(env.module, :defmstruct)
 
     {ir, referenced_modules, required_intrinsic_modules} =
-      defm_decls |> Enum.reverse() |> Charms.Defm.Definition.compile()
+      defm_definitions |> Enum.reverse() |> Charms.Defm.Definition.compile(defmstruct_definition)
 
     # create uses in Elixir, to disallow loop reference
     r =
@@ -128,5 +136,20 @@ defmodule Charms do
         quote do
         end
     )
+  end
+
+  @doc """
+  define a native struct
+
+  define a native struct with the given fields. The fields are defined as a list of tuples, where the first element is the field name and the second element is the field type.
+
+  > #### Native struct's fields are ordered, unlike Elixir's struct fields. {: .info}
+  >
+  > Note that the order of the fields is important for memory layout. An LLVM struct type will be created with the same order as the fields in the list.
+  """
+  defmacro defmstruct(fields) do
+    quote do
+      @defmstruct unquote(Macro.escape(Charms.Defmstruct.Definition.new(__CALLER__, fields)))
+    end
   end
 end

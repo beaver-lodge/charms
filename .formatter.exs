@@ -6,7 +6,8 @@ locals_without_parens = [
   const: 1,
   defm: 2,
   defbind: 1,
-  set!: 2
+  set!: 2,
+  defmstruct: 1
 ]
 
 [
