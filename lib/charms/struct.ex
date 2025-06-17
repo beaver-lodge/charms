@@ -47,10 +47,9 @@ defmodule Charms.Struct do
     field_names =
       field_names |> Enum.map(&MLIR.Attribute.string/1) |> MLIR.Attribute.array(ctx: ctx)
 
-    module
-    |> MLIR.Operation.from_module()
-    |> then(&put_in(&1[@defmstruct_fields], field_names))
-    |> then(&put_in(&1[@defmstruct_type], MLIR.Attribute.type(struct_type)))
+    module = module |> MLIR.Operation.from_module()
+    _ = put_in(module[@defmstruct_fields], field_names)
+    put_in(module[@defmstruct_type], MLIR.Attribute.type(struct_type))
   end
 
   def retrieve_struct_type(%m{} = module) when m in [Beaver.MLIR.Module, Beaver.MLIR.Operation] do

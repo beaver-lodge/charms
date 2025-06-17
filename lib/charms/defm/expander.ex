@@ -237,29 +237,39 @@ defmodule Charms.Defm.Expander do
     create_call_of_types(mod, name, args, types, state, env)
   end
 
-  defp create_call_of_types(module, :%, [mod, {:%{}, _struct_meta, fields}], types, state, env)
+  defp create_call_of_types(
+         module,
+         :%,
+         [mod, {:%{}, _struct_meta, [{:|, _, [struct, fields]}]}],
+         [] = _types,
+         state,
+         env
+       )
        when is_atom(mod) do
     loc = MLIR.Location.from_env(env)
 
-    [] = types
+    mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
+      {dependence, state} = get_dependence_module(module, mod, state)
+      {struct, state, env} = expand(struct, state, env)
+      insert_struct_fields(struct, fields, dependence, state, env, loc)
+    end
+  end
+
+  defp create_call_of_types(
+         module,
+         :%,
+         [mod, {:%{}, _struct_meta, fields}],
+         [] = _types,
+         state,
+         env
+       )
+       when is_atom(mod) do
+    loc = MLIR.Location.from_env(env)
 
     mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
-      {dependence, state} =
-        if module == mod do
-          {state.mlir.mod, state}
-        else
-          fetch_dependence_module(mod, state)
-        end
-
-      struct_type = Charms.Struct.retrieve_struct_type(dependence)
-      struct = LLVM.mlir_undef(loc: loc) >>> struct_type
-
-      for {k, v} <- fields, reduce: {struct, state, env} do
-        {struct, state, env} ->
-          position = Charms.Struct.position_of_field!(env, dependence, k)
-          struct = LLVM.insertvalue(struct, v, position: position, loc: loc) >>> struct_type
-          {struct, state, env}
-      end
+      {dependence, state} = get_dependence_module(module, mod, state)
+      struct = LLVM.mlir_undef(loc: loc) >>> Charms.Struct.retrieve_struct_type(dependence)
+      insert_struct_fields(struct, fields, dependence, state, env, loc)
     end
   end
 
@@ -1373,6 +1383,30 @@ defmodule Charms.Defm.Expander do
   defp export_intrinsics?(module, fun, arity) do
     match?({:module, _}, Code.ensure_compiled(module)) and Code.ensure_loaded?(module) and
       function_exported?(module, :__intrinsics__, 2) and module.__intrinsics__(fun, arity)
+  end
+
+  defp get_dependence_module(module, mod, state) do
+    if module == mod do
+      {state.mlir.mod, state}
+    else
+      fetch_dependence_module(mod, state)
+    end
+  end
+
+  defp insert_struct_fields(struct, fields, dependence, state, env, loc) do
+    struct_type = Charms.Struct.retrieve_struct_type(dependence)
+
+    struct =
+      mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
+        for {k, v} <- fields, reduce: struct do
+          struct ->
+            position = Charms.Struct.position_of_field!(env, dependence, k)
+            struct = LLVM.insertvalue(struct, v, position: position, loc: loc) >>> struct_type
+            struct
+        end
+      end
+
+    {struct, state, env}
   end
 
   defp expand_remote(_meta, module, fun, args, state, env) do

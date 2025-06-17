@@ -60,7 +60,7 @@ defmodule Charms.Pointer do
 
   @doc false
   def memref_ptr?(%MLIR.Type{} = t) do
-    MLIR.CAPI.mlirTypeIsAMemRef(t) |> Beaver.Native.to_term()
+    MLIR.Type.memref?(t)
   end
 
   def memref_ptr?(%MLIR.Value{} = ptr) do
@@ -73,7 +73,7 @@ defmodule Charms.Pointer do
   defintr load(type, ptr) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
-    if MLIR.equal?(MLIR.Value.type(ptr), ~t{!llvm.ptr}) do
+    if MLIR.Type.llvm_pointer?(MLIR.Value.type(ptr)) do
       mlir ctx: ctx, blk: blk do
         LLVM.load(ptr, loc: loc) >>> type
       end
@@ -86,9 +86,7 @@ defmodule Charms.Pointer do
   end
 
   defintr load(%MLIR.Value{} = ptr) do
-    t = MLIR.Value.type(ptr)
-
-    if memref_ptr?(t) do
+    if memref_ptr?(ptr) do
       {quote do
          Charms.Pointer.load(Charms.Pointer.element_type(ptr), ptr)
        end, ptr: ptr}
@@ -231,20 +229,11 @@ defmodule Charms.Pointer do
 
       Charms.Pointer.memref_ptr?(t) ->
         mlir ctx: ctx, blk: blk do
-          elem_t = MLIR.CAPI.mlirShapedTypeGetElementType(t)
+          unless MLIR.Type.shaped?(t) do
+            raise ArgumentError, "Expected a pointer type, got #{MLIR.to_string(t)}"
+          end
 
-          width =
-            cond do
-              MLIR.Type.integer?(elem_t) ->
-                MLIR.CAPI.mlirIntegerTypeGetWidth(elem_t) |> Beaver.Native.to_term()
-
-              MLIR.Type.float?(elem_t) ->
-                MLIR.CAPI.mlirFloatTypeGetWidth(elem_t) |> Beaver.Native.to_term()
-
-              true ->
-                raise ArgumentError, "Expected a shaped type, got #{to_string(t)}"
-            end
-
+          width = MLIR.Type.element_type(t) |> MLIR.Type.width()
           width = Index.constant(value: Attribute.index(width), loc: loc) >>> Type.index()
           ptr_i = MemRef.extract_aligned_pointer_as_index(ptr, loc: loc) >>> Type.index()
           [_, offset, _, _] = MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
@@ -259,13 +248,20 @@ defmodule Charms.Pointer do
     end
   end
 
+  defintr raw(%MLIR.Value{} = ptr) do
+    extract_raw_pointer(ptr, __IR__)
+  end
+
   defintr copy(source, destination, bytes_count) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
     source = extract_raw_pointer(source, __IR__)
     destination = extract_raw_pointer(destination, __IR__)
 
     mlir ctx: ctx, blk: blk do
-      LLVM.intr_memcpy(destination, source, bytes_count, isVolatile: ~a{false}, loc: loc) >>> []
+      LLVM.intr_memcpy(destination, source, bytes_count,
+        isVolatile: MLIR.Attribute.bool(false),
+        loc: loc
+      ) >>> []
     end
   end
 end
