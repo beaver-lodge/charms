@@ -12,7 +12,7 @@ defmodule DefmstructTest do
         a = const 1 :: i32()
         b = const 2 :: i64()
         struct = %__MODULE__{a: a, b: b, c: c}
-        func.return(struct.c)
+        struct.c
       end
     end
 
@@ -49,7 +49,7 @@ defmodule DefmstructTest do
         b = const 2 :: i64()
         struct = %__MODULE__{a: a, b: b, c: c}
         struct = id(struct)
-        func.return(struct.c)
+        struct.c
       end
     end
 
@@ -72,7 +72,7 @@ defmodule DefmstructTest do
         b = const 2 :: i64()
         struct = %__MODULE__{a: a, b: b, c: c}
         struct = id(struct)
-        func.return(struct.c)
+        struct.c
       end
     end
 
@@ -89,7 +89,7 @@ defmodule DefmstructTest do
         b = const 2 :: i64()
         struct = %DefiningTHelper{a: a, b: b, c: c}
         struct = id(struct)
-        func.return(struct.c)
+        struct.c
       end
     end
 
@@ -111,7 +111,7 @@ defmodule DefmstructTest do
       defm new(env) :: Term.t() do
         inner = %InnerStruct{value: const(1 :: i32())}
         outer = %__MODULE__{inner: inner}
-        func.return(enif_make_int(env, outer.inner.value))
+        enif_make_int(env, outer.inner.value)
       end
     end
 
@@ -127,8 +127,7 @@ defmodule DefmstructTest do
         defmstruct a: i32(), b: i64()
 
         defm update(env, s :: __MODULE__.t()) :: __MODULE__.t() do
-          updated = %__MODULE__{b: const(1 :: i32())}
-          func.return(updated)
+          %__MODULE__{b: const(1 :: i32())}
         end
       end
     end
@@ -168,7 +167,7 @@ defmodule DefmstructTest do
         a = const 1 :: i32()
         b = const 2 :: i64()
         s = %__MODULE__{a: a, b: b, c: c}
-        func.return(enif_make_atom(env, s.c))
+        enif_make_atom(env, s.c)
       end
     end
 
