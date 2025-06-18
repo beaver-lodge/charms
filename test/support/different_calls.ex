@@ -28,6 +28,6 @@ defmodule DifferentCalls do
   end
 
   defm defined_later(i) :: Term.t() do
-    func.return(i)
+    i
   end
 end

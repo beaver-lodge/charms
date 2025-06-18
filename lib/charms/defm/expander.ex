@@ -434,8 +434,23 @@ defmodule Charms.Defm.Expander do
 
           state = put_in(state.mlir.blk, Beaver.Env.block())
 
-          {_, state, env} =
+          {body, state, env} =
             expand(body, state, env)
+
+          case body do
+            [%MLIR.Value{} = v] ->
+              cond do
+                MLIR.Value.argument?(v) ->
+                  loc = MLIR.Location.from_env(env)
+                  Func.return(v, loc: loc) >>> []
+
+                (op = MLIR.Value.owner!(v)) && MLIR.Operation.name(op) != "func.return" ->
+                  Func.return(v, loc: MLIR.Operation.location(op)) >>> []
+              end
+
+            _ ->
+              nil
+          end
         end
 
       {b, state, env}

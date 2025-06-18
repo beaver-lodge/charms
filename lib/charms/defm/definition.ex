@@ -206,10 +206,7 @@ defmodule Charms.Defm.Definition do
           end
 
         1 ->
-          mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), blk: b do
-            results = Beaver.Walker.results(last_op) |> Enum.to_list()
-            Func.return(results, loc: MLIR.Operation.location(last_op)) >>> []
-          end
+          raise ArgumentError, "Expected func.return returns a single value"
 
         _ ->
           raise ArgumentError, "Multiple return values are not supported yet."

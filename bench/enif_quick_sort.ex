@@ -26,7 +26,7 @@ defmodule ENIFQuickSort do
 
     i = i_ptr[0]
     swap(arr + i + 1, arr + high)
-    func.return(i + 1)
+    i + 1
   end
 
   defm do_sort(arr :: Pointer.t(Term.t()), low :: i32(), high :: i32()) do

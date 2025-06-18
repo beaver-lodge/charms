@@ -20,8 +20,7 @@ defmodule IfTest do
             zero
           end
 
-        ret = enif_make_int(env, ret)
-        func.return(ret)
+        enif_make_int(env, ret)
       end
     end
 

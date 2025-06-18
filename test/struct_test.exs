@@ -41,7 +41,7 @@ defmodule DefmstructTest do
       defmstruct a: i32(), b: i64(), c: Term.t()
 
       defm id(s :: __MODULE__.t()) :: __MODULE__.t() do
-        func.return(s)
+        s
       end
 
       defm new(env, c :: Term.t()) :: Term.t() do
@@ -64,7 +64,7 @@ defmodule DefmstructTest do
       defmstruct a: i32(), b: i64(), c: Term.t()
 
       defm id(s :: __MODULE__.t()) :: __MODULE__.t() do
-        func.return(s)
+        s
       end
 
       defm new(env, c :: Term.t()) :: Term.t() do

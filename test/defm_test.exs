@@ -196,4 +196,25 @@ defmodule DefmTest do
 
     assert 1.1 = ArrayIndexing.foo()
   end
+
+  test "last expression in defm" do
+    defmodule LastExpression do
+      use Charms
+      alias Charms.Term
+
+      defm foo(env) :: Term.t() do
+        a = enif_make_int(env, 1)
+        enif_make_int(env, 2)
+        a
+      end
+
+      defm bar(env, arg0 :: Term.t()) :: Term.t() do
+        enif_make_int(env, 2)
+        arg0
+      end
+    end
+
+    assert 1 = LastExpression.foo()
+    assert 1 = LastExpression.bar(1)
+  end
 end
