@@ -449,6 +449,7 @@ defmodule Charms.Defm.Expander do
               end
 
             _ ->
+              # an pass will insert `func.return` of no operand based on function signature
               nil
           end
         end
