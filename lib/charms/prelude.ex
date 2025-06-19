@@ -53,7 +53,7 @@ defmodule Charms.Prelude do
   end
 
   @doc """
-  Syntactic sugar for `Charms.Pointer.allocate/1` to print the MLIR entity at compile time.
+  Syntactic sugar for `Charms.Pointer.allocate/1`.
   """
   defintr ptr!(t) do
     {
@@ -65,7 +65,7 @@ defmodule Charms.Prelude do
   end
 
   @doc """
-  Syntactic sugar for `Charms.Pointer.allocate/2` to print the MLIR entity at compile time.
+  Syntactic sugar for `Charms.Pointer.allocate/2`.
   """
   defintr ptr!(t, n) do
     {

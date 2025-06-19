@@ -4,12 +4,12 @@ defmodule IfTest do
   test "if with value" do
     defmodule GetIntIf do
       use Charms
-      alias Charms.{Pointer, Term}
+      alias Charms.Term
 
       defm get(env, i) :: Term.t() do
         zero = const 0 :: i32()
         one = const 1 :: i32()
-        i_ptr = Pointer.allocate(i32())
+        i_ptr = ptr! i32()
         enif_get_int(env, i, i_ptr)
         i = i_ptr[0]
 

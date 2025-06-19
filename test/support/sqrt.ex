@@ -2,12 +2,12 @@ defmodule SqrtWrapper do
   @moduledoc false
   require Logger
   use Charms
-  alias Charms.{Term, Pointer}
+  alias Charms.Term
 
   defbind sqrt_c(x :: f64()) :: f64()
 
   defm sqrt(env, x :: Term.t()) :: Term.t() do
-    f_ptr = Pointer.allocate(f64())
+    f_ptr = ptr! f64()
     enif_get_double(env, x, f_ptr)
     f = f_ptr[0]
     r = sqrt_c(f)
