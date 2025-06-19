@@ -51,7 +51,7 @@ defmodule Charms.Intrinsic do
   defp mark_generated(ast) do
     Macro.postwalk(ast, fn
       {tag, meta, args} ->
-        {tag, Keyword.put(meta, :generated, true), args}
+        {tag, Keyword.put_new(meta, :generated, true), args}
 
       other ->
         other
