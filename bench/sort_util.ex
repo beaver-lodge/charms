@@ -4,9 +4,9 @@ defmodule SortUtil do
   alias Charms.{Pointer, Term}
 
   defm copy_terms(env, movable_list_ptr :: Pointer.t(Term.t()), arr :: Pointer.t(Term.t())) do
-    head = Pointer.allocate(Term.t())
+    head = ptr! Term.t()
     zero = const 0 :: i32()
-    i_ptr = Pointer.allocate(i32())
+    i_ptr = ptr! i32()
     set! i_ptr[0], zero
 
     while(
@@ -28,8 +28,8 @@ defmodule SortUtil do
     n1 = m - l + 1
     n2 = r - m
 
-    left_temp = Pointer.allocate(Term.t(), n1)
-    right_temp = Pointer.allocate(Term.t(), n2)
+    left_temp = ptr! Term.t(), n1
+    right_temp = ptr! Term.t(), n2
 
     for_loop {element, i} <- {arr + l, n1} do
       set! left_temp[i], element
@@ -39,9 +39,9 @@ defmodule SortUtil do
       set! right_temp[j], element
     end
 
-    i_ptr = Pointer.allocate(i32())
-    j_ptr = Pointer.allocate(i32())
-    k_ptr = Pointer.allocate(i32())
+    i_ptr = ptr! i32()
+    j_ptr = ptr! i32()
+    k_ptr = ptr! i32()
 
     zero = const 0 :: i32()
     set! i_ptr[0], zero

@@ -140,7 +140,7 @@ defmodule DefmTest do
 
       defm foo(env, a) :: Term.t() do
         b = const 1 :: i32()
-        i_ptr = Pointer.allocate(type_of(b))
+        i_ptr = ptr! type_of(b)
         enif_get_int(env, a, i_ptr)
         sum = Pointer.load(type_of(b), i_ptr) + b
         enif_make_int(env, sum)
@@ -182,12 +182,11 @@ defmodule DefmTest do
     defmodule ArrayIndexing do
       use Charms
       alias Charms.Term
-      alias Charms.Pointer
 
       defm foo(env) :: Term.t() do
-        dst_arr = Pointer.allocate(f64(), 2)
+        dst_arr = ptr! f64(), 2
         val = const 1.1 :: f64()
-        src_arr = Pointer.allocate(f64())
+        src_arr = ptr! f64()
         set! src_arr[0], val
         set! dst_arr[1], src_arr[0]
         enif_make_double(env, dst_arr[1])

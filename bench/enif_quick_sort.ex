@@ -12,7 +12,7 @@ defmodule ENIFQuickSort do
 
   defm partition(arr :: Pointer.t(Term.t()), low :: i32(), high :: i32()) :: i32() do
     pivot = arr[high]
-    i_ptr = Pointer.allocate(i32())
+    i_ptr = ptr! i32()
     set! i_ptr[0], low - 1
     start = arr + low
 
@@ -39,13 +39,13 @@ defmodule ENIFQuickSort do
 
   @err %ArgumentError{message: "list expected"}
   defm sort(env, list) :: Term.t() do
-    len_ptr = Pointer.allocate(i32())
+    len_ptr = ptr! i32()
 
     if enif_get_list_length(env, list, len_ptr) != 0 do
-      movable_list_ptr = Pointer.allocate(Term.t())
+      movable_list_ptr = ptr! Term.t()
       set! movable_list_ptr[0], list
       len = len_ptr[0]
-      arr = Pointer.allocate(Term.t(), len)
+      arr = ptr! Term.t(), len
       SortUtil.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
       do_sort(arr, zero, len - 1)

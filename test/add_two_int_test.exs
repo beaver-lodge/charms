@@ -4,11 +4,11 @@ defmodule AddTwoIntTest do
   test "add two integers" do
     defmodule AddTwoInt do
       use Charms, init: false
-      alias Charms.{Pointer, Term}
+      alias Charms.Term
 
       defm add_or_error_with_cond_br(env, a, b, error) :: Term.t() do
-        ptr_a = Pointer.allocate(i32())
-        ptr_b = Pointer.allocate(i32())
+        ptr_a = ptr! i32()
+        ptr_b = ptr! i32()
 
         arg_err =
           block do
@@ -33,8 +33,8 @@ defmodule AddTwoIntTest do
       end
 
       defm add(env, a, b) :: Term.t() do
-        ptr_a = Pointer.allocate(i32())
-        ptr_b = Pointer.allocate(i32())
+        ptr_a = ptr! i32()
+        ptr_b = ptr! i32()
 
         if !enif_get_int(env, a, ptr_a) || !enif_get_int(env, b, ptr_b) do
           enif_make_badarg(env)
