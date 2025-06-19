@@ -48,7 +48,7 @@ defmodule Charms.Intrinsic do
      end, name}
   end
 
-  def make_generated(ast) do
+  defp mark_generated(ast) do
     Macro.postwalk(ast, fn
       {tag, meta, args} ->
         {tag, Keyword.put(meta, :generated, true), args}
@@ -65,7 +65,7 @@ defmodule Charms.Intrinsic do
     # can't get the arity from length(args), because it might be an unquote_splicing, whose length is 1
     placeholder =
       quote generated: true do
-        def unquote(make_generated(call)) do
+        def unquote(mark_generated(call)) do
           {name, arity} = __ENV__.function
 
           raise "Intrinsic #{Exception.format_mfa(__MODULE__, name, arity)} cannot be called outside of a defm body"
