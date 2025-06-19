@@ -54,13 +54,13 @@ defmodule Charms.Struct do
 
   def retrieve_struct_type(%m{} = module) when m in [Beaver.MLIR.Module, Beaver.MLIR.Operation] do
     Beaver.Walker.attributes(module)[@defmstruct_type]
-    |> case do
+    |> then(fn
+      %MLIR.Attribute{} = struct_type_attr ->
+        MLIR.Attribute.unwrap(struct_type_attr)
+
       nil ->
         nil
-
-      struct_type_attr ->
-        MLIR.Attribute.unwrap(struct_type_attr)
-    end
+    end)
   end
 
   def retrieve_struct_type(_), do: nil
