@@ -528,14 +528,11 @@ defmodule Charms.Defm.Expander do
       state = update_in(state.mlir.required_intrinsic_modules, &MapSet.put(&1, module))
 
       v =
-        apply(module, intrinsic_impl, [
-          args,
-          %Charms.Intrinsic.Opts{
-            ctx: state.mlir.ctx,
-            blk: state.mlir.blk,
-            loc: loc
-          }
-        ])
+        apply(module, intrinsic_impl, args).(%Charms.Intrinsic.Opts{
+          ctx: state.mlir.ctx,
+          blk: state.mlir.blk,
+          loc: loc
+        })
 
       case v do
         %m{} when m in [MLIR.Value, MLIR.Type, MLIR.Operation] ->

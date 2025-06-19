@@ -34,53 +34,45 @@ defmodule Charms.Intrinsic do
     end
   end
 
-  defp recompose_when_clauses(name, args) do
+  defp recompose_when_clauses({:when, meta, [call, guards]}) do
+    {call, name} = recompose_when_clauses(call)
+    {{:when, meta, [call, guards]}, name}
+  end
+
+  defp recompose_when_clauses({name, _meta, args}) do
     intrinsic_name_ast =
       {:unquote, [], [quote(do: :"__defintrinsic_#{unquote(unwrap_unquote(name))}__")]}
 
-    opts =
-      quote do
-        %Charms.Intrinsic.Opts{} = var!(charms_intrinsic_internal_opts)
-      end
-
-    quote do
-      unquote(intrinsic_name_ast)(unquote(args), unquote(opts))
-    end
+    {quote do
+       unquote(intrinsic_name_ast)(unquote_splicing(args))
+     end, name}
   end
 
-  defp normalize_arg_names(args) do
-    for arg <- args do
-      case arg do
-        {arg_name, meta, nil} ->
-          arg_name
-          |> to_string()
-          |> String.trim_leading("_")
-          |> String.to_atom()
-          |> then(&{&1, meta, nil})
+  def make_generated(ast) do
+    Macro.postwalk(ast, fn
+      {tag, meta, args} ->
+        {tag, Keyword.put(meta, :generated, true), args}
 
-        _ ->
-          arg
-      end
-    end
+      other ->
+        other
+    end)
   end
 
   @doc """
   To implement an intrinsic function
   """
   defmacro defintr(call, do: body) do
-    {name, _meta, args} = call
-    call = recompose_when_clauses(name, args)
-    placeholder_args = normalize_arg_names(args)
-
     # can't get the arity from length(args), because it might be an unquote_splicing, whose length is 1
     placeholder =
       quote generated: true do
-        def unquote(name)(unquote_splicing(placeholder_args)) do
-          arity = length([unquote_splicing(placeholder_args)])
+        def unquote(make_generated(call)) do
+          {name, arity} = __ENV__.function
 
-          raise "Intrinsic #{Exception.format_mfa(__MODULE__, unquote(name), arity)} cannot be called outside of a defm body"
+          raise "Intrinsic #{Exception.format_mfa(__MODULE__, name, arity)} cannot be called outside of a defm body"
         end
       end
+
+    {call, name} = recompose_when_clauses(call)
 
     body =
       Macro.postwalk(body, fn
@@ -97,8 +89,10 @@ defmodule Charms.Intrinsic do
       unquote(placeholder)
       @doc false
       def unquote(call) do
-        %Charms.Intrinsic.Opts{ctx: ctx} = var!(charms_intrinsic_internal_opts)
-        unquote(body)
+        fn var!(charms_intrinsic_internal_opts) ->
+          %Charms.Intrinsic.Opts{ctx: ctx} = var!(charms_intrinsic_internal_opts)
+          unquote(body)
+        end
       end
 
       @intrinsic {unquote(unwrap_unquote(name)),
