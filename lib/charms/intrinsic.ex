@@ -84,7 +84,7 @@ defmodule Charms.Intrinsic do
 
     body =
       Macro.postwalk(body, fn
-        {:__IR__, _, args} when args == [] or args == nil ->
+        {:__IR__, _, args} when args == [] or is_atom(args) ->
           quote do
             var!(charms_intrinsic_internal_opts)
           end

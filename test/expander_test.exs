@@ -2,6 +2,7 @@ defmodule POCTest do
   @moduledoc """
   This test suite was created to ensure that original Elixir semantics and conventions will be preserved and respected in Charms.
   """
+  alias Charms.Term
   alias Charms.Defm.Expander, as: POC
   alias Beaver.MLIR
   use ExUnit.Case, async: true
@@ -193,6 +194,34 @@ defmodule POCTest do
                      end
                      |> compile
                    end
+    end
+  end
+
+  describe "struct" do
+    test "define a struct and access a field" do
+      quote do
+        defmodule SomeNativeStruct do
+          import Charms
+          import Charms.Defm
+          alias Charms.Env
+          alias Charms.Term
+
+          defmstruct a: Term.t(), b: Term.t(), c: Term.t()
+
+          defm new(env :: Env.t(), a :: Term.t(), b :: Term.t(), c :: Term.t()) :: Term.t() do
+            struct = %__MODULE__{a: a, b: b, c: c}
+            func.return(struct.b)
+          end
+        end
+      end
+      |> compile()
+      |> MLIR.verify!()
+      |> tap(fn m ->
+        {:ok, %Charms.JIT{}} = Charms.JIT.init(m, name: SomeNativeStruct)
+        engine = Charms.JIT.engine(SomeNativeStruct)
+        assert Charms.JIT.invoke(engine, {SomeNativeStruct, :new, [:a, :b, :c]}) == :b
+        assert :ok = Charms.JIT.destroy(SomeNativeStruct)
+      end)
     end
   end
 end

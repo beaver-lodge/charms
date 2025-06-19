@@ -206,10 +206,7 @@ defmodule Charms.Defm.Definition do
           end
 
         1 ->
-          mlir ctx: MLIR.CAPI.mlirOperationGetContext(last_op), blk: b do
-            results = Beaver.Walker.results(last_op) |> Enum.to_list()
-            Func.return(results, loc: MLIR.Operation.location(last_op)) >>> []
-          end
+          raise ArgumentError, "Expected func.return returns a single value"
 
         _ ->
           raise ArgumentError, "Multiple return values are not supported yet."
@@ -246,7 +243,7 @@ defmodule Charms.Defm.Definition do
     |> then(fn {_, acc} -> MapSet.to_list(acc) end)
   end
 
-  def do_compile(ctx, definitions) do
+  def do_compile(ctx, definitions, defmstruct_definition) do
     # this function might be called at compile time, so we need to ensure the application is started
     :ok = Application.ensure_started(:kinda)
     :ok = Application.ensure_started(:beaver)
@@ -262,6 +259,16 @@ defmodule Charms.Defm.Definition do
         enif_env: nil,
         mod: m
       }
+
+      if defmstruct_definition do
+        %Charms.Defmstruct.Definition{
+          fields: fields,
+          env: env
+        } = defmstruct_definition
+
+        quote(do: defmstruct(unquote(fields)))
+        |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
+      end
 
       # at this moment, we wrap it in the simplest way, before we decide what expander state to use.
       return_types =
@@ -331,11 +338,11 @@ defmodule Charms.Defm.Definition do
   - Extracting the return type of the `defm` definition, and wrapping it as an anonymous function to be called on-demand at the invocation site.
   - Determine the MLIR ops available in the definition.
   """
-  def compile(definitions) when is_list(definitions) do
+  def compile(definitions, defmstruct_definition) when is_list(definitions) do
     ctx = MLIR.Context.create()
 
     try do
-      do_compile(ctx, definitions)
+      do_compile(ctx, definitions, defmstruct_definition)
     after
       MLIR.Context.destroy(ctx)
     end

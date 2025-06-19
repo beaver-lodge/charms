@@ -8,7 +8,7 @@ defmodule ModAttrTest do
 
       @a :some_attr
       defm get(env) :: Term.t() do
-        func.return(@a)
+        @a
       end
     end
 
