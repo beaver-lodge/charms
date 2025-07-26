@@ -216,4 +216,26 @@ defmodule DefmTest do
     assert 1 = LastExpression.foo()
     assert 1 = LastExpression.bar(1)
   end
+
+  describe "ptr tests" do
+    test "alloc with value" do
+      defmodule AllocWithValueAsSize do
+        use Charms
+        alias Charms.Term
+
+        defm foo(env) :: Term.t() do
+          size2 = const 2 :: i64()
+          size1 = const 1 :: index()
+          dst_arr = ptr! f64(), size2
+          val = const 1.1 :: f64()
+          src_arr = ptr! f64(), size1
+          set! src_arr[0], val
+          set! dst_arr[1], src_arr[0]
+          enif_make_double(env, dst_arr[1])
+        end
+      end
+
+      assert 1.1 = AllocWithValueAsSize.foo()
+    end
+  end
 end
