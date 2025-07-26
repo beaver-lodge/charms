@@ -237,5 +237,24 @@ defmodule DefmTest do
 
       assert 1.1 = AllocWithValueAsSize.foo()
     end
+
+    test "load llvm ptr" do
+      defmodule LoadLLVMPtr do
+        use Charms
+        alias Charms.Term
+        alias Charms.Pointer
+
+        defm foo(env) :: Term.t() do
+          arr = ptr! f64()
+          val = const 1.1 :: f64()
+          set! arr[0], val
+          llvm_arr = Pointer.raw(arr)
+          a = Pointer.load(f64(), llvm_arr)
+          enif_make_double(env, a)
+        end
+      end
+
+      assert 1.1 = LoadLLVMPtr.foo()
+    end
   end
 end
