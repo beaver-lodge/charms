@@ -216,4 +216,45 @@ defmodule DefmTest do
     assert 1 = LastExpression.foo()
     assert 1 = LastExpression.bar(1)
   end
+
+  describe "ptr tests" do
+    test "alloc with value" do
+      defmodule AllocWithValueAsSize do
+        use Charms
+        alias Charms.Term
+
+        defm foo(env) :: Term.t() do
+          size2 = const 2 :: i64()
+          size1 = const 1 :: index()
+          dst_arr = ptr! f64(), size2
+          val = const 1.1 :: f64()
+          src_arr = ptr! f64(), size1
+          set! src_arr[0], val
+          set! dst_arr[1], src_arr[0]
+          enif_make_double(env, dst_arr[1])
+        end
+      end
+
+      assert 1.1 = AllocWithValueAsSize.foo()
+    end
+
+    test "load llvm ptr" do
+      defmodule LoadLLVMPtr do
+        use Charms
+        alias Charms.Term
+        alias Charms.Pointer
+
+        defm foo(env) :: Term.t() do
+          arr = ptr! f64()
+          val = const 1.1 :: f64()
+          set! arr[0], val
+          llvm_arr = Pointer.raw(arr)
+          a = Pointer.load(f64(), llvm_arr)
+          enif_make_double(env, a)
+        end
+      end
+
+      assert 1.1 = LoadLLVMPtr.foo()
+    end
+  end
 end
