@@ -48,13 +48,45 @@ defmodule Charms.Kernel do
     end
   end
 
+  defp f_predicate(:!=), do: :une
+  defp f_predicate(:==), do: :oeq
+  defp f_predicate(:>), do: :ogt
+  defp f_predicate(:>=), do: :oge
+  defp f_predicate(:<), do: :olt
+  defp f_predicate(:<=), do: :ole
+
+  defp f_create_binary(op, operands, type, ctx, blk, loc) do
+    mlir ctx: ctx, blk: blk do
+      case op do
+        op when op in @compare_ops ->
+          Arith.cmpf(operands, predicate: Arith.cmp_f_predicate(f_predicate(op)), loc: loc) >>>
+            Type.i1()
+
+        :- ->
+          Arith.subf(operands, loc: loc) >>> type
+
+        :+ ->
+          Arith.addf(operands, loc: loc) >>> type
+
+        :* ->
+          Arith.mulf(operands, loc: loc) >>> type
+
+        :/ ->
+          Arith.divf(operands, loc: loc) >>> type
+
+        _ ->
+          raise ArgumentError, "Unsupported operator: #{inspect(op)}"
+      end
+    end
+  end
+
   defp create_binary(op, left, right, ctx, blk, loc) do
     {operands, type} =
       case {left, right} do
-        {%MLIR.Value{} = v, i} when is_integer(i) ->
+        {%MLIR.Value{} = v, i} when is_integer(i) or is_float(i) ->
           [v, Charms.Constant.from_literal(i, v, ctx, blk, loc)]
 
-        {i, %MLIR.Value{} = v} when is_integer(i) ->
+        {i, %MLIR.Value{} = v} when is_integer(i) or is_float(i) ->
           [Charms.Constant.from_literal(i, v, ctx, blk, loc), v]
 
         {%MLIR.Value{}, %MLIR.Value{}} ->
@@ -70,11 +102,16 @@ defmodule Charms.Kernel do
       end
       |> then(fn [left, _] = operands -> {operands, MLIR.CAPI.mlirValueGetType(left)} end)
 
-    if MLIR.Type.integer?(type) do
-      i_create_binary(op, operands, type, ctx, blk, loc)
-    else
-      raise ArgumentError,
-            "Unsupported type for binary operator: #{to_string(type)}. Only integer types are supported for now."
+    cond do
+      MLIR.Type.integer?(type) ->
+        i_create_binary(op, operands, type, ctx, blk, loc)
+
+      MLIR.Type.float?(type) ->
+        f_create_binary(op, operands, type, ctx, blk, loc)
+
+      true ->
+        raise ArgumentError,
+              "Unsupported type for binary operator: #{to_string(type)}. Only integer and float types are supported for now."
     end
   end
 
