@@ -64,7 +64,7 @@ defmodule Charms do
     defm_definitions = Module.get_attribute(env.module, :defm) || []
     defmstruct_definition = Module.get_attribute(env.module, :defmstruct)
 
-    {ir, referenced_modules, required_intrinsic_modules} =
+    {ir, referenced_modules, required_intrinsic_modules, exports} =
       defm_definitions |> Enum.reverse() |> Charms.Defm.Definition.compile(defmstruct_definition)
 
     # create uses in Elixir, to disallow loop reference
@@ -82,11 +82,24 @@ defmodule Charms do
         end
       end
 
+    ir_exports =
+      quote bind_quoted: [] do
+        for {name, arity, func_name} <- @all_exports do
+          def __ir_exports__(unquote(name), unquote(arity)) do
+            unquote(func_name)
+          end
+        end
+      end
+
     quote do
       @ir unquote(ir)
       @referenced_modules unquote(referenced_modules)
       unquote_splicing(r)
       unquote_splicing(i)
+      @all_exports unquote(Macro.escape(exports))
+      unquote(ir_exports)
+
+      def __ir_exports__(_, _), do: nil
 
       @ir_hash [
                  :erlang.phash2(@ir)

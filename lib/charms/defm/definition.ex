@@ -48,7 +48,6 @@ defmodule Charms.Defm.Definition do
     call = normalize_call(call)
     {name, args} = Macro.decompose_call(call)
     {:ok, env} = Macro.Env.define_import(env, [], Charms.Defm, warn: false, only: :macros)
-    exported = match?([{:"::", _, [{:env, _, _}, _]} | _], args)
 
     %__MODULE__{
       name: name,
@@ -56,28 +55,42 @@ defmodule Charms.Defm.Definition do
       args: args,
       call: call,
       ret_types: ret_types,
-      body: body,
-      exported: exported
+      body: body
     }
   end
 
-  defp invoke_args(%__MODULE__{args: args}) do
-    [_ | invoke_args] =
-      for {:"::", _, [a, _t]} <- args do
-        a
-      end
-
-    invoke_args
+  defp do_invoke_args(invoke_args) do
+    for {:"::", _, [a, _t]} <- invoke_args do
+      a
+    end
   end
 
-  defp invoker(%__MODULE__{exported: false}), do: nil
+  defp invoke_args(%__MODULE__{args: [{:"::", _, [{:env, _, _}, _]} | invoke_args]}) do
+    do_invoke_args(invoke_args)
+  end
 
-  defp invoker(%__MODULE__{exported: true, env: env, name: name} = d) do
+  defp invoke_args(%__MODULE__{args: args}) do
+    do_invoke_args(args)
+  end
+
+  defp invoker(%__MODULE__{env: env, name: name} = d) do
     invoke_args = invoke_args(d)
 
     quote do
       def unquote(name)(unquote_splicing(invoke_args)) do
         mfa = {unquote(env.module), unquote(name), unquote(invoke_args)}
+        {name, arity} = __ENV__.function
+
+        unless __ir_exports__(name, arity) do
+          raise ArgumentError,
+                """
+                Cannot invoke #{Exception.format_mfa(__MODULE__, name, arity)} from Elixir because it is not exported. Function gets exported only if
+                - the first parameter is explicitly named as env (think of it as a special argument like "self" in some languages)
+                - all arguments are Term.t()
+                - returns Term.t()
+                Also note that when invoking there is no need to pass env as the first argument, it will be automatically passed by the JIT engine. So a defm f(env, x :: Term.t()) :: Term.t() should be invoked as f(x) in Elixir.
+                """
+        end
 
         if @init_at_fun_call do
           {_, %Charms.JIT{engine: engine} = jit} =
@@ -301,6 +314,50 @@ defmodule Charms.Defm.Definition do
         end
     end
 
+    exports =
+      m
+      |> MLIR.Operation.from_module()
+      |> MLIR.Operation.with_symbol_table(fn s_table ->
+        for %__MODULE__{name: name, env: env} <- definitions, reduce: [] do
+          acc ->
+            func_name = Charms.Defm.mangling(env.module, name)
+
+            func =
+              MLIR.CAPI.mlirSymbolTableLookup(
+                s_table,
+                MLIR.StringRef.create(func_name)
+              )
+
+            if !MLIR.null?(func) and !MLIR.Dialect.Func.external?(func) do
+              args_types =
+                Beaver.Walker.regions(func)
+                |> Enum.at(0)
+                |> Beaver.Walker.blocks()
+                |> Enum.at(0)
+                |> Beaver.Walker.arguments()
+                |> Enum.map(&MLIR.Value.type/1)
+
+              with [env_type | args_types] <- args_types,
+                   true <- Enum.all?(args_types, &MLIR.equal?(&1, Beaver.ENIF.Type.term())),
+                   true <- MLIR.equal?(env_type, Beaver.ENIF.Type.env()),
+                   function_type = func[:function_type] |> MLIR.Attribute.unwrap(),
+                   1 <-
+                     function_type
+                     |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
+                     |> Beaver.Native.to_term(),
+                   result_type <- MLIR.CAPI.mlirFunctionTypeGetResult(function_type, 0),
+                   true <- MLIR.equal?(result_type, Beaver.ENIF.Type.term()) do
+                [{name, length(args_types), func_name} | acc]
+              else
+                _ ->
+                  acc
+              end
+            else
+              acc
+            end
+        end
+      end)
+
     m
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested(
@@ -325,7 +382,8 @@ defmodule Charms.Defm.Definition do
       end
     end)
     |> then(
-      &{MLIR.to_string(&1, bytecode: true), referenced_modules(&1), required_intrinsic_modules}
+      &{MLIR.to_string(&1, bytecode: true), referenced_modules(&1), required_intrinsic_modules,
+       exports}
     )
   end
 
