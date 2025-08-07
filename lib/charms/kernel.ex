@@ -81,7 +81,12 @@ defmodule Charms.Kernel do
   end
 
   defp create_binary(op, left, right, ctx, blk, loc) do
-    {operands, type} =
+    {type, operands} = validate_operands(left, right, ctx, blk, loc)
+    dispatch_binary_op(type, op, operands, ctx, blk, loc)
+  end
+
+  defp validate_operands(left, right, ctx, blk, loc) do
+    operands =
       case {left, right} do
         {%MLIR.Value{} = v, i} when is_integer(i) or is_float(i) ->
           [v, Charms.Constant.from_literal(i, v, ctx, blk, loc)]
@@ -90,18 +95,21 @@ defmodule Charms.Kernel do
           [Charms.Constant.from_literal(i, v, ctx, blk, loc), v]
 
         {%MLIR.Value{}, %MLIR.Value{}} ->
-          if not MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) do
+          if MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) do
+            [left, right]
+          else
             raise "args of binary op must be same type"
           end
-
-          [left, right]
 
         _ ->
           raise ArgumentError,
                 "Invalid arguments for binary operator: #{inspect(left)}, #{inspect(right)}"
       end
-      |> then(fn [left, _] = operands -> {operands, MLIR.CAPI.mlirValueGetType(left)} end)
 
+    {MLIR.Value.type(hd(operands)), operands}
+  end
+
+  defp dispatch_binary_op(type, op, operands, ctx, blk, loc) do
     cond do
       MLIR.Type.integer?(type) ->
         i_create_binary(op, operands, type, ctx, blk, loc)
