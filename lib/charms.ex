@@ -7,7 +7,7 @@ defmodule Charms do
 
   The intrinsic is more flexible than `defm` because:
   - Intrinsic is suitable for the cases where directly writing or generating MLIR is more ideal
-  - An intrinsic should be responsible for its type check while the Charm’s type system is responsible for function call’s type check
+  - An intrinsic should be responsible for its type check while the Charm's type system is responsible for function call's type check
   - It is possible for an intrinsic to return a MLIR type, while `defm` can only return value.
   - Intrinsic function is always inline.
 
@@ -64,30 +64,54 @@ defmodule Charms do
     defm_definitions = Module.get_attribute(env.module, :defm) || []
     defmstruct_definition = Module.get_attribute(env.module, :defmstruct)
 
-    {ir, referenced_modules, required_intrinsic_modules} =
+    {ir, referenced_modules, required_intrinsic_modules, exports} =
       defm_definitions |> Enum.reverse() |> Charms.Defm.Definition.compile(defmstruct_definition)
 
-    # create uses in Elixir, to disallow loop reference
-    r =
-      for r <- referenced_modules, r != env.module do
-        quote do
-          unquote(r).__use_ir__
-        end
-      end
-
-    i =
-      for r <- required_intrinsic_modules, r != env.module do
-        quote do
-          unquote(r).__use_intrinsic__
-        end
-      end
+    use_ir = generate_use_ir_quotes(referenced_modules, env.module)
+    intrinsic = generate_use_intrinsic_quotes(required_intrinsic_modules, env.module)
+    ir_exports = generate_ir_exports_quotes()
 
     quote do
       @ir unquote(ir)
       @referenced_modules unquote(referenced_modules)
-      unquote_splicing(r)
-      unquote_splicing(i)
+      unquote_splicing(use_ir)
+      unquote_splicing(intrinsic)
+      @all_exports unquote(Macro.escape(exports))
+      unquote(ir_exports)
+      def __ir_exports__(_, _), do: nil
+      unquote(generate_ir_hash_quotes())
+      unquote(generate_helper_functions())
+    end
+  end
 
+  defp generate_use_ir_quotes(referenced_modules, current_module) do
+    for r <- referenced_modules, r != current_module do
+      quote do
+        unquote(r).__use_ir__
+      end
+    end
+  end
+
+  defp generate_use_intrinsic_quotes(required_intrinsic_modules, current_module) do
+    for r <- required_intrinsic_modules, r != current_module do
+      quote do
+        unquote(r).__use_intrinsic__
+      end
+    end
+  end
+
+  defp generate_ir_exports_quotes() do
+    quote bind_quoted: [] do
+      for {name, arity, func_name} <- @all_exports do
+        def __ir_exports__(unquote(name), unquote(arity)) do
+          unquote(func_name)
+        end
+      end
+    end
+  end
+
+  defp generate_ir_hash_quotes() do
+    quote do
       @ir_hash [
                  :erlang.phash2(@ir)
                  | for r <- @referenced_modules, r != __MODULE__ do
@@ -95,7 +119,11 @@ defmodule Charms do
                    end
                ]
                |> List.flatten()
+    end
+  end
 
+  defp generate_helper_functions() do
+    quote do
       @doc false
       def __ir__ do
         @ir

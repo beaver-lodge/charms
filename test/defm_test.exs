@@ -37,10 +37,67 @@ defmodule DefmTest do
 
   test "only env defm is exported" do
     refute function_exported?(RefereeMod, :term_roundtrip1, 0)
-    refute function_exported?(RefereeMod, :term_roundtrip1, 1)
+
+    assert_raise ArgumentError,
+                 ~r"Cannot invoke RefereeMod.term_roundtrip1/1 from Elixir because it is not exported.",
+                 fn ->
+                   RefereeMod.term_roundtrip1(1)
+                 end
+
     refute function_exported?(RefereeMod, :term_roundtrip1, 2)
+
     assert 1 = RefereeMod.term_roundtrip0(1)
     assert 1 = ReferrerMod.term_roundtrip(1)
+  end
+
+  describe "exports" do
+    test "incorrect arg type" do
+      defmodule ExportFailures do
+        use Charms
+        alias Charms.Term
+
+        # Integer operations
+        defm wrong_arg_types(env, a :: i32(), b :: i32()) :: Term.t() do
+          c = a + b
+          enif_make_int(env, c)
+        end
+
+        defm wrong_return_types(env, a :: Term.t(), b :: Term.t()) :: i32() do
+          const 0 :: i32()
+        end
+
+        defm no_env(a :: Term.t(), b :: Term.t()) :: Term.t() do
+          a
+        end
+
+        defm no_return(env, a :: Term.t(), b :: Term.t()) do
+        end
+      end
+
+      assert_raise ArgumentError,
+                   ~r"Cannot invoke DefmTest.ExportFailures.wrong_arg_types/2 from Elixir because it is not exported.",
+                   fn ->
+                     ExportFailures.wrong_arg_types(1, 2)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r"Cannot invoke DefmTest.ExportFailures.wrong_return_types/2 from Elixir because it is not exported.",
+                   fn ->
+                     ExportFailures.wrong_return_types(1, 2)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r"Cannot invoke DefmTest.ExportFailures.no_env/2 from Elixir because it is not exported.",
+                   fn ->
+                     ExportFailures.no_env(1, 2)
+                   end
+
+      assert_raise ArgumentError,
+                   ~r"Cannot invoke DefmTest.ExportFailures.no_return/2 from Elixir because it is not exported.",
+                   fn ->
+                     ExportFailures.no_return(1, 2)
+                   end
+    end
   end
 
   describe "different sorts" do

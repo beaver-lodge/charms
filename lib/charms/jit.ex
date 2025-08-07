@@ -36,7 +36,7 @@ defmodule Charms.JIT do
       object_dump: true,
       shared_lib_paths: dynamic_libraries
     )
-    |> tap(&beaver_raw_jit_register_enif(&1.ref))
+    |> tap(&Beaver.ENIF.register_symbols/1)
   end
 
   defp clone_ops(to, from) do
