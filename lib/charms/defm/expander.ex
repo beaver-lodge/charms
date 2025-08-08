@@ -19,8 +19,9 @@ defmodule Charms.Defm.Expander do
   """
   use Beaver
   alias MLIR.Attribute
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM, GPU}
   require Func
+  require GPU
   import Charms.Diagnostic, only: :macros
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -1032,7 +1033,7 @@ defmodule Charms.Defm.Expander do
     ast |> Macro.to_string() |> String.replace([":", " "], "")
   end
 
-  defp expand_defm(call, body, state, env) do
+  defp expand_defm(convention, call, body, state, env) do
     {:"::", _, [call, ret_types]} = call
 
     {name, args} = Macro.decompose_call(call)
@@ -1064,9 +1065,24 @@ defmodule Charms.Defm.Expander do
 
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
-        Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
-          region do
-          end
+        case convention do
+          :defm ->
+            Func.func _(
+                        sym_name: "\"#{name}\"",
+                        function_type: ft,
+                        loc: MLIR.Location.from_env(env)
+                      ) do
+              region do
+              end
+            end
+
+          :defk ->
+            GPU.func sym_name: "\"#{name}\"",
+                     function_type: ft,
+                     loc: MLIR.Location.from_env(env) do
+              region do
+              end
+            end >>> []
         end
       end
 
@@ -1144,7 +1160,25 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms, :defm, [call, [do: body]], _callback, state, env) do
-    expand_defm(call, body, state, env)
+    expand_defm(:defm, call, body, state, env)
+  end
+
+  defp expand_macro(_meta, Charms, :defk, [call, [do: body]], _callback, state, env) do
+    gpu_module =
+      mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
+        GPU.module sym_name: Attribute.string("#{env.module}.GPU.Kernels") do
+          region do
+            block do
+            end
+          end
+        end >>> []
+      end
+
+    gpu_block =
+      gpu_module |> Beaver.Walker.regions() |> Enum.at(0) |> Beaver.Walker.blocks() |> Enum.at(0)
+
+    state = put_in(state.mlir.blk, gpu_block)
+    expand_defm(:defk, call, body, state, env)
   end
 
   defp expand_macro(_meta, Beaver, :block, args, _callback, state, env) do

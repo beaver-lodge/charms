@@ -10,7 +10,8 @@ defmodule Charms.JIT do
 
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
-
+    Charms.Transform.put_gpu_transforms(m)
+    MLIR.Context.register_translations(MLIR.context(m))
     m
     |> MLIR.verify!()
     |> MLIR.Transform.canonicalize()
@@ -21,7 +22,9 @@ defmodule Charms.JIT do
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested("func.func", "llvm-request-c-wrappers")
     |> Beaver.Composer.nested("func.func", loop_invariant_code_motion())
-    |> convert_scf_to_cf
+    |> Beaver.Composer.append("transform-interpreter")
+    |> Beaver.Composer.append("gpu-lower-to-nvvm-pipeline{cubin-format=fatbin}")
+    |> convert_scf_to_cf()
     |> convert_cf_to_llvm()
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()

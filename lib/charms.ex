@@ -31,9 +31,9 @@ defmodule Charms do
 
   ## Glossary of modules
 
-  - `Charms`: the top level macros `defm` and `use Charms`
+  - `Charms`: the top level macros `defm`, `defk` and `use Charms`
   - `Charms.Defm`: the `defm` DSL syntax and special forms
-  - `Charms.Defm.Definition`: functions to define and compile `defm` functions to MLIR
+  - `Charms.Definition`: functions to define and compile `defm` functions to MLIR
   - `Charms.Intrinsic`: the behavior used to define and compile intrinsic functions
   """
 
@@ -43,10 +43,12 @@ defmodule Charms do
       use Beaver
       import Beaver.MLIR.Type
       import Charms.Prelude
+      import Charms.GPU
       @doc false
       def __use_ir__, do: nil
       @before_compile Charms
       Module.register_attribute(__MODULE__, :defm, accumulate: true)
+      Module.register_attribute(__MODULE__, :defk, accumulate: true)
       Module.register_attribute(__MODULE__, :defmstruct, accumulate: false)
       Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
       @init_at_fun_call Keyword.get(unquote(opts), :init, true)
@@ -62,10 +64,13 @@ defmodule Charms do
 
   defmacro __before_compile__(env) do
     defm_definitions = Module.get_attribute(env.module, :defm) || []
+    defk_definitions = Module.get_attribute(env.module, :defk) || []
     defmstruct_definition = Module.get_attribute(env.module, :defmstruct)
 
     {ir, referenced_modules, required_intrinsic_modules, exports} =
-      defm_definitions |> Enum.reverse() |> Charms.Defm.Definition.compile(defmstruct_definition)
+      (defm_definitions ++ defk_definitions)
+      |> Enum.reverse()
+      |> Charms.Definition.compile(defmstruct_definition)
 
     use_ir = generate_use_ir_quotes(referenced_modules, env.module)
     intrinsic = generate_use_intrinsic_quotes(required_intrinsic_modules, env.module)
@@ -147,7 +152,11 @@ defmodule Charms do
   define a function that can be JIT compiled
   """
   defmacro defm(call, body) do
-    Charms.Defm.Definition.declare(__CALLER__, call, body)
+    Charms.Definition.declare(__CALLER__, call, body)
+  end
+
+  defmacro defk(call, body) do
+    Charms.Definition.declare(__CALLER__, call, body, convention: :defk)
   end
 
   @doc """
@@ -159,7 +168,7 @@ defmodule Charms do
 
   """
   defmacro defbind(call) do
-    Charms.Defm.Definition.declare(__CALLER__, call,
+    Charms.Definition.declare(__CALLER__, call,
       do:
         quote do
         end
