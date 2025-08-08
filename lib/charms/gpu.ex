@@ -24,9 +24,10 @@ defmodule Charms.GPU do
 
       case size do
         i when is_integer(i) ->
+
           GPU.alloc(
             loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
+            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0, 0])
           ) >>> Type.memref!([i], elem_type)
 
         %MLIR.Value{} ->
@@ -39,7 +40,7 @@ defmodule Charms.GPU do
 
           GPU.alloc(size,
             loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([1, 0])
+            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 1, 0])
           ) >>> Type.memref!([:dynamic], elem_type)
       end
       |> Pointer.offset_ptr(elem_type, zero, ctx, blk, loc)
