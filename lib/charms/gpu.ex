@@ -27,7 +27,8 @@ defmodule Charms.GPU do
 
           GPU.alloc(
             loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0, 0])
+            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0, 0]),
+            hostShared: MLIR.Attribute.unit() #TODO: make it async so it can be compiled as device allocation
           ) >>> Type.memref!([i], elem_type)
 
         %MLIR.Value{} ->
