@@ -13,6 +13,11 @@ defmodule Charms.JIT do
     System.trap_signal(:sigchld, fn -> :ok end)
     Charms.Transform.put_gpu_transforms(m)
     MLIR.Context.register_translations(MLIR.context(m))
+    libs = ~w{libmlir_cuda_runtime.so libmlir_runner_utils.so libmlir_c_runner_utils.so}
+
+    dynamic_libraries =
+      dynamic_libraries ++ Enum.map(libs, &Path.join([:code.priv_dir(:beaver), "lib", &1]))
+
     m
     |> MLIR.verify!()
     |> MLIR.Transform.canonicalize()
@@ -30,6 +35,7 @@ defmodule Charms.JIT do
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
     |> convert_func_to_llvm()
+    |> Beaver.Composer.append("gpu-to-llvm")
     |> Beaver.Composer.append("finalize-memref-to-llvm")
     |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> reconcile_unrealized_casts
