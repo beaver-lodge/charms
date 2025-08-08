@@ -10,6 +10,7 @@ defmodule Charms.JIT do
 
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
+    System.trap_signal(:sigchld, fn -> :ok end)
     Charms.Transform.put_gpu_transforms(m)
     MLIR.Context.register_translations(MLIR.context(m))
     m
