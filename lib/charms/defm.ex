@@ -51,6 +51,11 @@ defmodule Charms.Defm do
   """
   defmacro set!(_index_expression, _value), do: :implemented_in_expander
 
+  @doc """
+  launch a GPU kernel
+  """
+  defmacro launch!(_kernel_call, _blocks, _threads), do: :implemented_in_expander
+
   @doc false
   def mangling(mod, func) do
     Module.concat(mod, func) |> to_string() |> String.replace(".", "$")

@@ -10,7 +10,8 @@ locals_without_parens = [
   set!: 2,
   ptr!: 1,
   ptr!: 2,
-  defmstruct: 1
+  defmstruct: 1,
+  launch!: 3
 ]
 
 [

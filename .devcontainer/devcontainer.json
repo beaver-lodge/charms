@@ -1,0 +1,11 @@
+{
+	"name": "charms-dev",
+	"image": "ghcr.io/livebook-dev/livebook:latest-cuda12",
+	"runArgs": [
+		"--gpus",
+		"all",
+		"--network",
+		"host",
+		"--shm-size=2g"
+	]
+}

@@ -21,9 +21,9 @@ defmodule Charms.JIT do
     m
     |> MLIR.verify!()
     |> MLIR.Transform.canonicalize()
-    |> Beaver.Composer.append("ownership-based-buffer-deallocation")
-    |> Beaver.Composer.append("buffer-deallocation-simplification")
-    |> Beaver.Composer.append("bufferization-lower-deallocations")
+    # |> Beaver.Composer.append("ownership-based-buffer-deallocation")
+    # |> Beaver.Composer.append("buffer-deallocation-simplification")
+    # |> Beaver.Composer.append("bufferization-lower-deallocations")
     |> MLIR.Transform.canonicalize()
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested("func.func", "llvm-request-c-wrappers")

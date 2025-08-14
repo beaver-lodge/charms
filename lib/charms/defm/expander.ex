@@ -1079,6 +1079,7 @@ defmodule Charms.Defm.Expander do
           :defk ->
             GPU.func sym_name: "\"#{name}\"",
                      function_type: ft,
+                     "gpu.kernel": MLIR.Attribute.unit(),
                      loc: MLIR.Location.from_env(env) do
               region do
               end
@@ -1164,9 +1165,12 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms, :defk, [call, [do: body]], _callback, state, env) do
+    mod = MLIR.Operation.from_module(state.mlir.mod)
+    put_in(mod["gpu.container_module"], MLIR.Attribute.unit(ctx: state.mlir.ctx))
+
     gpu_module =
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
-        GPU.module sym_name: Attribute.string("#{env.module}.GPU.Kernels") do
+        GPU.module sym_name: Attribute.string("GPU.Kernels") do
           region do
             block do
             end
@@ -1328,6 +1332,17 @@ defmodule Charms.Defm.Expander do
       end
 
     {v, state, env}
+  end
+
+  defp expand_macro(_meta, Charms.Defm, :launch!, [call, blocks, threads], _callback, state, env) do
+    {call, state, env} = expand(call, state, env)
+    {blocks, state, env} = expand(blocks, state, env)
+    {threads, state, env} = expand(threads, state, env)
+
+    quote do
+      Charms.GPU.launch(call, blocks, threads)
+    end
+    |> expand_with_bindings(state, env, call: call, blocks: blocks, threads: threads)
   end
 
   defp expand_macro(_meta, Charms.Defm, :set!, [index_expression, value], _callback, state, env) do
