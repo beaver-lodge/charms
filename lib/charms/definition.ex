@@ -199,8 +199,8 @@ defmodule Charms.Definition do
 
   defp declared_required_enif(op) do
     mlir ctx: MLIR.context(op), blk: MLIR.Module.body(MLIR.Module.from_operation(op)) do
-      #declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_alloc")
-      #declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_free")
+      declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_alloc")
+      declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_free")
     end
   end
 

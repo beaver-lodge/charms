@@ -47,6 +47,7 @@ defmodule Charms.JIT do
       shared_lib_paths: dynamic_libraries
     )
     |> tap(&Beaver.ENIF.register_symbols/1)
+    |> MLIR.ExecutionEngine.init()
   end
 
   defp clone_ops(to, from) do

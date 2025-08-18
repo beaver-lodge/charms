@@ -1166,7 +1166,7 @@ defmodule Charms.Defm.Expander do
 
   defp expand_macro(_meta, Charms, :defk, [call, [do: body]], _callback, state, env) do
     mod = MLIR.Operation.from_module(state.mlir.mod)
-    put_in(mod["gpu.container_module"], MLIR.Attribute.unit(ctx: state.mlir.ctx))
+    _ = put_in(mod["gpu.container_module"], MLIR.Attribute.unit(ctx: state.mlir.ctx))
 
     gpu_module =
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
