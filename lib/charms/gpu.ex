@@ -126,4 +126,12 @@ defmodule Charms.GPU do
       |> Pointer.offset_ptr(elem_type, zero, ctx, blk, loc)
     end
   end
+
+  defintr print(format, args) when is_atom(format) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+    format |> dbg
+    mlir ctx: ctx, blk: blk do
+      GPU.printf(args, format: Attribute.string(format), loc: loc) >>> []
+    end
+  end
 end
