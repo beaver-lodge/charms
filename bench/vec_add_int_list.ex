@@ -9,14 +9,22 @@ defmodule AddTwoIntVec do
     set! i_ptr[0], zero
     vec = SIMD.new(SIMD.t(i32(), 8), [0, 0, 0, 0, 0, 0, 0, 0])
 
-    vec = SIMD.insert(vec, 0, zero + 0)
-    vec = SIMD.insert(vec, 1, zero + 1)
-    vec = SIMD.insert(vec, 2, zero + 2)
-    vec = SIMD.insert(vec, 3, zero + 3)
-    vec = SIMD.insert(vec, 4, zero + 4)
-    vec = SIMD.insert(vec, 5, zero + 5)
-    vec = SIMD.insert(vec, 6, zero + 6)
-    vec = SIMD.insert(vec, 7, zero + 7)
+    vec = SIMD.insert(vec, 0, zero + 10000)
+    vec = SIMD.insert(vec, 1, zero + 10000)
+    vec = SIMD.insert(vec, 2, zero + 10000)
+    vec = SIMD.insert(vec, 3, zero + 10000)
+    vec = SIMD.insert(vec, 4, zero + 10000)
+    vec = SIMD.insert(vec, 5, zero + 10000)
+    vec = SIMD.insert(vec, 6, zero + 10000)
+    vec = SIMD.insert(vec, 7, zero + 10000)
+
+    Enum.reduce(l, vec, fn x, acc ->
+      v_ptr = ptr! i32()
+      enif_get_int(env, x, v_ptr)
+      i = i_ptr[0]
+      set! i_ptr[0], i + 1
+      SIMD.insert(acc, i, v_ptr[0])
+    end)
   end
 
   defm add(env, a, b, error) :: Term.t() do

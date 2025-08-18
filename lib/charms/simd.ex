@@ -3,7 +3,7 @@ defmodule Charms.SIMD do
   Intrinsic module for SIMD types.
   """
   use Charms.Intrinsic
-  alias MLIR.Dialect.{Arith, Vector}
+  alias MLIR.Dialect.{Arith, Vector, Index}
   alias MLIR.Type
   alias Charms.Intrinsic.Opts
 
@@ -49,6 +49,21 @@ defmodule Charms.SIMD do
     mlir ctx: ctx, blk: blk do
       static_position = MLIR.Attribute.dense_array([position], Beaver.Native.I64)
       Vector.insert(value, dest, loc: loc, static_position: static_position) >>> :infer
+    end
+  end
+
+  defintr insert(dest, %MLIR.Value{} = position, value) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      static_position =
+        MLIR.Attribute.dense_array(
+          [MLIR.CAPI.mlirShapedTypeGetDynamicStrideOrOffset()],
+          Beaver.Native.I64
+        )
+
+      position = Index.casts(position) >>> Type.index()
+      Vector.insert(value, dest, position, loc: loc, static_position: static_position) >>> :infer
     end
   end
 
