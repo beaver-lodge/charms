@@ -13,10 +13,16 @@ defmodule Charms.JIT do
     System.trap_signal(:sigchld, fn -> :ok end)
     Charms.Transform.put_gpu_transforms(m)
     MLIR.Context.register_translations(MLIR.context(m))
-    libs = ~w{libmlir_cuda_runtime.so libmlir_runner_utils.so libmlir_c_runner_utils.so}
+
+    cuda_libs =
+      Enum.map(
+        ~w{libmlir_cuda_runtime.so libmlir_runner_utils.so libmlir_c_runner_utils.so},
+        &Path.join([:code.priv_dir(:beaver), "lib", &1])
+      )
+      |> Enum.filter(&File.exists?/1)
 
     dynamic_libraries =
-      dynamic_libraries ++ Enum.map(libs, &Path.join([:code.priv_dir(:beaver), "lib", &1]))
+      dynamic_libraries ++ cuda_libs
 
     m
     |> MLIR.verify!()

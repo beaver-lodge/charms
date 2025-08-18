@@ -25,6 +25,16 @@ defmodule DefkTest do
   use ExUnit.Case, async: true
 
   test "compiling a simple vector add kernel" do
-    assert :ok = VecAddKernel.main(:ok)
+    case :os.type() do
+      {:unix, :linux} ->
+        assert :ok = VecAddKernel.main(:ok)
+
+      _ ->
+        assert_raise ArgumentError,
+                     ~r"Failed to lookup target for triple 'nvptx64-nvidia-cuda'",
+                     fn ->
+                       VecAddKernel.main(:ok)
+                     end
+    end
   end
 end
