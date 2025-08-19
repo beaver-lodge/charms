@@ -39,9 +39,18 @@ defmodule Charms.GPU do
         else
           grid_size
         end
-      grid_x = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_x), loc: loc) >>> MLIR.Type.index(ctx: ctx)
-      grid_y = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_y), loc: loc) >>> MLIR.Type.index(ctx: ctx)
-      grid_z = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_z), loc: loc) >>> MLIR.Type.index(ctx: ctx)
+
+      grid_x =
+        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_x), loc: loc) >>>
+          MLIR.Type.index(ctx: ctx)
+
+      grid_y =
+        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_y), loc: loc) >>>
+          MLIR.Type.index(ctx: ctx)
+
+      grid_z =
+        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_z), loc: loc) >>>
+          MLIR.Type.index(ctx: ctx)
 
       # Handle block dimensions
       {block_x, block_y, block_z} =
@@ -50,9 +59,18 @@ defmodule Charms.GPU do
         else
           block_size
         end
-      block_x = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_x), loc: loc) >>> MLIR.Type.index(ctx: ctx)
-      block_y = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_y), loc: loc) >>> MLIR.Type.index(ctx: ctx)
-      block_z = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_z), loc: loc) >>> MLIR.Type.index(ctx: ctx)
+
+      block_x =
+        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_x), loc: loc) >>>
+          MLIR.Type.index(ctx: ctx)
+
+      block_y =
+        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_y), loc: loc) >>>
+          MLIR.Type.index(ctx: ctx)
+
+      block_z =
+        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_z), loc: loc) >>>
+          MLIR.Type.index(ctx: ctx)
 
       operands =
         [grid_x, grid_y, grid_z, block_x, block_y, block_z] ++
@@ -139,6 +157,7 @@ defmodule Charms.GPU do
 
   defintr print(format, args) when is_atom(format) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
     mlir ctx: ctx, blk: blk do
       GPU.printf(args, format: Attribute.string(format), loc: loc) >>> []
     end
