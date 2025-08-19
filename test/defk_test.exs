@@ -6,17 +6,24 @@ defmodule VecAddKernel do
   defk vec_add(a :: Pointer.t(f32()), b :: Pointer.t(f32()), c :: Pointer.t(f32())) do
     i = GPU.program_id()
     set! c[i], a[i] + b[i]
+    #GPU.print(:"Index: %d, A: %f, B: %f, C: %f\n", [i, a[i], b[i], c[i]])
     op gpu.return :: []
   end
 
+  @size 98432
+  @block_size 1024
+  @grid_size Float.ceil(@size / @block_size) |> Float.round
   defm main(env, ok :: Term.t()) :: Term.t() do
-    a_host = ptr! f32(), 100
-    b_host = ptr! f32(), 100
-    c_host = ptr! f32(), 100
-    a = GPU.allocate(f32(), 100)
-    b = GPU.allocate(f32(), 100)
-    c = GPU.allocate(f32(), 100)
-    launch! vec_add(a, b, c), 2, 1
+    size_ptr = ptr! i64()
+    enif_get_int64(env, @size, size_ptr)
+    size = size_ptr[0]
+    a_host = ptr! f32(), size
+    b_host = ptr! f32(), size
+    c_host = ptr! f32(), size
+    a = GPU.allocate(f32(), size)
+    b = GPU.allocate(f32(), size)
+    c = GPU.allocate(f32(), size)
+    launch! vec_add(a, b, c), 97, 1024
     ok
   end
 end

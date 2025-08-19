@@ -18,8 +18,8 @@ defmodule Charms.GPU do
 
   defintr launch(
             kernel,
-            _grid_size,
-            _block_size,
+            grid_size,
+            block_size,
             cluster_size \\ nil,
             async_deps \\ [],
             dynamic_shared_memory_size \\ nil
@@ -32,19 +32,27 @@ defmodule Charms.GPU do
     MLIR.CAPI.mlirOperationDestroy(kernel)
 
     mlir ctx: ctx, blk: blk do
-      # {grid_x, grid_y, grid_z} = grid_size
-      grid_x =
-        grid_y =
-        grid_z =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), 2), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
+      # Handle grid dimensions
+      {grid_x, grid_y, grid_z} =
+        if is_integer(grid_size) do
+          {grid_size, 1, 1}
+        else
+          grid_size
+        end
+      grid_x = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_x), loc: loc) >>> MLIR.Type.index(ctx: ctx)
+      grid_y = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_y), loc: loc) >>> MLIR.Type.index(ctx: ctx)
+      grid_z = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_z), loc: loc) >>> MLIR.Type.index(ctx: ctx)
 
-      # {block_x, block_y, block_z} = block_size
-      block_x =
-        block_y =
-        block_z =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), 1), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
+      # Handle block dimensions
+      {block_x, block_y, block_z} =
+        if is_integer(block_size) do
+          {block_size, 1, 1}
+        else
+          block_size
+        end
+      block_x = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_x), loc: loc) >>> MLIR.Type.index(ctx: ctx)
+      block_y = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_y), loc: loc) >>> MLIR.Type.index(ctx: ctx)
+      block_z = Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_z), loc: loc) >>> MLIR.Type.index(ctx: ctx)
 
       operands =
         [grid_x, grid_y, grid_z, block_x, block_y, block_z] ++
@@ -61,8 +69,8 @@ defmodule Charms.GPU do
           end ++
           kernel_args
 
-      gridSize = 1
-      blockSize = 1
+      gridSize = if is_tuple(grid_size), do: tuple_size(grid_size), else: 1
+      blockSize = if is_tuple(block_size), do: tuple_size(block_size), else: 1
       clusterSize = 0
       dynamicSharedMemorySize = if(dynamic_shared_memory_size, do: 1, else: 0)
       asyncObject = 0
@@ -120,7 +128,9 @@ defmodule Charms.GPU do
 
           GPU.alloc(size,
             loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 1, 0])
+            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 1, 0]),
+            # TODO: make it async so it can be compiled as device allocation
+            hostShared: MLIR.Attribute.unit()
           ) >>> Type.memref!([:dynamic], elem_type)
       end
       |> Pointer.offset_ptr(elem_type, zero, ctx, blk, loc)
@@ -129,7 +139,6 @@ defmodule Charms.GPU do
 
   defintr print(format, args) when is_atom(format) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
-    format |> dbg
     mlir ctx: ctx, blk: blk do
       GPU.printf(args, format: Attribute.string(format), loc: loc) >>> []
     end
