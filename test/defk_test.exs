@@ -12,7 +12,7 @@ defmodule VecAddKernel do
 
   @size 98432
   @block_size 1024
-  @grid_size Float.ceil(@size / @block_size) |> Float.round()
+  @grid_size Float.ceil(@size / @block_size) |> Float.round() |> trunc()
   defm main(env, ok :: Term.t()) :: Term.t() do
     size_ptr = ptr! i64()
     enif_get_int64(env, @size, size_ptr)
@@ -23,7 +23,11 @@ defmodule VecAddKernel do
     a = GPU.allocate(f32(), size)
     b = GPU.allocate(f32(), size)
     c = GPU.allocate(f32(), size)
-    launch! vec_add(a, b, c), 97, 1024
+    grid_size_ptr = ptr! i64()
+    enif_get_int64(env, @grid_size, grid_size_ptr)
+    print_i64(grid_size_ptr[0])
+    print_newline()
+    launch! vec_add(a, b, c), grid_size_ptr[0], 1024
     arr = ptr! Term.t(), size
 
     for_loop {element, i} <- {c, size} do

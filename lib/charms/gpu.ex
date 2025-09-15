@@ -16,6 +16,23 @@ defmodule Charms.GPU do
     end
   end
 
+  defp to_index(size, %Opts{ctx: ctx, blk: blk, loc: loc}) when is_integer(size) do
+    mlir ctx: ctx, blk: blk do
+      Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), size), loc: loc) >>>
+        MLIR.Type.index(ctx: ctx)
+    end
+  end
+
+  defp to_index(%MLIR.Value{} = size, %Opts{ctx: ctx, blk: blk, loc: loc}) do
+    mlir ctx: ctx, blk: blk do
+      if Type.index?(MLIR.Value.type(size)) do
+        size
+      else
+        Index.casts(size, loc: loc) >>> Type.index()
+      end
+    end
+  end
+
   defintr launch(
             kernel,
             grid_size,
@@ -34,23 +51,7 @@ defmodule Charms.GPU do
     mlir ctx: ctx, blk: blk do
       # Handle grid dimensions
       {grid_x, grid_y, grid_z} =
-        if is_integer(grid_size) do
-          {grid_size, 1, 1}
-        else
-          grid_size
-        end
-
-      grid_x =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_x), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
-
-      grid_y =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_y), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
-
-      grid_z =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), grid_z), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
+        {to_index(grid_size, __IR__), to_index(1, __IR__), to_index(1, __IR__)}
 
       # Handle block dimensions
       {block_x, block_y, block_z} =
@@ -71,7 +72,6 @@ defmodule Charms.GPU do
       block_z =
         Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_z), loc: loc) >>>
           MLIR.Type.index(ctx: ctx)
-
 
       GPU.launch_func(
         asyncDependencies: [],
