@@ -3,28 +3,6 @@ defmodule VecAddKernel do
   alias Charms.{Term, Pointer}
   alias Charms.GPU
 
-  defm copy_terms_as_floats(env, tail :: Pointer.t(Term.t()), arr :: Pointer.t(f32())) do
-    head = ptr! Term.t()
-    zero = const 0 :: i32()
-    i_ptr = ptr! i32()
-    set! i_ptr[0], zero
-
-    while(
-      enif_get_list_cell(
-        env,
-        tail[0],
-        head,
-        tail
-      ) > 0
-    ) do
-      double_ptr = ptr! f64()
-      enif_get_double(env, head[0], double_ptr)
-      i = i_ptr[0]
-      set! arr[i], value(arith.truncf(double_ptr[0]) :: f32())
-      set! i_ptr[0], i + 1
-    end
-  end
-
   defk vec_add(a :: Pointer.t(f32()), b :: Pointer.t(f32()), c :: Pointer.t(f32())) do
     i = GPU.block_id() * 1024 + GPU.thread_id()
     set! c[i], a[i] + b[i]
@@ -75,6 +53,28 @@ defmodule VecAddKernel do
     # convert to Elixir list
     size = value arith.trunci(size) :: i32()
     enif_make_list_from_array(env, arr, size)
+  end
+
+  defm copy_terms_as_floats(env, tail :: Pointer.t(Term.t()), arr :: Pointer.t(f32())) do
+    head = ptr! Term.t()
+    zero = const 0 :: i32()
+    i_ptr = ptr! i32()
+    set! i_ptr[0], zero
+
+    while(
+      enif_get_list_cell(
+        env,
+        tail[0],
+        head,
+        tail
+      ) > 0
+    ) do
+      double_ptr = ptr! f64()
+      enif_get_double(env, head[0], double_ptr)
+      i = i_ptr[0]
+      set! arr[i], value(arith.truncf(double_ptr[0]) :: f32())
+      set! i_ptr[0], i + 1
+    end
   end
 end
 
