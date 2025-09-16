@@ -132,4 +132,12 @@ defmodule Charms.GPU do
       GPU.printf(args, format: Attribute.string(format), loc: loc) >>> []
     end
   end
+
+  defintr return() do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      GPU.return(loc: loc) >>> []
+    end
+  end
 end
