@@ -1077,13 +1077,16 @@ defmodule Charms.Defm.Expander do
             end
 
           :defk ->
-            GPU.func sym_name: "\"#{name}\"",
-                     function_type: ft,
-                     "gpu.kernel": MLIR.Attribute.unit(),
-                     loc: MLIR.Location.from_env(env) do
+            Func.func_like _(
+                             sym_name: "\"#{name}\"",
+                             function_type: ft,
+                             "gpu.kernel": MLIR.Attribute.unit(),
+                             loc: MLIR.Location.from_env(env)
+                           ),
+                           "gpu.func" do
               region do
               end
-            end >>> []
+            end
         end
       end
 
@@ -1308,6 +1311,11 @@ defmodule Charms.Defm.Expander do
     {:<-, _, [{element, index}, {ptr, len}]} = expr
     {len, state, env} = expand(len, state, env)
     {ptr, state, env} = expand(ptr, state, env)
+
+    if not Charms.Pointer.memref_ptr?(ptr) do
+      raise_compile_error(env, "Expected a pointer")
+    end
+
     t = MLIR.Value.type(ptr) |> MLIR.CAPI.mlirShapedTypeGetElementType()
     loc = MLIR.Location.from_env(env)
 

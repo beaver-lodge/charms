@@ -8,11 +8,19 @@ defmodule Charms.GPU do
   alias Beaver.MLIR.Dialect.{Index, GPU, Arith}
   alias MLIR.Type
 
-  defintr program_id(dimension \\ :x) do
+  defintr block_id(dimension \\ :x) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
       GPU.block_id(dimension: ~a{#gpu<dim #{dimension}>}, loc: loc) >>> Type.index()
+    end
+  end
+
+  defintr thread_id(dimension \\ :x) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      GPU.thread_id(dimension: ~a{#gpu<dim #{dimension}>}, loc: loc) >>> Type.index()
     end
   end
 
@@ -55,23 +63,7 @@ defmodule Charms.GPU do
 
       # Handle block dimensions
       {block_x, block_y, block_z} =
-        if is_integer(block_size) do
-          {block_size, 1, 1}
-        else
-          block_size
-        end
-
-      block_x =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_x), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
-
-      block_y =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_y), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
-
-      block_z =
-        Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), block_z), loc: loc) >>>
-          MLIR.Type.index(ctx: ctx)
+        {to_index(block_size, __IR__), to_index(1, __IR__), to_index(1, __IR__)}
 
       GPU.launch_func(
         asyncDependencies: [],
@@ -120,6 +112,16 @@ defmodule Charms.GPU do
           ) >>> Type.memref!([:dynamic], elem_type)
       end
       |> Pointer.offset_ptr(elem_type, zero, ctx, blk, loc)
+    end
+  end
+
+  defintr dealloc(ptr) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      # Can only convert with exactly one async dependency.
+      token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
+      GPU.dealloc(token, ptr, loc: loc) >>> ~t{!gpu.async.token}
     end
   end
 
