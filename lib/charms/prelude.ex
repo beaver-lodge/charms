@@ -149,7 +149,7 @@ defmodule Charms.Prelude do
       call_enif(unquote(name), unquote(args), __IR__)
     end
 
-    if Atom.to_string(name) |> String.starts_with?("enif_get_") do
+    if String.starts_with?(Atom.to_string(name), "enif_get_") or name == :enif_send do
       defintr unquote(String.to_atom("#{name}!"))(unquote_splicing(args)) do
         {
           quote do

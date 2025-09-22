@@ -3,21 +3,22 @@ defmodule DeferTest do
 
   defmodule DeferSendMessage do
     use Charms
-    alias Charms.Term
+    alias Charms.{Term, Pointer}
 
     @ok :ok
     defm test_defer_with_message(env, pid_term, msg1, msg2, msg3) :: Term.t() do
       pid = Term.to_pid!(env, pid_term)
-      null_env = enif_alloc_env()
-      defer enif_send(env, pid, null_env, msg3)
-      defer enif_send(env, pid, null_env, msg2)
-      enif_send(env, pid, null_env, msg1)
+      null_env = Pointer.null()
+      defer enif_send!(env, pid, null_env, msg3)
+      defer enif_send!(env, pid, null_env, msg2)
+      enif_send!(env, pid, null_env, msg1)
       @ok
     end
 
     defm test_defer_with_explicit_terminator(env, pid_term, msg) :: Term.t() do
       pid = Term.to_pid!(env, pid_term)
-      defer enif_send(env, pid, enif_alloc_env(), msg)
+      null_env = Pointer.null()
+      defer enif_send!(env, pid, Pointer.null(), msg)
       func.return(@ok)
     end
 
@@ -25,9 +26,10 @@ defmodule DeferTest do
       pid = Term.to_pid!(env, pid_term)
 
       defer do
-        enif_send(env, pid, enif_alloc_env(), msg1)
-        enif_send(env, pid, enif_alloc_env(), msg2)
-        enif_send(env, pid, enif_alloc_env(), msg3)
+        null_env = Pointer.null()
+        enif_send!(env, pid, null_env, msg1)
+        enif_send!(env, pid, null_env, msg2)
+        enif_send!(env, pid, null_env, msg3)
       end
 
       func.return(@ok)

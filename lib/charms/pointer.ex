@@ -283,4 +283,15 @@ defmodule Charms.Pointer do
       end
     end
   end
+
+  @doc """
+  Get a null raw ptr
+  """
+  defintr null() do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      LLVM.mlir_zero(loc: loc) >>> ~t{!llvm.ptr}
+    end
+  end
 end
