@@ -75,6 +75,7 @@ defmodule ENIFTimSort do
       arr = ptr! Term.t(), len
       SortUtil.copy_terms(env, movable_list_ptr, arr)
       tim_sort(arr, len)
+      defer free! arr
       enif_make_list_from_array(env, arr, len)
     else
       enif_raise_exception(env, @err)

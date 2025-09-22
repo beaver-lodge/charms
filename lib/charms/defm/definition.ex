@@ -208,7 +208,8 @@ defmodule Charms.Defm.Definition do
          [b] <- Beaver.Walker.blocks(r) |> Enum.to_list(),
          last_op = %MLIR.Operation{} <-
            Beaver.Walker.operations(b) |> Enum.to_list() |> List.last(),
-         false <- MLIR.Operation.name(last_op) == "func.return" do
+         last_op_name <- MLIR.Operation.name(last_op),
+         false <- last_op_name == "func.return" do
       case func[:function_type]
            |> MLIR.Attribute.unwrap()
            |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
@@ -219,7 +220,8 @@ defmodule Charms.Defm.Definition do
           end
 
         1 ->
-          raise ArgumentError, "Expected func.return returns a single value"
+          raise ArgumentError,
+                "Expected func.return returns a single value, instead we got #{last_op_name}"
 
         _ ->
           raise ArgumentError, "Multiple return values are not supported yet."

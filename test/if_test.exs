@@ -10,7 +10,7 @@ defmodule IfTest do
         zero = const 0 :: i32()
         one = const 1 :: i32()
         i_ptr = ptr! i32()
-        enif_get_int(env, i, i_ptr)
+        if enif_get_int(env, i, i_ptr) == 0, do: unreachable!()
         i = i_ptr[0]
 
         ret =

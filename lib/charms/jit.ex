@@ -14,10 +14,6 @@ defmodule Charms.JIT do
     m
     |> MLIR.verify!()
     |> MLIR.Transform.canonicalize()
-    |> Beaver.Composer.append("ownership-based-buffer-deallocation")
-    |> Beaver.Composer.append("buffer-deallocation-simplification")
-    |> Beaver.Composer.append("bufferization-lower-deallocations")
-    |> MLIR.Transform.canonicalize()
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested("func.func", "llvm-request-c-wrappers")
     |> Beaver.Composer.nested("func.func", loop_invariant_code_motion())
@@ -28,6 +24,7 @@ defmodule Charms.JIT do
     |> convert_func_to_llvm()
     |> Beaver.Composer.append("finalize-memref-to-llvm")
     |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
+    |> Beaver.Composer.append(Charms.Defm.Pass.UseENIFAlloc)
     |> reconcile_unrealized_casts
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
@@ -37,6 +34,7 @@ defmodule Charms.JIT do
       shared_lib_paths: dynamic_libraries
     )
     |> tap(&Beaver.ENIF.register_symbols/1)
+    |> MLIR.ExecutionEngine.init()
   end
 
   defp clone_ops(to, from) do

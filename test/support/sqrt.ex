@@ -7,9 +7,7 @@ defmodule SqrtWrapper do
   defbind sqrt_c(x :: f64()) :: f64()
 
   defm sqrt(env, x :: Term.t()) :: Term.t() do
-    f_ptr = ptr! f64()
-    enif_get_double(env, x, f_ptr)
-    f = f_ptr[0]
+    f = Term.to_f64!(env, x)
     r = sqrt_c(f)
     enif_make_double(env, r)
   end
