@@ -198,7 +198,7 @@ defmodule DefmTest do
       defm foo(env, a) :: Term.t() do
         b = const 1 :: i32()
         i_ptr = ptr! type_of(b)
-        enif_get_int(env, a, i_ptr)
+        if enif_get_int(env, a, i_ptr) == 0, do: unreachable!()
         sum = Pointer.load(type_of(b), i_ptr) + b
         enif_make_int(env, sum)
       end
@@ -284,8 +284,14 @@ defmodule DefmTest do
           size2 = const 2 :: i64()
           size1 = const 1 :: index()
           dst_arr = ptr! f64(), size2
-          val = const 1.1 :: f64()
           src_arr = ptr! f64(), size1
+
+          defer do
+            free! dst_arr
+            free! src_arr
+          end
+
+          val = const 1.1 :: f64()
           set! src_arr[0], val
           set! dst_arr[1], src_arr[0]
           enif_make_double(env, dst_arr[1])

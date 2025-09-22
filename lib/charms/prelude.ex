@@ -4,7 +4,7 @@ defmodule Charms.Prelude do
   """
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
-  alias Beaver.MLIR.Dialect.Func
+  alias Beaver.MLIR.Dialect.{Func, CF, Arith}
   @enif_functions Beaver.ENIF.functions()
 
   defp literal_to_constant(v, t, %Opts{ctx: ctx, blk: blk, loc: loc})
@@ -76,6 +76,29 @@ defmodule Charms.Prelude do
     }
   end
 
+  @doc """
+  Syntactic sugar for `Charms.Pointer.free/1`.
+  """
+  defintr free!(ptr) do
+    {
+      quote do
+        Charms.Pointer.free(ptr)
+      end,
+      ptr: ptr
+    }
+  end
+
+  defintr unreachable!() do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      f = Arith.constant(false) >>> Type.i1()
+      loc = Beaver.Deferred.create(loc, ctx)
+      msg = MLIR.Attribute.string("Unreachable code reached. #{to_string(loc)}")
+      CF.assert(f, loc: loc, msg: msg) >>> []
+    end
+  end
+
   defp extract_raw_pointer(arg, arg_type, %Opts{ctx: ctx} = opts) do
     if MLIR.equal?(~t{!llvm.ptr}.(ctx), arg_type) and Charms.Pointer.memref_ptr?(arg) do
       Charms.Pointer.extract_raw_pointer(arg, opts)
@@ -124,6 +147,21 @@ defmodule Charms.Prelude do
 
     defintr unquote(name)(unquote_splicing(args)) do
       call_enif(unquote(name), unquote(args), __IR__)
+    end
+
+    if Atom.to_string(name) |> String.starts_with?("enif_get_") do
+      defintr unquote(String.to_atom("#{name}!"))(unquote_splicing(args)) do
+        {
+          quote do
+            if ret == 0 do
+              unreachable!()
+            else
+              ret
+            end
+          end,
+          ret: call_enif(unquote(name), unquote(args), __IR__)
+        }
+      end
     end
   end
 

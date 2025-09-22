@@ -264,4 +264,23 @@ defmodule Charms.Pointer do
       ) >>> []
     end
   end
+
+  @doc """
+  Frees memory previously allocated with allocate/1 or allocate/2.
+  """
+  defintr free(ptr) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    t = MLIR.Value.type(ptr)
+
+    if MLIR.Type.llvm_pointer?(t) do
+      mlir ctx: ctx, blk: blk do
+        raise ArgumentError, "Cannot free LLVM pointers"
+      end
+    else
+      mlir ctx: ctx, blk: blk do
+        MemRef.dealloc(ptr, loc: loc) >>> []
+      end
+    end
+  end
 end
