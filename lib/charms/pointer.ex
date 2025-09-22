@@ -27,19 +27,16 @@ defmodule Charms.Pointer do
 
     mlir ctx: ctx, blk: blk do
       zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
+      operand_segment_sizes_of_zeros = Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
 
       case size do
         1 ->
-          MemRef.alloca(
-            loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
-          ) >>> Type.memref!([1], elem_type)
+          MemRef.alloca(loc: loc, operand_segment_sizes: operand_segment_sizes_of_zeros) >>>
+            Type.memref!([1], elem_type)
 
         i when is_integer(i) ->
-          MemRef.alloc(
-            loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
-          ) >>> Type.memref!([i], elem_type)
+          MemRef.alloc(loc: loc, operand_segment_sizes: operand_segment_sizes_of_zeros) >>>
+            Type.memref!([i], elem_type)
 
         %MLIR.Value{} ->
           size =
@@ -49,10 +46,8 @@ defmodule Charms.Pointer do
               Index.casts(size, loc: loc) >>> Type.index()
             end
 
-          MemRef.alloc(size,
-            loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([1, 0])
-          ) >>> Type.memref!([:dynamic], elem_type)
+          MemRef.alloc(dynamicSizes: size, loc: loc, operand_segment_sizes: :infer) >>>
+            Type.memref!([:dynamic], elem_type)
       end
       |> offset_ptr(elem_type, zero, ctx, blk, loc)
     end
@@ -135,8 +130,11 @@ defmodule Charms.Pointer do
 
       offset = Arith.addi(offset_extracted, offset, loc: loc) >>> Type.index()
 
-      MemRef.reinterpret_cast(ptr, offset, size,
-        operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([1, 1, 1, 0]),
+      MemRef.reinterpret_cast(
+        source: ptr,
+        offsets: offset,
+        sizes: size,
+        operand_segment_sizes: :infer,
         static_offsets: static_offsets_or_sizes,
         static_sizes: static_offsets_or_sizes,
         static_strides: static_strides,
