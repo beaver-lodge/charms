@@ -624,6 +624,8 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_deferrals(state) do
+    # each defer statement's environment should not inferrer with each other
+    # this discourage using binding expression in one-line defer, but it is supported in defer-block
     for {expression, state, env} <- state.mlir.deferrals do
       expand(expression, state, env)
     end
