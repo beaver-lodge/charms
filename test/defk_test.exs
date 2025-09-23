@@ -22,6 +22,13 @@ defmodule VecAddKernel do
     b = GPU.allocate(f32(), size)
     c = GPU.allocate(f32(), size)
 
+    # free
+    defer do
+      GPU.dealloc(a)
+      GPU.dealloc(b)
+      GPU.dealloc(c)
+    end
+
     # copy input data to GPU
     movable_list_ptr = ptr! Term.t()
     set! movable_list_ptr[0], l_a
@@ -44,11 +51,6 @@ defmodule VecAddKernel do
       term = enif_make_double(env, element)
       set! arr[i], term
     end
-
-    # free GPU memory
-    GPU.dealloc(a)
-    GPU.dealloc(b)
-    GPU.dealloc(c)
 
     # convert to Elixir list
     size = value arith.trunci(size) :: i32()
