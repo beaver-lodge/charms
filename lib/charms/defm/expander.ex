@@ -36,6 +36,7 @@ defmodule Charms.Defm.Expander do
             enif_env: nil,
             dependence_modules: Map.new(),
             required_intrinsic_modules: MapSet.new(),
+            deferrals: [],
             return_types: Map.new()
 
   @env %{
@@ -496,6 +497,8 @@ defmodule Charms.Defm.Expander do
     validate_call_args!(args, env)
 
     try do
+      state = expand_deferrals_before_terminator(op, state)
+
       %Beaver.SSA{
         op: op,
         arguments: args,
@@ -617,6 +620,31 @@ defmodule Charms.Defm.Expander do
     end
   end
 
+  defp clear_deferrals(state) do
+    put_in(state.mlir.deferrals, [])
+  end
+
+  defp expand_deferrals(state) do
+    # each defer statement's environment should not inferrer with each other
+    # this discourage using binding expression in one-line defer, but it is supported in defer-block
+    for {expression, state, env} <- state.mlir.deferrals do
+      expand(expression, state, env)
+    end
+  end
+
+  defp expand_deferrals_before_terminator(op, state) do
+    is_terminator =
+      MLIR.CAPI.beaverIsOpNameTerminator(MLIR.StringRef.create(op), state.mlir.ctx)
+      |> Beaver.Native.to_term()
+
+    if is_terminator do
+      expand_deferrals(state)
+      clear_deferrals(state)
+    else
+      state
+    end
+  end
+
   # The goal of this function is to traverse all of Elixir special
   # forms. The list is actually relatively small and a good reference
   # is the Elixir type checker: https://github.com/elixir-lang/elixir/blob/494a018abbc88901747c32032ec9e2c408f40608/lib/elixir/lib/module/types/expr.ex
@@ -668,9 +696,13 @@ defmodule Charms.Defm.Expander do
   ## __block__
 
   defp expand({:__block__, _, list}, state, env) do
+    # clear deferrals from enclosing block, they should not escape
+    state = clear_deferrals(state)
+
     expand_list(list, state, env)
+    |> tap(fn {_, s, _} -> expand_deferrals(s) end)
     |> then(fn
-      {[], _, e} -> raise_compile_error(e, "empty block cannot be expanded")
+      {[], _, e} -> raise_compile_error(e, "block can't be empty")
       {l, s, e} when is_list(l) -> {List.last(l), s, e}
       {l, _, e} -> raise_compile_error(e, "Expected a list, got: #{inspect(l)}")
     end)
@@ -1366,6 +1398,11 @@ defmodule Charms.Defm.Expander do
     |> expand_with_bindings(state, env, arr: arr, i: i, value: value)
   end
 
+  defp expand_macro(_meta, Charms.Defm, :defer, expression, _callback, state, env) do
+    state = update_in(state.mlir.deferrals, &[{expression, state, env} | &1])
+    {[], state, env}
+  end
+
   defp expand_macro(_meta, Charms.Defm, :op, [call], _callback, state, env) do
     {call, return_types} = decompose_call_signature(call)
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
@@ -1382,6 +1419,8 @@ defmodule Charms.Defm.Expander do
         _ ->
           List.flatten(return_types)
       end
+
+    state = expand_deferrals_before_terminator(op, state)
 
     op =
       %Beaver.SSA{

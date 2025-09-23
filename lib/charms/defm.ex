@@ -56,6 +56,11 @@ defmodule Charms.Defm do
   """
   defmacro launch!(_kernel_call, _blocks, _threads), do: :implemented_in_expander
 
+  @doc """
+  Executes an expression unconditionally at do-block exit.
+  """
+  defmacro defer(_expression), do: :implemented_in_expander
+
   @doc false
   def mangling(mod, func) do
     Module.concat(mod, func) |> to_string() |> String.replace(".", "$")

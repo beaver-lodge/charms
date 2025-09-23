@@ -40,6 +40,7 @@ defmodule Charms.JIT do
     |> Beaver.Composer.append("gpu-to-llvm")
     |> Beaver.Composer.append("finalize-memref-to-llvm")
     |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
+    |> Beaver.Composer.append(Charms.Defm.Pass.UseENIFAlloc)
     |> reconcile_unrealized_casts
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?())
