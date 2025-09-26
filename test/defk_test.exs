@@ -3,6 +3,7 @@ defmodule VecAddKernel do
   alias Charms.{Term, Pointer}
   alias Charms.GPU
 
+  @block_size 1024
   defk vec_add(a :: Pointer.t(f32()), b :: Pointer.t(f32()), c :: Pointer.t(f32())) do
     i = GPU.block_id() * 1024 + GPU.thread_id()
     set! c[i], a[i] + b[i]
@@ -10,12 +11,9 @@ defmodule VecAddKernel do
   end
 
   @size 10000
-  @block_size 1024
   @grid_size Float.ceil(@size / @block_size) |> Float.round() |> trunc()
   defm main(env, l_a :: Term.t(), l_b :: Term.t()) :: Term.t() do
-    size_ptr = ptr! i64()
-    enif_get_int64(env, @size, size_ptr)
-    size = size_ptr[0]
+    size = Term.to_i64!(env, @size)
 
     # allocate
     a = GPU.allocate(f32(), size)
@@ -36,20 +34,15 @@ defmodule VecAddKernel do
     set! movable_list_ptr[0], l_b
     copy_terms_as_floats(env, movable_list_ptr, b)
 
-    # load grid size from module attribute
-    grid_size_ptr = ptr! i64()
-    enif_get_int64(env, @grid_size, grid_size_ptr)
-
     # launch kernel
-    launch! vec_add(a, b, c), grid_size_ptr[0], 1024
+    launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
 
     # copy output data back to CPU
     arr = ptr! Term.t(), size
 
     for_loop {element, i} <- {c, size} do
       element = value arith.extf(element) :: f64()
-      term = enif_make_double(env, element)
-      set! arr[i], term
+      set! arr[i], enif_make_double(env, element)
     end
 
     # convert to Elixir list
@@ -78,16 +71,18 @@ defmodule VecAddKernel do
       set! i_ptr[0], i + 1
     end
   end
+
+  def random_floats() do
+    Enum.map(1..@size, fn _ -> :rand.uniform() * 1000.0 end)
+  end
 end
 
 defmodule DefkTest do
   use ExUnit.Case, async: true
 
   test "compiling a simple vector add kernel" do
-    size = 10000
-    l = Enum.to_list(1..size)
-    a = l |> Enum.shuffle() |> Enum.map(&(&1 * 1.0))
-    b = l |> Enum.shuffle() |> Enum.map(&(&1 * 1.0))
+    a = VecAddKernel.random_floats()
+    b = VecAddKernel.random_floats()
 
     case :os.type() do
       {:unix, :linux} ->

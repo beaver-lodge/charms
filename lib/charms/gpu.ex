@@ -41,14 +41,7 @@ defmodule Charms.GPU do
     end
   end
 
-  defintr launch(
-            kernel,
-            grid_size,
-            block_size,
-            cluster_size \\ nil,
-            async_deps \\ [],
-            dynamic_shared_memory_size \\ nil
-          ) do
+  defintr launch(kernel, grid_size, block_size) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
     callee = kernel[:callee]
     gpu_kernels = "GPU.Kernels"
