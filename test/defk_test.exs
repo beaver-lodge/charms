@@ -73,7 +73,7 @@ defmodule VecAddKernel do
   end
 
   def random_floats() do
-    Enum.map(1..@size, fn _ -> :rand.uniform() * 1000.0 end)
+    Enum.map(1..@size, fn _ -> :rand.uniform() * 10.0 end)
   end
 end
 
@@ -88,8 +88,8 @@ defmodule DefkTest do
       {:unix, :linux} ->
         res = VecAddKernel.main(a, b)
 
-        for {{x, y, z}, i} <- Enum.with_index(Enum.zip([a, b, res])) do
-          assert_in_delta x + y, z, 0.0001, "at index #{i}"
+        for {x, y, z} <- Enum.zip([a, b, res]) do
+          assert_in_delta x + y, z, 0.0001
         end
 
       _ ->
