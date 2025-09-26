@@ -16,31 +16,40 @@ defmodule VecAddKernel do
     size = Term.to_i64!(env, @size)
 
     # allocate
-    a = GPU.allocate(f32(), size)
-    b = GPU.allocate(f32(), size)
-    c = GPU.allocate(f32(), size)
+    a_alloc = GPU.allocate(f32(), size)
+    b_alloc = GPU.allocate(f32(), size)
+    c_alloc = GPU.allocate(f32(), size)
+    buffer_alloc = GPU.allocate(f32(), size, host_shared: true)
 
     # free
     defer do
-      GPU.dealloc(a)
-      GPU.dealloc(b)
-      GPU.dealloc(c)
+      GPU.dealloc(a_alloc)
+      GPU.dealloc(b_alloc)
+      GPU.dealloc(c_alloc)
+      GPU.dealloc(buffer_alloc)
     end
 
+    buffer = Pointer.to_offset(buffer_alloc)
     # copy input data to GPU
     movable_list_ptr = ptr! Term.t()
     set! movable_list_ptr[0], l_a
-    copy_terms_as_floats(env, movable_list_ptr, a)
+    copy_terms_as_floats(env, movable_list_ptr, buffer)
+    GPU.memcpy(a_alloc, buffer_alloc)
     set! movable_list_ptr[0], l_b
-    copy_terms_as_floats(env, movable_list_ptr, b)
+    copy_terms_as_floats(env, movable_list_ptr, buffer)
+    GPU.memcpy(b_alloc, buffer_alloc)
 
+    a = Pointer.to_offset(a_alloc)
+    b = Pointer.to_offset(b_alloc)
+    c = Pointer.to_offset(c_alloc)
     # launch kernel
     launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
 
     # copy output data back to CPU
+    GPU.memcpy(buffer_alloc, c_alloc)
     arr = ptr! Term.t(), size
 
-    for_loop {element, i} <- {c, size} do
+    for_loop {element, i} <- {buffer, size} do
       element = value arith.extf(element) :: f64()
       set! arr[i], enif_make_double(env, element)
     end

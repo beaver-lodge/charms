@@ -3,7 +3,6 @@ defmodule Charms.GPU do
   intrinsics of MLIR GPU dialect
   """
   use Charms.Intrinsic
-  alias Charms.Pointer
   alias Charms.Intrinsic.Opts
   alias Beaver.MLIR.Dialect.{Index, GPU, Arith}
   alias MLIR.Type
@@ -58,36 +57,50 @@ defmodule Charms.GPU do
       {block_x, block_y, block_z} =
         {to_index(block_size, __IR__), to_index(1, __IR__), to_index(1, __IR__)}
 
-      GPU.launch_func(
-        asyncDependencies: [],
-        gridSizeX: grid_x,
-        gridSizeY: grid_y,
-        gridSizeZ: grid_z,
-        blockSizeX: block_x,
-        blockSizeY: block_y,
-        blockSizeZ: block_z,
-        kernelOperands: kernel_args,
-        kernel: callee,
-        operand_segment_sizes: :infer,
-        loc: loc
-      ) >>> []
+      token =
+        GPU.launch_func(
+          asyncDependencies: [],
+          gridSizeX: grid_x,
+          gridSizeY: grid_y,
+          gridSizeZ: grid_z,
+          blockSizeX: block_x,
+          blockSizeY: block_y,
+          blockSizeZ: block_z,
+          kernelOperands: kernel_args,
+          kernel: callee,
+          operand_segment_sizes: :infer,
+          loc: loc
+        ) >>> ~t{!gpu.async.token}
+
+      GPU.wait(token, loc: loc) >>> []
     end
   end
 
-  defintr allocate(elem_type, size) do
+  defintr allocate(elem_type, size, opts \\ [host_shared: false]) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
-      zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
+      host_shared =
+        if opts[:host_shared] do
+          [hostShared: MLIR.Attribute.unit()]
+        else
+          token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
+          [asyncDependencies: token]
+        end
+
+      token_t =
+        if opts[:host_shared] do
+          []
+        else
+          [~t{!gpu.async.token}]
+        end
 
       case size do
         i when is_integer(i) ->
           GPU.alloc(
-            loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 0, 0]),
-            # TODO: make it async so it can be compiled as device allocation
-            hostShared: MLIR.Attribute.unit()
-          ) >>> Type.memref!([i], elem_type)
+            [loc: loc, operand_segment_sizes: :infer] ++
+              host_shared
+          ) >>> ([Type.memref!([i], elem_type)] ++ token_t)
 
         %MLIR.Value{} ->
           size =
@@ -97,14 +110,24 @@ defmodule Charms.GPU do
               Index.casts(size, loc: loc) >>> Type.index()
             end
 
-          GPU.alloc(size,
-            loc: loc,
-            operand_segment_sizes: Beaver.MLIR.ODS.operand_segment_sizes([0, 1, 0]),
-            # TODO: make it async so it can be compiled as device allocation
-            hostShared: MLIR.Attribute.unit()
-          ) >>> Type.memref!([:dynamic], elem_type)
+          GPU.alloc(
+            [
+              dynamicSizes: size,
+              loc: loc,
+              operand_segment_sizes: :infer
+            ] ++ host_shared
+          ) >>> ([Type.memref!([:dynamic], elem_type)] ++ token_t)
       end
-      |> Pointer.offset_ptr(elem_type, zero, ctx, blk, loc)
+      |> then(
+        &case &1 do
+          %MLIR.Value{} = ptr ->
+            ptr
+
+          [ptr, token] ->
+            GPU.wait(token, loc: loc) >>> []
+            ptr
+        end
+      )
     end
   end
 
@@ -114,7 +137,8 @@ defmodule Charms.GPU do
     mlir ctx: ctx, blk: blk do
       # Can only convert with exactly one async dependency.
       token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
-      GPU.dealloc(token, ptr, loc: loc) >>> ~t{!gpu.async.token}
+      token = GPU.dealloc(token, ptr, loc: loc) >>> ~t{!gpu.async.token}
+      GPU.wait(token, loc: loc) >>> []
     end
   end
 
@@ -131,6 +155,21 @@ defmodule Charms.GPU do
 
     mlir ctx: ctx, blk: blk do
       GPU.return(loc: loc) >>> []
+    end
+  end
+
+  defintr memcpy(dst, src) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      # Can only convert with exactly one async dependency.
+      token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
+
+      token =
+        GPU.memcpy(asyncDependencies: token, dst: dst, src: src, loc: loc) >>>
+          ~t{!gpu.async.token}
+
+      GPU.wait(token, loc: loc) >>> []
     end
   end
 end

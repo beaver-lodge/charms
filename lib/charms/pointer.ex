@@ -293,4 +293,14 @@ defmodule Charms.Pointer do
       LLVM.mlir_zero(loc: loc) >>> ~t{!llvm.ptr}
     end
   end
+
+  defintr to_offset(ptr) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
+      elem_type = MLIR.Type.element_type(MLIR.Value.type(ptr))
+      offset_ptr(ptr, elem_type, zero, ctx, blk, loc)
+    end
+  end
 end
