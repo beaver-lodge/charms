@@ -43,9 +43,7 @@ defmodule VecAddKernel do
     b = Pointer.to_offset(b_alloc)
     c = Pointer.to_offset(c_alloc)
     # launch kernel
-    GPU.await(
-      launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
-    )
+    launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
 
     # copy output data back to CPU
     GPU.memcpy(buffer_alloc, c_alloc) |> GPU.await()

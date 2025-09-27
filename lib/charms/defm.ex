@@ -52,7 +52,7 @@ defmodule Charms.Defm do
   defmacro set!(_index_expression, _value), do: :implemented_in_expander
 
   @doc """
-  launch a GPU kernel
+  launch a GPU kernel and wait for its completion
   """
   defmacro launch!(_kernel_call, _blocks, _threads), do: :implemented_in_expander
 

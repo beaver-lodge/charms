@@ -1380,7 +1380,7 @@ defmodule Charms.Defm.Expander do
     {threads, state, env} = expand(threads, state, env)
 
     quote do
-      Charms.GPU.launch(call, blocks, threads)
+      Charms.GPU.launch(call, blocks, threads) |> Charms.GPU.await()
     end
     |> expand_with_bindings(state, env, call: call, blocks: blocks, threads: threads)
   end
