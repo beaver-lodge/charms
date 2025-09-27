@@ -19,8 +19,9 @@ defmodule Charms.Defm.Expander do
   """
   use Beaver
   alias MLIR.Attribute
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM, GPU}
   require Func
+  require GPU
   import Charms.Diagnostic, only: :macros
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -1064,7 +1065,7 @@ defmodule Charms.Defm.Expander do
     ast |> Macro.to_string() |> String.replace([":", " "], "")
   end
 
-  defp expand_defm(call, body, state, env) do
+  defp expand_defm(convention, call, body, state, env) do
     {:"::", _, [call, ret_types]} = call
 
     {name, args} = Macro.decompose_call(call)
@@ -1096,9 +1097,28 @@ defmodule Charms.Defm.Expander do
 
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
-        Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
-          region do
-          end
+        case convention do
+          :defm ->
+            Func.func _(
+                        sym_name: "\"#{name}\"",
+                        function_type: ft,
+                        loc: MLIR.Location.from_env(env)
+                      ) do
+              region do
+              end
+            end
+
+          :defk ->
+            Func.func_like _(
+                             sym_name: "\"#{name}\"",
+                             function_type: ft,
+                             "gpu.kernel": MLIR.Attribute.unit(),
+                             loc: MLIR.Location.from_env(env)
+                           ),
+                           "gpu.func" do
+              region do
+              end
+            end
         end
       end
 
@@ -1176,7 +1196,28 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms, :defm, [call, [do: body]], _callback, state, env) do
-    expand_defm(call, body, state, env)
+    expand_defm(:defm, call, body, state, env)
+  end
+
+  defp expand_macro(_meta, Charms, :defk, [call, [do: body]], _callback, state, env) do
+    mod = MLIR.Operation.from_module(state.mlir.mod)
+    _ = put_in(mod["gpu.container_module"], MLIR.Attribute.unit(ctx: state.mlir.ctx))
+
+    gpu_module =
+      mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
+        GPU.module sym_name: Attribute.string("GPU.Kernels") do
+          region do
+            block do
+            end
+          end
+        end >>> []
+      end
+
+    gpu_block =
+      gpu_module |> Beaver.Walker.regions() |> Enum.at(0) |> Beaver.Walker.blocks() |> Enum.at(0)
+
+    state = put_in(state.mlir.blk, gpu_block)
+    expand_defm(:defk, call, body, state, env)
   end
 
   defp expand_macro(_meta, Beaver, :block, args, _callback, state, env) do
@@ -1302,6 +1343,11 @@ defmodule Charms.Defm.Expander do
     {:<-, _, [{element, index}, {ptr, len}]} = expr
     {len, state, env} = expand(len, state, env)
     {ptr, state, env} = expand(ptr, state, env)
+
+    if not Charms.Pointer.memref_ptr?(ptr) do
+      raise_compile_error(env, "Expected a pointer")
+    end
+
     t = MLIR.Value.type(ptr) |> MLIR.CAPI.mlirShapedTypeGetElementType()
     loc = MLIR.Location.from_env(env)
 
@@ -1326,6 +1372,17 @@ defmodule Charms.Defm.Expander do
       end
 
     {v, state, env}
+  end
+
+  defp expand_macro(_meta, Charms.Defm, :launch!, [call, blocks, threads], _callback, state, env) do
+    {call, state, env} = expand(call, state, env)
+    {blocks, state, env} = expand(blocks, state, env)
+    {threads, state, env} = expand(threads, state, env)
+
+    quote do
+      Charms.GPU.launch(call, blocks, threads) |> Charms.GPU.await()
+    end
+    |> expand_with_bindings(state, env, call: call, blocks: blocks, threads: threads)
   end
 
   defp expand_macro(_meta, Charms.Defm, :set!, [index_expression, value], _callback, state, env) do

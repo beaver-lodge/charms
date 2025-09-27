@@ -10,6 +10,19 @@ defmodule Charms.JIT do
 
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
+    System.trap_signal(:sigchld, fn -> :ok end)
+    Charms.Transform.put_gpu_transforms(m)
+    MLIR.Context.register_translations(MLIR.context(m))
+
+    cuda_libs =
+      Enum.map(
+        ~w{libmlir_cuda_runtime.so libmlir_runner_utils.so libmlir_c_runner_utils.so},
+        &Path.join([:code.priv_dir(:beaver), "lib", &1])
+      )
+      |> Enum.filter(&File.exists?/1)
+
+    dynamic_libraries =
+      dynamic_libraries ++ cuda_libs
 
     m
     |> MLIR.verify!()
@@ -17,11 +30,14 @@ defmodule Charms.JIT do
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested("func.func", "llvm-request-c-wrappers")
     |> Beaver.Composer.nested("func.func", loop_invariant_code_motion())
-    |> convert_scf_to_cf
+    |> Beaver.Composer.append("transform-interpreter")
+    |> Beaver.Composer.append("gpu-lower-to-nvvm-pipeline{cubin-format=fatbin}")
+    |> convert_scf_to_cf()
     |> convert_cf_to_llvm()
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
     |> convert_func_to_llvm()
+    |> Beaver.Composer.append("gpu-to-llvm")
     |> Beaver.Composer.append("finalize-memref-to-llvm")
     |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> Beaver.Composer.append(Charms.Defm.Pass.UseENIFAlloc)

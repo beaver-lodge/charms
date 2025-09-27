@@ -52,6 +52,11 @@ defmodule Charms.Defm do
   defmacro set!(_index_expression, _value), do: :implemented_in_expander
 
   @doc """
+  launch a GPU kernel and wait for its completion
+  """
+  defmacro launch!(_kernel_call, _blocks, _threads), do: :implemented_in_expander
+
+  @doc """
   Executes an expression unconditionally at do-block exit.
   """
   defmacro defer(_expression), do: :implemented_in_expander
