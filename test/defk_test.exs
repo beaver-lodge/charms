@@ -22,12 +22,12 @@ defmodule VecAddKernel do
     buffer_alloc = GPU.allocate(f32(), size, host_shared: true)
 
     # free
-    defer do
-      GPU.dealloc(a_alloc)
-      GPU.dealloc(b_alloc)
-      GPU.dealloc(c_alloc)
-      GPU.dealloc(buffer_alloc)
-    end
+    defer GPU.await([
+            GPU.dealloc(a_alloc),
+            GPU.dealloc(b_alloc),
+            GPU.dealloc(c_alloc),
+            GPU.dealloc(buffer_alloc)
+          ])
 
     buffer = Pointer.to_offset(buffer_alloc)
     # copy input data to GPU
@@ -43,7 +43,9 @@ defmodule VecAddKernel do
     b = Pointer.to_offset(b_alloc)
     c = Pointer.to_offset(c_alloc)
     # launch kernel
-    launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
+    GPU.await(
+      launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
+    )
 
     # copy output data back to CPU
     GPU.memcpy(buffer_alloc, c_alloc) |> GPU.await()

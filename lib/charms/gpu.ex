@@ -57,22 +57,19 @@ defmodule Charms.GPU do
       {block_x, block_y, block_z} =
         {to_index(block_size, __IR__), to_index(1, __IR__), to_index(1, __IR__)}
 
-      token =
-        GPU.launch_func(
-          asyncDependencies: [],
-          gridSizeX: grid_x,
-          gridSizeY: grid_y,
-          gridSizeZ: grid_z,
-          blockSizeX: block_x,
-          blockSizeY: block_y,
-          blockSizeZ: block_z,
-          kernelOperands: kernel_args,
-          kernel: callee,
-          operand_segment_sizes: :infer,
-          loc: loc
-        ) >>> ~t{!gpu.async.token}
-
-      GPU.wait(token, loc: loc) >>> []
+      GPU.launch_func(
+        asyncDependencies: [],
+        gridSizeX: grid_x,
+        gridSizeY: grid_y,
+        gridSizeZ: grid_z,
+        blockSizeX: block_x,
+        blockSizeY: block_y,
+        blockSizeZ: block_z,
+        kernelOperands: kernel_args,
+        kernel: callee,
+        operand_segment_sizes: :infer,
+        loc: loc
+      ) >>> ~t{!gpu.async.token}
     end
   end
 
@@ -137,8 +134,7 @@ defmodule Charms.GPU do
     mlir ctx: ctx, blk: blk do
       # Can only convert with exactly one async dependency.
       token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
-      token = GPU.dealloc(token, ptr, loc: loc) >>> ~t{!gpu.async.token}
-      GPU.wait(token, loc: loc) >>> []
+      GPU.dealloc(token, ptr, loc: loc) >>> ~t{!gpu.async.token}
     end
   end
 
@@ -164,9 +160,7 @@ defmodule Charms.GPU do
     mlir ctx: ctx, blk: blk do
       # Can only convert with exactly one async dependency.
       token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
-
-      GPU.memcpy(asyncDependencies: token, dst: dst, src: src, loc: loc) >>>
-        ~t{!gpu.async.token}
+      GPU.memcpy(asyncDependencies: token, dst: dst, src: src, loc: loc) >>> ~t{!gpu.async.token}
     end
   end
 
