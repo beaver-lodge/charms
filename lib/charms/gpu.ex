@@ -165,11 +165,16 @@ defmodule Charms.GPU do
       # Can only convert with exactly one async dependency.
       token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
 
-      token =
-        GPU.memcpy(asyncDependencies: token, dst: dst, src: src, loc: loc) >>>
-          ~t{!gpu.async.token}
+      GPU.memcpy(asyncDependencies: token, dst: dst, src: src, loc: loc) >>>
+        ~t{!gpu.async.token}
+    end
+  end
 
-      GPU.wait(token, loc: loc) >>> []
+  defintr await(dependencies) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      GPU.wait(asyncDependencies: dependencies, loc: loc) >>> []
     end
   end
 end

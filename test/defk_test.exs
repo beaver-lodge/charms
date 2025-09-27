@@ -34,10 +34,10 @@ defmodule VecAddKernel do
     movable_list_ptr = ptr! Term.t()
     set! movable_list_ptr[0], l_a
     copy_terms_as_floats(env, movable_list_ptr, buffer)
-    GPU.memcpy(a_alloc, buffer_alloc)
+    GPU.memcpy(a_alloc, buffer_alloc) |> GPU.await()
     set! movable_list_ptr[0], l_b
     copy_terms_as_floats(env, movable_list_ptr, buffer)
-    GPU.memcpy(b_alloc, buffer_alloc)
+    GPU.memcpy(b_alloc, buffer_alloc) |> GPU.await()
 
     a = Pointer.to_offset(a_alloc)
     b = Pointer.to_offset(b_alloc)
@@ -46,7 +46,7 @@ defmodule VecAddKernel do
     launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
 
     # copy output data back to CPU
-    GPU.memcpy(buffer_alloc, c_alloc)
+    GPU.memcpy(buffer_alloc, c_alloc) |> GPU.await()
     arr = ptr! Term.t(), size
 
     for_loop {element, i} <- {buffer, size} do
