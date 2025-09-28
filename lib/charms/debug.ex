@@ -16,6 +16,10 @@ defmodule Charms.Debug do
     end
   end
 
+  def global_debug_enabled?() do
+    System.get_env("DEFM_GLOBAL_DEBUG")
+  end
+
   def step_print?() do
     System.get_env("DEFM_PRINT_IR") == "step"
   end
