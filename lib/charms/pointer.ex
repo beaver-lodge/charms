@@ -129,9 +129,11 @@ defmodule Charms.Pointer do
 
       {offset_extracted, size} =
         case strided_metadata do
+          # 1D MemRef
           [_, offset, size, _stride] ->
             {offset, size}
 
+          # 0D MemRef
           [_, offset] ->
             one = Arith.constant(value: Attribute.integer(Type.index(), 1)) >>> :infer
             {offset, one}
