@@ -22,7 +22,7 @@ defmodule Charms.Prelude do
     num_results = MLIR.CAPI.mlirOperationGetNumResults(op)
 
     if index < num_results do
-      MLIR.CAPI.mlirOperationGetResult(op, index)
+      Beaver.Walker.results(op)[index]
     else
       raise ArgumentError,
             "Index #{index} is out of bounds for operation results, num results: #{num_results}"
