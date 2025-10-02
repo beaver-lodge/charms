@@ -19,7 +19,7 @@ defmodule Charms.Prelude do
   end
 
   defintr result_at(%MLIR.Operation{} = op, index) do
-    num_results = MLIR.CAPI.mlirOperationGetNumResults(op)
+    num_results = Beaver.Walker.results(op) |> Enum.count()
 
     if index < num_results do
       Beaver.Walker.results(op)[index]

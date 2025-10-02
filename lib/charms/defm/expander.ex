@@ -319,14 +319,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  defp has_implemented_inference(op, ctx) when is_bitstring(op) do
-    id = MLIR.CAPI.mlirInferTypeOpInterfaceTypeID()
 
-    op
-    |> MLIR.StringRef.create()
-    |> MLIR.CAPI.mlirOperationImplementsInterfaceStatic(ctx, id)
-    |> Beaver.Native.to_term()
-  end
 
   defp expand_std(Enum, :reduce, args, state, env) do
     while =
@@ -505,7 +498,7 @@ defmodule Charms.Defm.Expander do
         ctx: state.mlir.ctx,
         blk: state.mlir.blk,
         loc: MLIR.Location.from_env(env),
-        results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
+        results: if( MLIR.Context.infer_type?(state.mlir.ctx, op), do: [:infer], else: [])
       }
       |> MLIR.Operation.create()
       |> then(&{MLIR.Operation.results(&1), state, env})
