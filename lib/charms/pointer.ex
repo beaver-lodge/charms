@@ -110,7 +110,7 @@ defmodule Charms.Pointer do
   # cast ptr to a pointer of the given element type with offset
   def offset_ptr(ptr, %MLIR.Type{} = elem_type, offset, ctx, blk, loc) do
     mlir ctx: ctx, blk: blk do
-      d = MLIR.Type.Shaped.dynamic_stride_or_offset()
+      d = MLIR.ShapedType.dynamic_stride_or_offset()
       static_offsets_or_sizes = Attribute.dense_array([d], Beaver.Native.I64, ctx: ctx)
       static_strides = Attribute.dense_array([1], Beaver.Native.I64, ctx: ctx)
 
@@ -140,7 +140,7 @@ defmodule Charms.Pointer do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     t = MLIR.Value.type(ptr)
-    elem_t = MLIR.Type.Shaped.element_type(t)
+    elem_t = MLIR.ShapedType.element_type(t)
 
     if not MLIR.equal?(elem_t, elem_type) do
       raise ArgumentError,
@@ -181,7 +181,7 @@ defmodule Charms.Pointer do
     if memref_ptr?(t) do
       {quote do
          Charms.Pointer.element_ptr(elem_type, ptr, n)
-       end, ptr: ptr, n: n, elem_type: MLIR.Type.Shaped.element_type(t)}
+       end, ptr: ptr, n: n, elem_type: MLIR.ShapedType.element_type(t)}
     else
       raise ArgumentError, "Pointer is not typed, use element_ptr/3 to specify the pointer type"
     end
@@ -191,7 +191,7 @@ defmodule Charms.Pointer do
     t = MLIR.Value.type(ptr)
 
     if memref_ptr?(t) do
-      MLIR.Type.Shaped.element_type(t)
+      MLIR.ShapedType.element_type(t)
     else
       raise ArgumentError, "Pointer is not typed, element_type/1 expects a typed pointer"
     end

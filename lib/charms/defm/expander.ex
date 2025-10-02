@@ -1339,7 +1339,7 @@ defmodule Charms.Defm.Expander do
       raise_compile_error(env, "Expected a pointer")
     end
 
-    t = MLIR.Value.type(ptr) |> MLIR.Type.Shaped.element_type()
+    t = MLIR.Value.type(ptr) |> MLIR.ShapedType.element_type()
     loc = MLIR.Location.from_env(env)
 
     v =

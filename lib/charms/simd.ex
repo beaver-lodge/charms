@@ -14,13 +14,13 @@ defmodule Charms.SIMD do
     %Opts{ctx: ctx, blk: blk} = __IR__
 
     mlir ctx: ctx, blk: blk do
-      element_type = MLIR.Type.Shaped.element_type(type)
+      element_type = MLIR.ShapedType.element_type(type)
 
       if MLIR.null?(element_type) do
         raise "element type is null"
       end
 
-      width = MLIR.Type.Shaped.dim_size(type, 0)
+      width = MLIR.ShapedType.dim_size(type, 0)
 
       if Enum.count(literal_values) != width do
         raise ArgumentError, "expected #{width} values, got #{length(literal_values)}"
@@ -58,7 +58,7 @@ defmodule Charms.SIMD do
     mlir ctx: ctx, blk: blk do
       static_position =
         MLIR.Attribute.dense_array(
-          [MLIR.Type.Shaped.dynamic_stride_or_offset()],
+          [MLIR.ShapedType.dynamic_stride_or_offset()],
           Beaver.Native.I64
         )
 
