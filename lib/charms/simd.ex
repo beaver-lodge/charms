@@ -14,7 +14,7 @@ defmodule Charms.SIMD do
     %Opts{ctx: ctx, blk: blk} = __IR__
 
     mlir ctx: ctx, blk: blk do
-      element_type = MLIR.CAPI.mlirShapedTypeGetElementType(type)
+      element_type = MLIR.Type.Shaped.element_type(type)
 
       if MLIR.null?(element_type) do
         raise "element type is null"

@@ -17,7 +17,7 @@ defmodule Charms.Transform do
         end
 
       m = MLIR.Operation.from_module(m)
-      MLIR.CAPI.mlirBlockAppendOwnedOperation(MLIR.Module.body(module), m)
+      MLIR.Block.append(MLIR.Module.body(module), m)
     end
   end
 
@@ -26,6 +26,6 @@ defmodule Charms.Transform do
   @gpu File.read!(@gpu_transform)
   def put_gpu_transforms(%MLIR.Module{} = module) do
     m = ~m{#{@gpu}}.(MLIR.context(module)) |> MLIR.Operation.from_module()
-    MLIR.CAPI.mlirBlockAppendOwnedOperation(MLIR.Module.body(module), m)
+    MLIR.Block.append(MLIR.Module.body(module), m)
   end
 end

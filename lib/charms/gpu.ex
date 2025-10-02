@@ -46,7 +46,7 @@ defmodule Charms.GPU do
     gpu_kernels = "GPU.Kernels"
     callee = MLIR.Attribute.symbol_ref(gpu_kernels, [callee], ctx: ctx)
     kernel_args = Beaver.Walker.operands(kernel) |> Enum.to_list()
-    MLIR.CAPI.mlirOperationDestroy(kernel)
+    MLIR.Operation.destroy(kernel)
 
     mlir ctx: ctx, blk: blk do
       # Handle grid dimensions

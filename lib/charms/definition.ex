@@ -217,7 +217,7 @@ defmodule Charms.Definition do
            |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
            |> Beaver.Native.to_term() do
         0 ->
-          mlir ctx: MLIR.CAPI.mlirOperationGetContext(func), blk: b do
+          mlir ctx: MLIR.context(func), blk: b do
             Func.return(loc: MLIR.Operation.location(func)) >>> []
           end
 
