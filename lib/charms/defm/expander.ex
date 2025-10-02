@@ -1136,7 +1136,7 @@ defmodule Charms.Defm.Expander do
           {blk_entry, state, env} =
             body |> List.wrap() |> expand_body(args, arg_types, state, env)
 
-          MLIR.CAPI.mlirRegionInsertOwnedBlock(r0, 0, blk_entry)
+          MLIR.Region.insert(r0, 0, blk_entry)
           {f, state, env}
       end
 
