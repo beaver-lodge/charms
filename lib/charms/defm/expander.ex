@@ -1229,7 +1229,7 @@ defmodule Charms.Defm.Expander do
         end
       end
 
-    MLIR.CAPI.mlirRegionAppendOwnedBlock(state.mlir.region, b)
+    MLIR.Region.append(state.mlir.region, b)
     {b, state, env}
   end
 
@@ -1244,13 +1244,13 @@ defmodule Charms.Defm.Expander do
           block do
             expand(true_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
           end
-          |> tap(&MLIR.CAPI.mlirRegionAppendOwnedBlock(state.mlir.region, &1))
+          |> tap(&MLIR.Region.append(state.mlir.region, &1))
 
         false_body =
           block do
             expand(false_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
           end
-          |> tap(&MLIR.CAPI.mlirRegionAppendOwnedBlock(state.mlir.region, &1))
+          |> tap(&MLIR.Region.append(state.mlir.region, &1))
 
         CF.cond_br(
           condition,
@@ -1294,7 +1294,7 @@ defmodule Charms.Defm.Expander do
 
         SCF.if [condition, loc: loc] do
           region do
-            MLIR.CAPI.mlirRegionAppendOwnedBlock(Beaver.Env.region(), b)
+            MLIR.Region.append(Beaver.Env.region(), b)
           end
 
           region do
