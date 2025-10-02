@@ -385,7 +385,11 @@ defmodule Charms.Definition do
     |> MLIR.Transform.canonicalize()
     |> then(fn op ->
       case Beaver.Composer.run(op, print: Charms.Debug.step_print?(), verifier: true) do
-        {:ok, op} ->
+        {:ok, op, []} ->
+          op
+
+        {:ok, op, diagnostics} ->
+          Logger.debug(fn -> "Diagnostics after optimization:\n#{diagnostics}" end)
           op
 
         {:error, diagnostics} ->
