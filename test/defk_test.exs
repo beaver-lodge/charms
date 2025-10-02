@@ -46,7 +46,7 @@ defmodule VecAddKernel do
     launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
 
     # copy output data back to CPU
-    GPU.memcpy(buffer, c) |> GPU.await()
+    GPU.memcpy(buffer_alloc, c_alloc) |> GPU.await()
     arr = ptr! Term.t(), size
 
     for_loop {element, i} <- {buffer, size} do
