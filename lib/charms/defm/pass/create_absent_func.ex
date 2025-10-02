@@ -4,24 +4,11 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
   use MLIR.Pass, on: "builtin.module"
   alias MLIR.Dialect.Func
   require Func
-  import MLIR.CAPI
 
   defp decompose(call) do
-    arg_types =
-      Beaver.Walker.operands(call)
-      |> Enum.map(&mlirValueGetType/1)
-
-    ret_types =
-      Beaver.Walker.results(call)
-      |> Enum.map(&mlirValueGetType/1)
-
-    name =
-      mlirOperationGetAttributeByName(
-        call,
-        MLIR.StringRef.create("callee")
-      )
-      |> mlirSymbolRefAttrGetRootReference()
-
+    arg_types = Beaver.Walker.operands(call) |> Enum.map(&MLIR.Value.type/1)
+    ret_types = Beaver.Walker.results(call) |> Enum.map(&MLIR.Value.type/1)
+    name = call[:callee] |> MLIR.CAPI.mlirSymbolRefAttrGetRootReference()
     {name, arg_types, ret_types}
   end
 
@@ -31,7 +18,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
     with op = %MLIR.Operation{} <- ir,
          "func.call" <- MLIR.Operation.name(op),
          {name, arg_types, ret_types} <- decompose(op),
-         true <- MLIR.null?(mlirSymbolTableLookup(symbol_table, name)),
+         true <- MLIR.null?(MLIR.CAPI.mlirSymbolTableLookup(symbol_table, name)),
          name_str <- MLIR.to_string(name),
          false <- MapSet.member?(created, name_str) do
       mlir ctx: ctx, blk: blk do
@@ -62,7 +49,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
   def run(mod, _state) do
     ctx = MLIR.context(mod)
     block = mod |> MLIR.Module.from_operation() |> MLIR.Module.body()
-    symbol_table = mlirSymbolTableCreate(mod)
+    symbol_table = MLIR.CAPI.mlirSymbolTableCreate(mod)
 
     try do
       Beaver.Walker.postwalk(
@@ -71,7 +58,7 @@ defmodule Charms.Defm.Pass.CreateAbsentFunc do
         &{&1, create_func(ctx, block, symbol_table, &1, &2)}
       )
     after
-      mlirSymbolTableDestroy(symbol_table)
+      MLIR.CAPI.mlirSymbolTableDestroy(symbol_table)
     end
   end
 end

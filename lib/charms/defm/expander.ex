@@ -319,8 +319,6 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-
-
   defp expand_std(Enum, :reduce, args, state, env) do
     while =
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
@@ -498,7 +496,7 @@ defmodule Charms.Defm.Expander do
         ctx: state.mlir.ctx,
         blk: state.mlir.blk,
         loc: MLIR.Location.from_env(env),
-        results: if( MLIR.Context.infer_type?(state.mlir.ctx, op), do: [:infer], else: [])
+        results: if(MLIR.Context.infer_type?(state.mlir.ctx, op), do: [:infer], else: [])
       }
       |> MLIR.Operation.create()
       |> then(&{MLIR.Operation.results(&1), state, env})
