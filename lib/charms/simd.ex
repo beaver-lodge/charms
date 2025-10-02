@@ -20,7 +20,7 @@ defmodule Charms.SIMD do
         raise "element type is null"
       end
 
-      width = MLIR.CAPI.mlirShapedTypeGetDimSize(type, 0) |> Beaver.Native.to_term()
+      width = MLIR.Type.Shaped.dim_size(type, 0)
 
       if Enum.count(literal_values) != width do
         raise ArgumentError, "expected #{width} values, got #{length(literal_values)}"
