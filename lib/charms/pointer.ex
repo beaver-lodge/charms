@@ -27,15 +27,14 @@ defmodule Charms.Pointer do
 
     mlir ctx: ctx, blk: blk do
       zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
-      operand_segment_sizes_of_zeros = Beaver.MLIR.ODS.operand_segment_sizes([0, 0])
 
       case size do
         1 ->
-          MemRef.alloca(loc: loc, operand_segment_sizes: operand_segment_sizes_of_zeros) >>>
+          MemRef.alloca(loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([1], elem_type)
 
         i when is_integer(i) ->
-          MemRef.alloc(loc: loc, operand_segment_sizes: operand_segment_sizes_of_zeros) >>>
+          MemRef.alloc(loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([i], elem_type)
 
         %MLIR.Value{} ->
