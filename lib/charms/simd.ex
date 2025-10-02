@@ -58,7 +58,7 @@ defmodule Charms.SIMD do
     mlir ctx: ctx, blk: blk do
       static_position =
         MLIR.Attribute.dense_array(
-          [MLIR.CAPI.mlirShapedTypeGetDynamicStrideOrOffset()],
+          [MLIR.Type.Shaped.dynamic_stride_or_offset()],
           Beaver.Native.I64
         )
 

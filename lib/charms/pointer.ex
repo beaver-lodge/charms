@@ -111,7 +111,7 @@ defmodule Charms.Pointer do
   # cast ptr to a pointer of the given element type with offset
   def offset_ptr(ptr, %MLIR.Type{} = elem_type, offset, ctx, blk, loc) do
     mlir ctx: ctx, blk: blk do
-      d = MLIR.CAPI.mlirShapedTypeGetDynamicStrideOrOffset() |> Beaver.Native.to_term()
+      d = MLIR.Type.Shaped.dynamic_stride_or_offset()
       static_offsets_or_sizes = Attribute.dense_array([d], Beaver.Native.I64, ctx: ctx)
       static_strides = Attribute.dense_array([1], Beaver.Native.I64, ctx: ctx)
 
