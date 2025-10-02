@@ -103,14 +103,7 @@ defmodule Charms.Pointer do
   end
 
   defp ptr_type(%MLIR.Type{} = elem_type, ctx) do
-    layout =
-      MLIR.CAPI.mlirStridedLayoutAttrGet(
-        ctx,
-        MLIR.CAPI.mlirShapedTypeGetDynamicStrideOrOffset(),
-        1,
-        Beaver.Native.array([1], Beaver.Native.I64)
-      )
-
+    layout = MLIR.Attribute.strided_layout(:dynamic, [1], ctx: ctx)
     Type.memref!([:dynamic], elem_type, layout: layout, ctx: ctx)
   end
 
