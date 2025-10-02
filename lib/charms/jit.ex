@@ -3,7 +3,6 @@ defmodule Charms.JIT do
   Compile and execute MLIR modules generated from `Charms.Defm`.
   """
   alias Beaver.MLIR.Dialect.Func
-  import Beaver.MLIR.CAPI
   alias Beaver.MLIR
   alias __MODULE__.LockedCache
   defstruct engine: nil, owner: true
@@ -55,24 +54,24 @@ defmodule Charms.JIT do
 
   defp clone_ops(to, from) do
     ops = MLIR.Module.body(from) |> Beaver.Walker.operations()
-    s_table = to |> MLIR.Operation.from_module() |> mlirSymbolTableCreate()
+    s_table = to |> MLIR.Operation.from_module() |> MLIR.CAPI.mlirSymbolTableCreate()
 
     for op <- ops, MLIR.Operation.name(op) in ~w{func.func memref.global} do
-      sym = mlirOperationGetAttributeByName(op, mlirSymbolTableGetSymbolAttributeName())
-      found = mlirSymbolTableLookup(s_table, MLIR.Attribute.unwrap(sym))
+      sym = op[MLIR.CAPI.mlirSymbolTableGetSymbolAttributeName()]
+      found = MLIR.CAPI.mlirSymbolTableLookup(s_table, MLIR.Attribute.unwrap(sym))
       body = MLIR.Module.body(to)
 
       if MLIR.null?(found) do
-        mlirBlockAppendOwnedOperation(body, mlirOperationClone(op))
+        MLIR.Block.append(body, MLIR.Operation.clone(op))
       else
         unless Func.external?(op) do
-          mlirOperationDestroy(found)
-          mlirBlockAppendOwnedOperation(body, mlirOperationClone(op))
+          MLIR.Operation.destroy(found)
+          MLIR.Block.append(body, MLIR.Operation.clone(op))
         end
       end
     end
 
-    mlirSymbolTableDestroy(s_table)
+    MLIR.CAPI.mlirSymbolTableDestroy(s_table)
   end
 
   defp merge_modules(modules, opts \\ []) do
