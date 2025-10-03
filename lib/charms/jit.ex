@@ -15,10 +15,12 @@ defmodule Charms.JIT do
 
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
-    System.trap_signal(:sigchld, fn -> :ok end)
+    if :persistent_term.get({__MODULE__, :sigchld_trapped?}, false) == false do
+      System.trap_signal(:sigchld, fn -> :ok end)
+      :persistent_term.put({__MODULE__, :sigchld_trapped?}, true)
+    end
     Charms.Transform.put_gpu_transforms(m)
     MLIR.Context.register_translations(MLIR.context(m))
-
     dynamic_libraries =
       if(cuda_available?(), do: @cuda_libs, else: [])
       |> Enum.concat(@runtime_libs)
