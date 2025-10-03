@@ -37,6 +37,9 @@ jobs:
           restore-keys: ${{ runner.os }}-mix-
       - run: mix deps.get
       - run: mix test
+      - run: mix test test/add_two_int_test.exs
+        env:
+          DEFM_GLOBAL_DEBUG: interfaces,dialect-conversion
       - run: mix
       - run: mix docs
       - run: mix credo
