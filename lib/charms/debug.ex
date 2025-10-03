@@ -37,7 +37,8 @@ defmodule Charms.Debug do
     end
   end
 
-  def enable() do
+  @doc false
+  def enable_by_flags() do
     debug_types = global_debug_types()
 
     if debug_types do
