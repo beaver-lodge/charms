@@ -552,21 +552,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  defp expand_magic_macros(_loc, {module, fun, _arity} = {String, :length, 1}, args, state, env) do
-    {args, state, env} = expand(args, state, env)
-    expand_std(module, fun, args, state, env)
-  end
-
-  defp expand_magic_macros(_loc, {module, fun, _arity} = {Enum, :reduce, 3}, args, state, env) do
-    expand_std(module, fun, args, state, env)
-  end
-
-  defp expand_magic_macros(_loc, {Module, :__get_attribute__, 4}, args, state, env) do
-    {args, _state, _env} = expand(args, state, env)
-    attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
-    {attr, _state, _env} = expand(attr, state, env)
-    env_ptr = beam_env_from_defm!(env, state)
-
+  defp expand_get_attribute_as_runtime_attr(env_ptr, attr, state, env) do
     quote do
       alias Charms.Pointer
       alias Charms.Term
@@ -578,6 +564,30 @@ defmodule Charms.Defm.Expander do
       Pointer.load(Term.t(), term_ptr)
     end
     |> expand_with_bindings(state, env, attr: attr, env_ptr: env_ptr)
+  end
+
+  defp expand_magic_macros(_loc, {module, fun, _arity} = {String, :length, 1}, args, state, env) do
+    {args, state, env} = expand(args, state, env)
+    expand_std(module, fun, args, state, env)
+  end
+
+  defp expand_magic_macros(_loc, {module, fun, _arity} = {Enum, :reduce, 3}, args, state, env) do
+    expand_std(module, fun, args, state, env)
+  end
+
+  defp expand_magic_macros(_loc, {Module, :__get_attribute__, 4}, args, state, env) do
+    {args, _state, _env} = expand(args, state, env)
+    attr = apply(Module, :__get_attribute__, args)
+    env_ptr = beam_env_from_defm(env, state)
+
+    if env_ptr do
+      # if we are in a defm with env, we convert the attribute to enif term at runtime
+      {attr, _state, _env} = attr |> :erlang.term_to_binary() |> expand(state, env)
+      expand_get_attribute_as_runtime_attr(env_ptr, attr, state, env)
+    else
+      # otherwise we just return the attribute as a literal so it can be consumed by intrinsics
+      {attr, state, env}
+    end
   end
 
   defp expand_magic_macros(loc, {module, fun, arity}, args, state, env) do
@@ -1620,8 +1630,12 @@ defmodule Charms.Defm.Expander do
     nil
   end
 
+  defp beam_env_from_defm(_env, state) do
+    state.mlir.enif_env
+  end
+
   defp beam_env_from_defm!(env, state) do
-    if e = state.mlir.enif_env do
+    if e = beam_env_from_defm(env, state) do
       e
     else
       raise_compile_error(env, "must be a defm with beam env as the first argument")
