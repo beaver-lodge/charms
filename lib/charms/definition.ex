@@ -383,23 +383,25 @@ defmodule Charms.Definition do
     |> Beaver.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?(), verifier: false)
     |> MLIR.Transform.canonicalize()
-    |> then(fn op ->
-      case Beaver.Composer.run(op, print: Charms.Debug.step_print?(), verifier: true) do
-        {:ok, op, []} ->
-          op
-
-        {:ok, op, diagnostics} ->
-          Logger.debug(fn -> "Diagnostics after optimization:\n#{diagnostics}" end)
-          op
-
-        {:error, diagnostics} ->
-          raise_compile_error(__ENV__, Beaver.MLIR.Diagnostic.format(diagnostics))
-      end
-    end)
+    |> run_composer_with_diagnostics()
     |> then(
       &{MLIR.to_string(&1, bytecode: true), referenced_modules(&1), required_intrinsic_modules,
        exports}
     )
+  end
+
+  defp run_composer_with_diagnostics(op) do
+    case Beaver.Composer.run(op, print: Charms.Debug.step_print?(), verifier: true) do
+      {:ok, op, []} ->
+        op
+
+      {:ok, op, diagnostics} ->
+        Logger.debug(fn -> "Diagnostics after optimization:\n#{diagnostics}" end)
+        op
+
+      {:error, diagnostics} ->
+        raise_compile_error(__ENV__, Beaver.MLIR.Diagnostic.format(diagnostics))
+    end
   end
 
   @doc """
