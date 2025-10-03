@@ -31,7 +31,7 @@ defmodule Charms.Pointer do
       case size do
         1 ->
           MemRef.alloca(loc: loc, operand_segment_sizes: :infer) >>>
-            Type.memref!([1], elem_type)
+            Type.memref!([], elem_type)
 
         i when is_integer(i) ->
           MemRef.alloc(loc: loc, operand_segment_sizes: :infer) >>>
@@ -118,8 +118,19 @@ defmodule Charms.Pointer do
         raise ArgumentError, "Failed to create dense array"
       end
 
-      [_, offset_extracted, size, _stride] =
-        MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
+      strided_metadata = MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
+
+      {offset_extracted, size} =
+        case strided_metadata do
+          # 1D MemRef
+          [_, offset, size, _stride] ->
+            {offset, size}
+
+          # 0D MemRef
+          [_, offset] ->
+            one = Arith.constant(value: Attribute.integer(Type.index(), 1)) >>> :infer
+            {offset, one}
+        end
 
       offset = Arith.addi(offset_extracted, offset, loc: loc) >>> Type.index()
 
