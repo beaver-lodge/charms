@@ -7,21 +7,24 @@ defmodule Charms.JIT do
   alias __MODULE__.LockedCache
   defstruct engine: nil, owner: true
 
+  @cuda_libs ~w{libmlir_cuda_runtime.so}
+  @runtime_libs ~w{libmlir_runner_utils.so libmlir_c_runner_utils.so}
+  def cuda_available? do
+    System.find_executable("nvidia-smi") != nil
+  end
+
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
     System.trap_signal(:sigchld, fn -> :ok end)
     Charms.Transform.put_gpu_transforms(m)
     MLIR.Context.register_translations(MLIR.context(m))
 
-    cuda_libs =
-      Enum.map(
-        ~w{libmlir_cuda_runtime.so libmlir_runner_utils.so libmlir_c_runner_utils.so},
-        &Path.join([:code.priv_dir(:beaver), "lib", &1])
-      )
-      |> Enum.filter(&File.exists?/1)
-
     dynamic_libraries =
-      dynamic_libraries ++ cuda_libs
+      if(cuda_available?(), do: @cuda_libs, else: [])
+      |> Enum.concat(@runtime_libs)
+      |> Enum.map(&Path.join([:code.priv_dir(:beaver), "lib", &1]))
+      |> Enum.filter(&File.exists?/1)
+      |> Enum.concat(dynamic_libraries)
 
     m
     |> MLIR.verify!()
