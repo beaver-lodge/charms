@@ -10,7 +10,15 @@ defmodule Charms.JIT do
   @cuda_libs ~w{libmlir_cuda_runtime.so}
   @runtime_libs ~w{libmlir_runner_utils.so libmlir_c_runner_utils.so}
   def cuda_available? do
-    System.find_executable("nvidia-smi") != nil
+    case :persistent_term.get(:charms_cuda_available, :not_found) do
+      :not_found ->
+        available = System.find_executable("nvidia-smi") != nil
+        :persistent_term.put(:charms_cuda_available, available)
+        available
+
+      available when is_boolean(available) ->
+        available
+    end
   end
 
   defp jit_of_mod(m, dynamic_libraries) do
