@@ -5,10 +5,13 @@ locals_without_parens = [
   call: 1,
   const: 1,
   defm: 2,
+  defk: 2,
   defbind: 1,
   set!: 2,
   ptr!: 1,
   ptr!: 2,
+  defmstruct: 1,
+  launch!: 3,
   defer: 1,
   free!: 1,
   defmstruct: 1

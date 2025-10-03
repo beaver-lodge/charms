@@ -3,13 +3,41 @@ defmodule Charms.JIT do
   Compile and execute MLIR modules generated from `Charms.Defm`.
   """
   alias Beaver.MLIR.Dialect.Func
-  import Beaver.MLIR.CAPI
   alias Beaver.MLIR
   alias __MODULE__.LockedCache
   defstruct engine: nil, owner: true
 
+  @cuda_libs ~w{libmlir_cuda_runtime.so}
+  @runtime_libs ~w{libmlir_runner_utils.so libmlir_c_runner_utils.so}
+  def cuda_available? do
+    case :persistent_term.get(:charms_cuda_available, :not_found) do
+      :not_found ->
+        available = System.find_executable("nvidia-smi") != nil
+        :persistent_term.put(:charms_cuda_available, available)
+        available
+
+      available when is_boolean(available) ->
+        available
+    end
+  end
+
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
+
+    unless :persistent_term.get({__MODULE__, :sigchld_trapped?}, false) do
+      System.trap_signal(:sigchld, fn -> :ok end)
+      :persistent_term.put({__MODULE__, :sigchld_trapped?}, true)
+    end
+
+    Charms.Transform.put_gpu_transforms(m)
+    MLIR.Context.register_translations(MLIR.context(m))
+
+    dynamic_libraries =
+      if(cuda_available?(), do: @cuda_libs, else: [])
+      |> Enum.concat(@runtime_libs)
+      |> Enum.map(&Path.join([:code.priv_dir(:beaver), "lib", &1]))
+      |> Enum.filter(&File.exists?/1)
+      |> Enum.concat(dynamic_libraries)
 
     m
     |> MLIR.verify!()
@@ -17,11 +45,14 @@ defmodule Charms.JIT do
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested("func.func", "llvm-request-c-wrappers")
     |> Beaver.Composer.nested("func.func", loop_invariant_code_motion())
-    |> convert_scf_to_cf
+    |> Beaver.Composer.append("transform-interpreter")
+    |> Beaver.Composer.append("gpu-lower-to-nvvm-pipeline{cubin-format=fatbin}")
+    |> convert_scf_to_cf()
     |> convert_cf_to_llvm()
     |> convert_arith_to_llvm()
     |> convert_index_to_llvm()
     |> convert_func_to_llvm()
+    |> Beaver.Composer.append("gpu-to-llvm")
     |> Beaver.Composer.append("finalize-memref-to-llvm")
     |> Beaver.Composer.append("convert-vector-to-llvm{reassociate-fp-reductions}")
     |> Beaver.Composer.append(Charms.Defm.Pass.UseENIFAlloc)
@@ -39,24 +70,24 @@ defmodule Charms.JIT do
 
   defp clone_ops(to, from) do
     ops = MLIR.Module.body(from) |> Beaver.Walker.operations()
-    s_table = to |> MLIR.Operation.from_module() |> mlirSymbolTableCreate()
+    s_table = to |> MLIR.Operation.from_module() |> MLIR.CAPI.mlirSymbolTableCreate()
 
     for op <- ops, MLIR.Operation.name(op) in ~w{func.func memref.global} do
-      sym = mlirOperationGetAttributeByName(op, mlirSymbolTableGetSymbolAttributeName())
-      found = mlirSymbolTableLookup(s_table, MLIR.Attribute.unwrap(sym))
+      sym = op[MLIR.CAPI.mlirSymbolTableGetSymbolAttributeName()]
+      found = MLIR.CAPI.mlirSymbolTableLookup(s_table, MLIR.Attribute.unwrap(sym))
       body = MLIR.Module.body(to)
 
       if MLIR.null?(found) do
-        mlirBlockAppendOwnedOperation(body, mlirOperationClone(op))
+        MLIR.Block.append(body, MLIR.Operation.clone(op))
       else
         unless Func.external?(op) do
-          mlirOperationDestroy(found)
-          mlirBlockAppendOwnedOperation(body, mlirOperationClone(op))
+          MLIR.Operation.destroy(found)
+          MLIR.Block.append(body, MLIR.Operation.clone(op))
         end
       end
     end
 
-    mlirSymbolTableDestroy(s_table)
+    MLIR.CAPI.mlirSymbolTableDestroy(s_table)
   end
 
   defp merge_modules(modules, opts \\ []) do

@@ -19,10 +19,10 @@ defmodule Charms.Prelude do
   end
 
   defintr result_at(%MLIR.Operation{} = op, index) do
-    num_results = MLIR.CAPI.mlirOperationGetNumResults(op)
+    num_results = Beaver.Walker.results(op) |> Enum.count()
 
     if index < num_results do
-      MLIR.CAPI.mlirOperationGetResult(op, index)
+      Beaver.Walker.results(op)[index]
     else
       raise ArgumentError,
             "Index #{index} is out of bounds for operation results, num results: #{num_results}"

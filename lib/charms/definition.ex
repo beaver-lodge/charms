@@ -1,6 +1,6 @@
-defmodule Charms.Defm.Definition do
+defmodule Charms.Definition do
   @moduledoc """
-  Charms.Defm.Definition provides functions to define and compile `defm` functions that can be JIT/AOT compiled to native targets.
+  Charms.Definition provides functions to define and compile `defm` functions that can be JIT/AOT compiled to native targets.
 
   ## The compilation process
   The principle of the compilation process:
@@ -41,9 +41,10 @@ defmodule Charms.Defm.Definition do
   require Logger
   import Charms.Diagnostic
 
-  defstruct [:name, :args, :env, :call, :ret_types, :body, :exported]
+  defstruct [:name, :args, :env, :call, :ret_types, :body, :exported, :convention]
 
-  defp new(env, call, body) do
+  defp new(env, call, body, opts) do
+    convention = Keyword.get(opts, :convention, :defm)
     {call, ret_types} = Charms.Defm.Expander.decompose_call_signature(call)
     call = normalize_call(call)
     {name, args} = Macro.decompose_call(call)
@@ -55,7 +56,8 @@ defmodule Charms.Defm.Definition do
       args: args,
       call: call,
       ret_types: ret_types,
-      body: body
+      body: body,
+      convention: convention
     }
   end
 
@@ -109,11 +111,11 @@ defmodule Charms.Defm.Definition do
 
   The call signature will be decomposed and transformed into a normalized form.
   """
-  def declare(env, call, body) do
-    d = new(env, call, body)
+  def declare(env, call, body, opts \\ []) do
+    d = new(env, call, body, opts)
 
     quote do
-      @defm unquote(Macro.escape(d))
+      Module.put_attribute(__MODULE__, unquote(d.convention), unquote(Macro.escape(d)))
       unquote(invoker(d))
     end
   end
@@ -215,7 +217,7 @@ defmodule Charms.Defm.Definition do
            |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
            |> Beaver.Native.to_term() do
         0 ->
-          mlir ctx: MLIR.CAPI.mlirOperationGetContext(func), blk: b do
+          mlir ctx: MLIR.context(func), blk: b do
             Func.return(loc: MLIR.Operation.location(func)) >>> []
           end
 
@@ -304,12 +306,19 @@ defmodule Charms.Defm.Definition do
       mlir_expander = %Charms.Defm.Expander{mlir_expander | return_types: return_types}
 
       required_intrinsic_modules =
-        for %__MODULE__{env: env, call: call, ret_types: ret_types, body: body} <- definitions,
+        for %__MODULE__{
+              convention: convention,
+              env: env,
+              call: call,
+              ret_types: ret_types,
+              body: body
+            } <-
+              definitions,
             reduce: MapSet.new() do
           required_intrinsic_modules ->
             {_, state, _} =
               quote(do: unquote(call) :: unquote(ret_types))
-              |> then(&quote(do: defm(unquote(&1), unquote(body))))
+              |> then(&quote(do: unquote(convention)(unquote(&1), unquote(body))))
               |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
 
             MapSet.union(state.mlir.required_intrinsic_modules, required_intrinsic_modules)
@@ -374,19 +383,25 @@ defmodule Charms.Defm.Definition do
     |> Beaver.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?(), verifier: false)
     |> MLIR.Transform.canonicalize()
-    |> then(fn op ->
-      case Beaver.Composer.run(op, print: Charms.Debug.step_print?(), verifier: true) do
-        {:ok, op} ->
-          op
-
-        {:error, diagnostics} ->
-          raise_compile_error(__ENV__, Beaver.MLIR.Diagnostic.format(diagnostics))
-      end
-    end)
+    |> run_composer_with_diagnostics()
     |> then(
       &{MLIR.to_string(&1, bytecode: true), referenced_modules(&1), required_intrinsic_modules,
        exports}
     )
+  end
+
+  defp run_composer_with_diagnostics(op) do
+    case Beaver.Composer.run(op, print: Charms.Debug.step_print?(), verifier: true) do
+      {:ok, op, []} ->
+        op
+
+      {:ok, op, diagnostics} ->
+        Logger.debug(fn -> "Diagnostics after optimization:\n#{diagnostics}" end)
+        op
+
+      {:error, diagnostics} ->
+        raise_compile_error(__ENV__, Beaver.MLIR.Diagnostic.format(diagnostics))
+    end
   end
 
   @doc """

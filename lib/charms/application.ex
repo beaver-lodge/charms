@@ -7,6 +7,7 @@ defmodule Charms.Application do
       Charms.ContextPool.specs()
     ]
 
+    Charms.Debug.enable_by_flags()
     Supervisor.start_link(children, name: __MODULE__, strategy: :one_for_one)
   end
 end

@@ -111,7 +111,7 @@ defmodule Charms.Kernel do
 
   defp dispatch_binary_op(type, op, operands, ctx, blk, loc) do
     cond do
-      MLIR.Type.integer?(type) ->
+      MLIR.Type.integer?(type) or MLIR.Type.index?(type) ->
         i_create_binary(op, operands, type, ctx, blk, loc)
 
       MLIR.Type.float?(type) ->

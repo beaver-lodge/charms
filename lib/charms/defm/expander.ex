@@ -19,8 +19,9 @@ defmodule Charms.Defm.Expander do
   """
   use Beaver
   alias MLIR.Attribute
-  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM}
+  alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, UB, LLVM, GPU}
   require Func
+  require GPU
   import Charms.Diagnostic, only: :macros
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
@@ -318,15 +319,6 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  defp has_implemented_inference(op, ctx) when is_bitstring(op) do
-    id = MLIR.CAPI.mlirInferTypeOpInterfaceTypeID()
-
-    op
-    |> MLIR.StringRef.create()
-    |> MLIR.CAPI.mlirOperationImplementsInterfaceStatic(ctx, id)
-    |> Beaver.Native.to_term()
-  end
-
   defp expand_std(Enum, :reduce, args, state, env) do
     while =
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
@@ -504,7 +496,7 @@ defmodule Charms.Defm.Expander do
         ctx: state.mlir.ctx,
         blk: state.mlir.blk,
         loc: MLIR.Location.from_env(env),
-        results: if(has_implemented_inference(op, state.mlir.ctx), do: [:infer], else: [])
+        results: if(MLIR.Context.infer_type?(state.mlir.ctx, op), do: [:infer], else: [])
       }
       |> MLIR.Operation.create()
       |> then(&{MLIR.Operation.results(&1), state, env})
@@ -560,21 +552,7 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  defp expand_magic_macros(_loc, {module, fun, _arity} = {String, :length, 1}, args, state, env) do
-    {args, state, env} = expand(args, state, env)
-    expand_std(module, fun, args, state, env)
-  end
-
-  defp expand_magic_macros(_loc, {module, fun, _arity} = {Enum, :reduce, 3}, args, state, env) do
-    expand_std(module, fun, args, state, env)
-  end
-
-  defp expand_magic_macros(_loc, {Module, :__get_attribute__, 4}, args, state, env) do
-    {args, _state, _env} = expand(args, state, env)
-    attr = apply(Module, :__get_attribute__, args) |> :erlang.term_to_binary()
-    {attr, _state, _env} = expand(attr, state, env)
-    env_ptr = beam_env_from_defm!(env, state)
-
+  defp expand_get_attribute_as_runtime_attr(env_ptr, attr, state, env) do
     quote do
       alias Charms.Pointer
       alias Charms.Term
@@ -586,6 +564,30 @@ defmodule Charms.Defm.Expander do
       Pointer.load(Term.t(), term_ptr)
     end
     |> expand_with_bindings(state, env, attr: attr, env_ptr: env_ptr)
+  end
+
+  defp expand_magic_macros(_loc, {module, fun, _arity} = {String, :length, 1}, args, state, env) do
+    {args, state, env} = expand(args, state, env)
+    expand_std(module, fun, args, state, env)
+  end
+
+  defp expand_magic_macros(_loc, {module, fun, _arity} = {Enum, :reduce, 3}, args, state, env) do
+    expand_std(module, fun, args, state, env)
+  end
+
+  defp expand_magic_macros(_loc, {Module, :__get_attribute__, 4}, args, state, env) do
+    {args, _state, _env} = expand(args, state, env)
+    attr = apply(Module, :__get_attribute__, args)
+    env_ptr = beam_env_from_defm(env, state)
+
+    if env_ptr do
+      # if we are in a defm with env, we convert the attribute to enif term at runtime
+      {attr, _state, _env} = attr |> :erlang.term_to_binary() |> expand(state, env)
+      expand_get_attribute_as_runtime_attr(env_ptr, attr, state, env)
+    else
+      # otherwise we just return the attribute as a literal so it can be consumed by intrinsics
+      {attr, state, env}
+    end
   end
 
   defp expand_magic_macros(loc, {module, fun, arity}, args, state, env) do
@@ -1064,7 +1066,7 @@ defmodule Charms.Defm.Expander do
     ast |> Macro.to_string() |> String.replace([":", " "], "")
   end
 
-  defp expand_defm(call, body, state, env) do
+  defp expand_defm(convention, call, body, state, env) do
     {:"::", _, [call, ret_types]} = call
 
     {name, args} = Macro.decompose_call(call)
@@ -1096,9 +1098,28 @@ defmodule Charms.Defm.Expander do
 
         ft = Type.function(arg_types, ret_types, ctx: Beaver.Env.context())
 
-        Func.func _(sym_name: "\"#{name}\"", function_type: ft, loc: MLIR.Location.from_env(env)) do
-          region do
-          end
+        case convention do
+          :defm ->
+            Func.func _(
+                        sym_name: "\"#{name}\"",
+                        function_type: ft,
+                        loc: MLIR.Location.from_env(env)
+                      ) do
+              region do
+              end
+            end
+
+          :defk ->
+            Func.func_like _(
+                             sym_name: "\"#{name}\"",
+                             function_type: ft,
+                             "gpu.kernel": MLIR.Attribute.unit(),
+                             loc: MLIR.Location.from_env(env)
+                           ),
+                           "gpu.func" do
+              region do
+              end
+            end
         end
       end
 
@@ -1116,7 +1137,7 @@ defmodule Charms.Defm.Expander do
           {blk_entry, state, env} =
             body |> List.wrap() |> expand_body(args, arg_types, state, env)
 
-          MLIR.CAPI.mlirRegionInsertOwnedBlock(r0, 0, blk_entry)
+          MLIR.Region.insert(r0, 0, blk_entry)
           {f, state, env}
       end
 
@@ -1176,7 +1197,43 @@ defmodule Charms.Defm.Expander do
   end
 
   defp expand_macro(_meta, Charms, :defm, [call, [do: body]], _callback, state, env) do
-    expand_defm(call, body, state, env)
+    expand_defm(:defm, call, body, state, env)
+  end
+
+  defp expand_macro(_meta, Charms, :defk, [call, [do: body]], _callback, state, env) do
+    mod = MLIR.Operation.from_module(state.mlir.mod)
+    _ = put_in(mod["gpu.container_module"], MLIR.Attribute.unit(ctx: state.mlir.ctx))
+    parent_block = state.mlir.blk
+
+    gpu_module =
+      MLIR.Operation.with_symbol_table(mod, fn s_table ->
+        existing_gpu_module =
+          MLIR.CAPI.mlirSymbolTableLookup(
+            s_table,
+            MLIR.StringRef.create(Charms.GPU.gpu_module_name())
+          )
+
+        if MLIR.null?(existing_gpu_module) do
+          mlir ctx: state.mlir.ctx, blk: parent_block do
+            GPU.module sym_name: Attribute.string(Charms.GPU.gpu_module_name()) do
+              region do
+                block do
+                end
+              end
+            end >>> []
+          end
+        else
+          existing_gpu_module
+        end
+      end)
+
+    gpu_block =
+      gpu_module |> Beaver.Walker.regions() |> Enum.at(0) |> Beaver.Walker.blocks() |> Enum.at(0)
+
+    state = put_in(state.mlir.blk, gpu_block)
+    {result, state, env} = expand_defm(:defk, call, body, state, env)
+    state = put_in(state.mlir.blk, parent_block)
+    {result, state, env}
   end
 
   defp expand_macro(_meta, Beaver, :block, args, _callback, state, env) do
@@ -1188,7 +1245,7 @@ defmodule Charms.Defm.Expander do
         end
       end
 
-    MLIR.CAPI.mlirRegionAppendOwnedBlock(state.mlir.region, b)
+    MLIR.Region.append(state.mlir.region, b)
     {b, state, env}
   end
 
@@ -1203,13 +1260,13 @@ defmodule Charms.Defm.Expander do
           block do
             expand(true_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
           end
-          |> tap(&MLIR.CAPI.mlirRegionAppendOwnedBlock(state.mlir.region, &1))
+          |> tap(&MLIR.Region.append(state.mlir.region, &1))
 
         false_body =
           block do
             expand(false_body, put_in(state.mlir.blk, Beaver.Env.block()), env)
           end
-          |> tap(&MLIR.CAPI.mlirRegionAppendOwnedBlock(state.mlir.region, &1))
+          |> tap(&MLIR.Region.append(state.mlir.region, &1))
 
         CF.cond_br(
           condition,
@@ -1253,7 +1310,7 @@ defmodule Charms.Defm.Expander do
 
         SCF.if [condition, loc: loc] do
           region do
-            MLIR.CAPI.mlirRegionAppendOwnedBlock(Beaver.Env.region(), b)
+            MLIR.Region.append(Beaver.Env.region(), b)
           end
 
           region do
@@ -1302,7 +1359,12 @@ defmodule Charms.Defm.Expander do
     {:<-, _, [{element, index}, {ptr, len}]} = expr
     {len, state, env} = expand(len, state, env)
     {ptr, state, env} = expand(ptr, state, env)
-    t = MLIR.Value.type(ptr) |> MLIR.CAPI.mlirShapedTypeGetElementType()
+
+    if not Charms.Pointer.memref_ptr?(ptr) do
+      raise_compile_error(env, "Expected a pointer")
+    end
+
+    t = MLIR.Value.type(ptr) |> MLIR.ShapedType.element_type()
     loc = MLIR.Location.from_env(env)
 
     v =
@@ -1326,6 +1388,17 @@ defmodule Charms.Defm.Expander do
       end
 
     {v, state, env}
+  end
+
+  defp expand_macro(_meta, Charms.Defm, :launch!, [call, blocks, threads], _callback, state, env) do
+    {call, state, env} = expand(call, state, env)
+    {blocks, state, env} = expand(blocks, state, env)
+    {threads, state, env} = expand(threads, state, env)
+
+    quote do
+      Charms.GPU.launch(call, blocks, threads) |> Charms.GPU.await()
+    end
+    |> expand_with_bindings(state, env, call: call, blocks: blocks, threads: threads)
   end
 
   defp expand_macro(_meta, Charms.Defm, :set!, [index_expression, value], _callback, state, env) do
@@ -1572,8 +1645,12 @@ defmodule Charms.Defm.Expander do
     nil
   end
 
+  defp beam_env_from_defm(_env, state) do
+    state.mlir.enif_env
+  end
+
   defp beam_env_from_defm!(env, state) do
-    if e = state.mlir.enif_env do
+    if e = beam_env_from_defm(env, state) do
       e
     else
       raise_compile_error(env, "must be a defm with beam env as the first argument")

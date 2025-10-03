@@ -4,7 +4,7 @@ defmodule Charms.Constant do
   alias Beaver.MLIR.Dialect.{Arith, Index}
 
   def from_literal(literal, %MLIR.Value{} = v, ctx, blk, loc) do
-    t = MLIR.CAPI.mlirValueGetType(v)
+    t = MLIR.Value.type(v)
     from_literal(literal, t, ctx, blk, loc)
   end
 
