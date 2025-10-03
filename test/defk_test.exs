@@ -93,20 +93,28 @@ defmodule DefkTest do
     a = VecAddKernel.random_floats()
     b = VecAddKernel.random_floats()
 
-    case :os.type() do
-      {:unix, :linux} ->
-        res = VecAddKernel.main(a, b)
+    if Charms.JIT.cuda_available?() do
+      res = VecAddKernel.main(a, b)
 
-        for {x, y, z} <- Enum.zip([a, b, res]) do
-          assert_in_delta x + y, z, 0.0001
-        end
+      for {x, y, z} <- Enum.zip([a, b, res]) do
+        assert_in_delta x + y, z, 0.0001
+      end
+    else
+      case :os.type() do
+        {:unix, :linux} ->
+          assert_raise ArgumentError,
+                       ~r"CUDA path: /usr/local/cuda does not exist or is not a directory.",
+                       fn ->
+                         VecAddKernel.main(a, b)
+                       end
 
-      _ ->
-        assert_raise ArgumentError,
-                     ~r"Failed to lookup target for triple 'nvptx64-nvidia-cuda'",
-                     fn ->
-                       VecAddKernel.main(a, b)
-                     end
+        _ ->
+          assert_raise ArgumentError,
+                       ~r"Failed to lookup target for triple 'nvptx64-nvidia-cuda'",
+                       fn ->
+                         VecAddKernel.main(a, b)
+                       end
+      end
     end
   end
 end
