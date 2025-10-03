@@ -1203,22 +1203,37 @@ defmodule Charms.Defm.Expander do
   defp expand_macro(_meta, Charms, :defk, [call, [do: body]], _callback, state, env) do
     mod = MLIR.Operation.from_module(state.mlir.mod)
     _ = put_in(mod["gpu.container_module"], MLIR.Attribute.unit(ctx: state.mlir.ctx))
+    parent_block = state.mlir.blk
 
     gpu_module =
-      mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
-        GPU.module sym_name: Attribute.string("GPU.Kernels") do
-          region do
-            block do
-            end
+      MLIR.Operation.with_symbol_table(mod, fn s_table ->
+        existing_gpu_module =
+          MLIR.CAPI.mlirSymbolTableLookup(
+            s_table,
+            MLIR.StringRef.create(Charms.GPU.gpu_module_name())
+          )
+
+        if MLIR.null?(existing_gpu_module) do
+          mlir ctx: state.mlir.ctx, blk: parent_block do
+            GPU.module sym_name: Attribute.string(Charms.GPU.gpu_module_name()) do
+              region do
+                block do
+                end
+              end
+            end >>> []
           end
-        end >>> []
-      end
+        else
+          existing_gpu_module
+        end
+      end)
 
     gpu_block =
       gpu_module |> Beaver.Walker.regions() |> Enum.at(0) |> Beaver.Walker.blocks() |> Enum.at(0)
 
     state = put_in(state.mlir.blk, gpu_block)
-    expand_defm(:defk, call, body, state, env)
+    {result, state, env} = expand_defm(:defk, call, body, state, env)
+    state = put_in(state.mlir.blk, parent_block)
+    {result, state, env}
   end
 
   defp expand_macro(_meta, Beaver, :block, args, _callback, state, env) do

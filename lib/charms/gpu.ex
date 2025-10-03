@@ -40,10 +40,13 @@ defmodule Charms.GPU do
     end
   end
 
+  @doc false
+  def gpu_module_name, do: "Charms.GPU.Kernels"
+
   defintr launch(kernel, grid_size, block_size) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
     callee = kernel[:callee]
-    gpu_kernels = "GPU.Kernels"
+    gpu_kernels = gpu_module_name()
     callee = MLIR.Attribute.symbol_ref(gpu_kernels, [callee], ctx: ctx)
     kernel_args = Beaver.Walker.operands(kernel) |> Enum.to_list()
     MLIR.Operation.destroy(kernel)
