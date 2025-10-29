@@ -1035,11 +1035,7 @@ defmodule Charms.Defm.Expander do
 
   defp did_you_mean_op(op) do
     MLIR.Dialect.Registry.ops(:all)
-    |> Stream.map(&{&1, String.jaro_distance(&1, op)})
-    |> Enum.sort(&(elem(&1, 1) >= elem(&2, 1)))
-    |> Enum.to_list()
-    |> List.first()
-    |> elem(0)
+    |> Enum.max_by(&String.jaro_distance(&1, op))
   end
 
   # Expands a nil clause body in an if statement, yielding no value.
