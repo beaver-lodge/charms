@@ -167,7 +167,7 @@ defmodule Charms.JIT do
   def init(module, opts) do
     key = Keyword.fetch!(opts, :name)
 
-    {modules, jit} =
+    {modules, %__MODULE__{} = jit} =
       LockedCache.run(key, fn ->
         modules = collect_modules(module)
 
