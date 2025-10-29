@@ -26,3 +26,5 @@ charms-*.tar
 /tmp/
 *.so
 .DS_Store
+
+.elixir_ls

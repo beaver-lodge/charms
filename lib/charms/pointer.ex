@@ -1,8 +1,6 @@
 defmodule Charms.Pointer do
   @moduledoc """
   Intrinsic module to work with pointers.
-
-  Charms.Pointer should be the "smart pointer" not just comes with lifetime management, but also SIMD and Tensor support.
   """
   use Beaver
   use Charms.Intrinsic
@@ -26,8 +24,6 @@ defmodule Charms.Pointer do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
-      zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
-
       case size do
         1 ->
           MemRef.alloca(loc: loc, operand_segment_sizes: :infer) >>>
@@ -48,7 +44,12 @@ defmodule Charms.Pointer do
           MemRef.alloc(dynamicSizes: size, loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([:dynamic], elem_type)
       end
-      |> offset_ptr(elem_type, zero, ctx, blk, loc)
+      |> Charms.Coercion.cast_argument(
+        unified_ptr_type(elem_type, ctx),
+        ctx,
+        blk,
+        loc
+      )
     end
   end
 
@@ -101,22 +102,32 @@ defmodule Charms.Pointer do
     end
   end
 
-  defp ptr_type(%MLIR.Type{} = elem_type, ctx) do
+  @doc false
+  def unified_ptr_type(%MLIR.Type{} = elem_type, ctx) do
     layout = MLIR.Attribute.strided_layout(:dynamic, [1], ctx: ctx)
     Type.memref!([:dynamic], elem_type, layout: layout, ctx: ctx)
   end
 
-  @doc false
-  # cast ptr to a pointer of the given element type with offset
-  def offset_ptr(ptr, %MLIR.Type{} = elem_type, offset, ctx, blk, loc) do
+  @doc """
+  Make sure the pointer represented as memref has a unified layout
+  - 1D
+  - stride 1
+  - dynamic offset
+  - dynamic size
+  """
+  def unify_layout(%MLIR.Value{} = ptr, ctx, blk, loc, offset \\ 0) do
     mlir ctx: ctx, blk: blk do
-      d = MLIR.ShapedType.dynamic_stride_or_offset()
-      static_offsets_or_sizes = Attribute.dense_array([d], Beaver.Native.I64, ctx: ctx)
-      static_strides = Attribute.dense_array([1], Beaver.Native.I64, ctx: ctx)
+      elem_type = MLIR.Value.type(ptr) |> MLIR.ShapedType.element_type()
 
-      if MLIR.null?(static_offsets_or_sizes) do
-        raise ArgumentError, "Failed to create dense array"
-      end
+      static_offsets =
+        Attribute.dense_array([MLIR.ShapedType.dynamic_stride_or_offset()], Beaver.Native.I64,
+          ctx: ctx
+        )
+
+      static_sizes =
+        Attribute.dense_array([MLIR.ShapedType.dynamic_size()], Beaver.Native.I64, ctx: ctx)
+
+      static_strides = Attribute.dense_array([1], Beaver.Native.I64, ctx: ctx)
 
       strided_metadata = MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
 
@@ -132,6 +143,27 @@ defmodule Charms.Pointer do
             {offset, one}
         end
 
+      offset =
+        case offset do
+          i when is_integer(i) ->
+            Index.constant(value: Attribute.index(i)) >>> Type.index()
+
+          %MLIR.Value{} ->
+            t = MLIR.Value.type(offset)
+
+            cond do
+              Type.index?(t) ->
+                offset
+
+              Type.integer?(t) ->
+                Index.casts(offset, loc: loc) >>> Type.index()
+
+              true ->
+                raise ArgumentError,
+                      "Expected an integer or index type, got #{MLIR.to_string(t)}"
+            end
+        end
+
       offset = Arith.addi(offset_extracted, offset, loc: loc) >>> Type.index()
 
       MemRef.reinterpret_cast(
@@ -139,11 +171,11 @@ defmodule Charms.Pointer do
         offsets: offset,
         sizes: size,
         operand_segment_sizes: :infer,
-        static_offsets: static_offsets_or_sizes,
-        static_sizes: static_offsets_or_sizes,
+        static_offsets: static_offsets,
+        static_sizes: static_sizes,
         static_strides: static_strides,
         loc: loc
-      ) >>> ptr_type(elem_type, ctx)
+      ) >>> unified_ptr_type(elem_type, ctx)
     end
   end
 
@@ -159,27 +191,7 @@ defmodule Charms.Pointer do
     end
 
     mlir ctx: ctx, blk: blk do
-      n =
-        case n do
-          i when is_integer(i) ->
-            Index.constant(value: Attribute.index(i)) >>> Type.index()
-
-          %MLIR.Value{} ->
-            t = MLIR.Value.type(n)
-
-            cond do
-              Type.index?(t) ->
-                n
-
-              Type.integer?(t) ->
-                Index.casts(n, loc: loc) >>> Type.index()
-
-              true ->
-                raise ArgumentError, "Expected an integer or index type, got #{MLIR.to_string(t)}"
-            end
-        end
-
-      offset_ptr(ptr, elem_type, n, ctx, blk, loc)
+      unify_layout(ptr, ctx, blk, loc, n)
     end
   end
 
@@ -218,7 +230,7 @@ defmodule Charms.Pointer do
 
   defintr t(%MLIR.Type{} = elem_t) do
     %Opts{ctx: ctx} = __IR__
-    ptr_type(elem_t, ctx)
+    unified_ptr_type(elem_t, ctx)
   end
 
   @doc false
@@ -301,9 +313,7 @@ defmodule Charms.Pointer do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
-      zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
-      elem_type = MLIR.Type.element_type(MLIR.Value.type(ptr))
-      offset_ptr(ptr, elem_type, zero, ctx, blk, loc)
+      unify_layout(ptr, ctx, blk, loc)
     end
   end
 end
