@@ -21,6 +21,23 @@ defmodule Charms.JIT do
     end
   end
 
+  defp get_system_libraries do
+    case :persistent_term.get({__MODULE__, :system_libraries}, :not_found) do
+      :not_found ->
+        libs =
+          if(cuda_available?(), do: @cuda_libs, else: [])
+          |> Enum.concat(@runtime_libs)
+          |> Enum.map(&Path.join([:code.priv_dir(:beaver), "lib", &1]))
+          |> Enum.filter(&File.exists?/1)
+
+        :persistent_term.put({__MODULE__, :system_libraries}, libs)
+        libs
+
+      libs when is_list(libs) ->
+        libs
+    end
+  end
+
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
 
@@ -32,12 +49,7 @@ defmodule Charms.JIT do
     Charms.Transform.put_gpu_transforms(m)
     MLIR.Context.register_translations(MLIR.context(m))
 
-    dynamic_libraries =
-      if(cuda_available?(), do: @cuda_libs, else: [])
-      |> Enum.concat(@runtime_libs)
-      |> Enum.map(&Path.join([:code.priv_dir(:beaver), "lib", &1]))
-      |> Enum.filter(&File.exists?/1)
-      |> Enum.concat(dynamic_libraries)
+    dynamic_libraries = get_system_libraries() ++ dynamic_libraries
 
     m
     |> MLIR.verify!()
