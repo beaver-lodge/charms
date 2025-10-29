@@ -7,7 +7,7 @@ This document describes the performance optimizations made to the Charms compile
 Seven performance bottlenecks were identified and fixed in the codebase:
 
 1. **Redundant MapSet recreation** - High impact
-2. **O(n) list membership checks** - Medium impact  
+2. **O(n) list membership checks** - High impact  
 3. **Inefficient list operations** - Low impact
 4. **Context creation overhead** - Medium impact
 5. **Inefficient sorting for suggestions** - Low impact
@@ -47,7 +47,7 @@ end
 
 **Impact:** This function is called multiple times during compilation. Querying the registry is expensive, so avoiding redundant calls significantly improves compilation speed.
 
-### 2. O(n) List Membership Check (Medium Impact)
+### 2. O(n) List Membership Check (High Impact)
 
 **Location:** `lib/charms/jit.ex:137`
 
@@ -188,8 +188,11 @@ last_op = %MLIR.Operation{} <-
   Beaver.Walker.operations(b) |> Enum.to_list() |> List.last()
 
 # After
-operations <- Beaver.Walker.operations(b),
-last_op = %MLIR.Operation{} <- Enum.at(operations, -1)
+with [r] <- Beaver.Walker.regions(func) |> Enum.to_list(),
+     [b] <- Beaver.Walker.blocks(r) |> Enum.to_list(),
+     operations <- Beaver.Walker.operations(b),
+     last_op = %MLIR.Operation{} <- Enum.at(operations, -1),
+     # ... rest of the with statement
 ```
 
 **Impact:** Avoids unnecessary list allocation for each function being compiled.
@@ -238,7 +241,7 @@ dynamic_libraries = get_system_libraries() ++ dynamic_libraries
 Based on the complexity and frequency of the optimized operations:
 
 - **Compilation speed**: 10-30% improvement depending on project size and complexity
-- **Module collection**: O(n²) → O(n) for large dependency graphs
+- **Module collection**: O(n²) → O(n) for large dependency graphs (High impact)
 - **JIT initialization**: 5-15% faster due to cached library paths and pooled contexts
 - **Memory usage**: Reduced due to fewer intermediate list allocations
 
