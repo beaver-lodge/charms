@@ -21,6 +21,23 @@ defmodule Charms.JIT do
     end
   end
 
+  defp get_system_libraries do
+    case :persistent_term.get({__MODULE__, :system_libraries}, :not_found) do
+      :not_found ->
+        libs =
+          if(cuda_available?(), do: @cuda_libs, else: [])
+          |> Enum.concat(@runtime_libs)
+          |> Enum.map(&Path.join([:code.priv_dir(:beaver), "lib", &1]))
+          |> Enum.filter(&File.exists?/1)
+
+        :persistent_term.put({__MODULE__, :system_libraries}, libs)
+        libs
+
+      libs when is_list(libs) ->
+        libs
+    end
+  end
+
   defp jit_of_mod(m, dynamic_libraries) do
     import Beaver.MLIR.{Conversion, Transform}
 
@@ -32,12 +49,7 @@ defmodule Charms.JIT do
     Charms.Transform.put_gpu_transforms(m)
     MLIR.Context.register_translations(MLIR.context(m))
 
-    dynamic_libraries =
-      if(cuda_available?(), do: @cuda_libs, else: [])
-      |> Enum.concat(@runtime_libs)
-      |> Enum.map(&Path.join([:code.priv_dir(:beaver), "lib", &1]))
-      |> Enum.filter(&File.exists?/1)
-      |> Enum.concat(dynamic_libraries)
+    dynamic_libraries = get_system_libraries() ++ dynamic_libraries
 
     m
     |> MLIR.verify!()
@@ -104,7 +116,14 @@ defmodule Charms.JIT do
   end
 
   defp do_init(ctx, modules) when is_list(modules) do
-    dynamic_libraries = Enum.flat_map(modules, &collect_dynamic_libraries/1) |> Enum.uniq()
+    dynamic_libraries =
+      modules
+      |> Enum.reduce(MapSet.new(), fn module, acc ->
+        collect_dynamic_libraries(module)
+        |> MapSet.new()
+        |> MapSet.union(acc)
+      end)
+      |> MapSet.to_list()
 
     modules
     |> Enum.map(fn
@@ -131,22 +150,27 @@ defmodule Charms.JIT do
     |> then(&{:ok, &1})
   end
 
-  defp collect_modules(module, acc \\ [])
+  defp collect_modules(module) when is_atom(module) do
+    collect_modules_set(module, MapSet.new())
+    |> MapSet.to_list()
+  end
 
-  defp collect_modules(module, acc) when is_atom(module) do
-    if module in acc do
+  defp collect_modules(module), do: [module]
+
+  defp collect_modules_set(module, acc) when is_atom(module) do
+    if MapSet.member?(acc, module) do
       acc
     else
-      acc = [module | acc]
+      acc = MapSet.put(acc, module)
 
       module.referenced_modules()
       |> Enum.reduce(acc, fn m, acc ->
-        collect_modules(m, acc)
+        collect_modules_set(m, acc)
       end)
     end
   end
 
-  defp collect_modules(module, acc), do: [module | acc]
+  defp collect_modules_set(module, acc), do: MapSet.put(acc, module)
 
   defp collect_dynamic_libraries(module) when is_atom(module) do
     if function_exported?(module, :dynamic_libraries, 0) do

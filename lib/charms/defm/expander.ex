@@ -92,9 +92,15 @@ defmodule Charms.Defm.Expander do
   @doc """
   Expand an AST into MLIR.
   """
-  def expand_to_mlir(ast, env, %__MODULE__{ctx: ctx} = mlir_expander) do
-    available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
-    mlir_expander = mlir_expander |> Map.put(:available_ops, available_ops)
+  def expand_to_mlir(ast, env, %__MODULE__{ctx: ctx, available_ops: available_ops} = mlir_expander) do
+    # Only recreate available_ops if it's empty (not initialized yet)
+    mlir_expander =
+      if MapSet.size(available_ops) == 0 do
+        available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
+        %__MODULE__{mlir_expander | available_ops: available_ops}
+      else
+        mlir_expander
+      end
 
     expand(
       ast,
@@ -1029,11 +1035,7 @@ defmodule Charms.Defm.Expander do
 
   defp did_you_mean_op(op) do
     MLIR.Dialect.Registry.ops(:all)
-    |> Stream.map(&{&1, String.jaro_distance(&1, op)})
-    |> Enum.sort(&(elem(&1, 1) >= elem(&2, 1)))
-    |> Enum.to_list()
-    |> List.first()
-    |> elem(0)
+    |> Enum.max_by(&String.jaro_distance(&1, op))
   end
 
   # Expands a nil clause body in an if statement, yielding no value.

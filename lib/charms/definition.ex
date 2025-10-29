@@ -208,8 +208,8 @@ defmodule Charms.Definition do
   defp append_missing_return(func) do
     with [r] <- Beaver.Walker.regions(func) |> Enum.to_list(),
          [b] <- Beaver.Walker.blocks(r) |> Enum.to_list(),
-         last_op = %MLIR.Operation{} <-
-           Beaver.Walker.operations(b) |> Enum.to_list() |> List.last(),
+         operations <- Beaver.Walker.operations(b),
+         last_op = %MLIR.Operation{} <- Enum.at(operations, -1),
          last_op_name <- MLIR.Operation.name(last_op),
          false <- last_op_name == "func.return" do
       case func[:function_type]
@@ -414,12 +414,8 @@ defmodule Charms.Definition do
   - Determine the MLIR ops available in the definition.
   """
   def compile(definitions, defmstruct_definition) when is_list(definitions) do
-    ctx = MLIR.Context.create()
-
-    try do
-      do_compile(ctx, definitions, defmstruct_definition)
-    after
-      MLIR.Context.destroy(ctx)
-    end
+    NimblePool.checkout!(Charms.ContextPool, :checkout, fn _, ctx ->
+      {do_compile(ctx, definitions, defmstruct_definition), ctx}
+    end)
   end
 end
