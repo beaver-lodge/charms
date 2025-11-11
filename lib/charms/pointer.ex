@@ -44,12 +44,6 @@ defmodule Charms.Pointer do
           MemRef.alloc(dynamicSizes: size, loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([:dynamic], elem_type)
       end
-      |> Charms.Coercion.cast_argument(
-        unified_ptr_type(elem_type, ctx),
-        ctx,
-        blk,
-        loc
-      )
     end
   end
 
@@ -60,6 +54,16 @@ defmodule Charms.Pointer do
 
   def memref_ptr?(%MLIR.Value{} = ptr) do
     MLIR.Value.type(ptr) |> memref_ptr?()
+  end
+
+  defp rank_as_indices(ptr, opts) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = opts
+
+    mlir ctx: ctx, blk: blk do
+      zero = Index.constant(value: Attribute.index(0), loc: loc) >>> Type.index()
+      rank = MLIR.ShapedType.rank(MLIR.Value.type(ptr))
+      if rank == 0, do: [], else: [zero]
+    end
   end
 
   @doc """
@@ -74,8 +78,8 @@ defmodule Charms.Pointer do
       end
     else
       mlir ctx: ctx, blk: blk do
-        zero = Index.constant(value: Attribute.index(0), loc: loc) >>> Type.index()
-        MemRef.load(ptr, zero, loc: loc) >>> type
+        idx = rank_as_indices(ptr, __IR__)
+        MemRef.load(memref: ptr, indices: idx, loc: loc) >>> type
       end
     end
   end
@@ -97,8 +101,8 @@ defmodule Charms.Pointer do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
-      zero = Index.constant(value: Attribute.index(0)) >>> Type.index()
-      MemRef.store(val, ptr, zero, loc: loc) >>> []
+      idx = rank_as_indices(ptr, __IR__)
+      MemRef.store(value: val, memref: ptr, indices: idx, loc: loc) >>> []
     end
   end
 
@@ -106,6 +110,21 @@ defmodule Charms.Pointer do
   def unified_ptr_type(%MLIR.Type{} = elem_type, ctx) do
     layout = MLIR.Attribute.strided_layout(:dynamic, [1], ctx: ctx)
     Type.memref!([:dynamic], elem_type, layout: layout, ctx: ctx)
+  end
+
+  defp get_offset_and_size(strided_metadata, ctx, blk) do
+    mlir ctx: ctx, blk: blk do
+      case strided_metadata do
+        # 1D MemRef
+        [_, offset, size, _stride] ->
+          {offset, size}
+
+        # 0D MemRef
+        [_, offset] ->
+          one = Arith.constant(value: Attribute.integer(Type.index(), 1)) >>> :infer
+          {offset, one}
+      end
+    end
   end
 
   @doc """
@@ -131,17 +150,7 @@ defmodule Charms.Pointer do
 
       strided_metadata = MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
 
-      {offset_extracted, size} =
-        case strided_metadata do
-          # 1D MemRef
-          [_, offset, size, _stride] ->
-            {offset, size}
-
-          # 0D MemRef
-          [_, offset] ->
-            one = Arith.constant(value: Attribute.integer(Type.index(), 1)) >>> :infer
-            {offset, one}
-        end
+      {offset_extracted, size} = get_offset_and_size(strided_metadata, ctx, blk)
 
       offset =
         case offset do
@@ -250,7 +259,8 @@ defmodule Charms.Pointer do
           width = MLIR.Type.element_type(t) |> MLIR.Type.width()
           width = Index.constant(value: Attribute.index(width), loc: loc) >>> Type.index()
           ptr_i = MemRef.extract_aligned_pointer_as_index(ptr, loc: loc) >>> Type.index()
-          [_, offset, _, _] = MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
+          strided_metadata = MemRef.extract_strided_metadata(ptr, loc: loc) >>> :infer
+          {offset, _size} = get_offset_and_size(strided_metadata, ctx, blk)
           offset = Arith.muli(offset, width, loc: loc) >>> Type.index()
           ptr_i = Arith.addi(ptr_i, offset, loc: loc) >>> Type.index()
           ptr_i = Arith.index_cast(ptr_i, loc: loc) >>> Type.i64()

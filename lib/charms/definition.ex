@@ -45,8 +45,8 @@ defmodule Charms.Definition do
 
   defp new(env, call, body, opts) do
     convention = Keyword.get(opts, :convention, :defm)
-    {call, ret_types} = Charms.Defm.Expander.decompose_call_signature(call)
-    call = normalize_call(call)
+    {call, ret_types} = Charms.Definition.Call.decompose_return_signature(call)
+    call = Charms.Definition.Call.normalize(call)
     {name, args} = Macro.decompose_call(call)
     {:ok, env} = Macro.Env.define_import(env, [], Charms.Defm, warn: false, only: :macros)
 
@@ -54,31 +54,52 @@ defmodule Charms.Definition do
       name: name,
       env: env,
       args: args,
-      call: call,
       ret_types: ret_types,
       body: body,
       convention: convention
     }
   end
 
-  defp do_invoke_args(invoke_args) do
-    for {:"::", _, [a, _t]} <- invoke_args do
-      a
+  defp placeholder_args(%__MODULE__{args: args}) do
+    placeholder_args(args)
+  end
+
+  defp placeholder_args(args) when is_list(args) do
+    for {:"::", _, [a, _t]} <- args do
+      {var, meta, ctx} = a
+      {var, Keyword.put_new(meta, :generated, true), ctx}
     end
   end
 
   defp invoke_args(%__MODULE__{args: [{:"::", _, [{:env, _, _}, _]} | invoke_args]}) do
-    do_invoke_args(invoke_args)
+    placeholder_args(invoke_args)
   end
 
   defp invoke_args(%__MODULE__{args: args}) do
-    do_invoke_args(args)
+    placeholder_args(args)
   end
 
   defp invoker(%__MODULE__{env: env, name: name} = d) do
     invoke_args = invoke_args(d)
+    placeholder_args = placeholder_args(d)
+
+    # generate placeholder to have module system and LSP tools happy
+    fallback_placeholder =
+      if length(placeholder_args) != length(invoke_args) do
+        quote do
+          @doc false
+          def unquote(name)(unquote_splicing(placeholder_args)) do
+            raise ArgumentError,
+                  "Call #{Exception.format_mfa(__MODULE__, unquote(name), unquote(length(invoke_args)))} to invoke the JIT compiled function."
+          end
+        end
+      else
+        nil
+      end
 
     quote do
+      unquote(fallback_placeholder)
+
       def unquote(name)(unquote_splicing(invoke_args)) do
         mfa = {unquote(env.module), unquote(name), unquote(invoke_args)}
         {name, arity} = __ENV__.function
@@ -113,99 +134,48 @@ defmodule Charms.Definition do
   """
   def declare(env, call, body, opts \\ []) do
     d = new(env, call, body, opts)
+    {name, args, _ret_types} = Charms.Definition.Call.decompose_call(call)
+    fa = {name, length(args)}
 
-    quote do
-      Module.put_attribute(__MODULE__, unquote(d.convention), unquote(Macro.escape(d)))
-      unquote(invoker(d))
-    end
-  end
+    infer_type_helpers =
+      [
+        quote do
+          def infer_return_type(unquote(fa), state) do
+            {ret_types, _, _} =
+              Charms.Defm.Expander.expand(
+                unquote(Macro.escape(d.ret_types)),
+                state,
+                unquote(Macro.escape(env))
+              )
 
-  @doc false
-  defp normalize_call(call) do
-    {name, args} = Macro.decompose_call(call)
-
-    args =
-      for i <- Enum.with_index(args) do
-        case i do
-          # env
-          {a = {:env, _, nil}, 0} ->
-            quote do
-              unquote(a) :: Charms.Env.t()
-            end
-
-          # term
-          {a = {name, _, context}, version}
-          when is_atom(name) and is_atom(context) and is_integer(version) ->
-            quote do
-              unquote(a) :: Charms.Term.t()
-            end
-
-          # typed
-          {at = {:"::", _, [_a, _t]}, _} ->
-            at
-        end
-      end
-
-    quote do
-      unquote(name)(unquote_splicing(args))
-    end
-  end
-
-  defp check_poison!(op) do
-    Beaver.Walker.postwalk(op, fn op ->
-      with %MLIR.Operation{} <- op,
-           "ub.poison" <- MLIR.Operation.name(op) do
-        loc_str = to_string(MLIR.Operation.location(op))
-
-        compile_err_msg =
-          case String.split(loc_str, ":") do
-            [f, line, _col] ->
-              [file: f, line: String.to_integer(line)]
-
-            _ ->
-              [file: loc_str, line: 0]
+            ret_types
           end
-
-        if msg = Beaver.Walker.attributes(op)["msg"] do
-          MLIR.Attribute.unwrap(msg) |> MLIR.to_string()
-        else
-          "Poison operation detected in the IR. #{to_string(op)}"
         end
-        |> then(&raise(CompileError, [{:description, &1} | compile_err_msg]))
-      else
-        ir ->
-          ir
-      end
-    end)
+        | for {{:"::", _, [_variable, t]}, index} <- Enum.with_index(args) do
+            quote do
+              def infer_argument_type(unquote(fa), unquote(index), state) do
+                {t, _, _} =
+                  Charms.Defm.Expander.expand(
+                    unquote(Macro.escape(t)),
+                    state,
+                    unquote(Macro.escape(env))
+                  )
 
-    :ok
-  end
+                t
+              end
+            end
+          end
+      ]
 
-  @default_visibility "private"
-  defp declare_enif(ctx, blk, name_str) do
-    mlir ctx: ctx, blk: blk do
-      {arg_types, ret_types} = Beaver.ENIF.signature(ctx, String.to_atom(name_str))
-
-      Func.func _(
-                  sym_name: MLIR.Attribute.string(name_str),
-                  sym_visibility: MLIR.Attribute.string(@default_visibility),
-                  function_type: Type.function(arg_types, ret_types)
-                ) do
-        region do
-        end
-      end
-    end
-  end
-
-  defp declared_required_enif(op) do
-    mlir ctx: MLIR.context(op), blk: MLIR.Module.body(MLIR.Module.from_operation(op)) do
-      declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_alloc")
-      declare_enif(Beaver.Env.context(), Beaver.Env.block(), "enif_free")
+    quote do
+      Module.put_attribute(__MODULE__, :__charm_function__, unquote(Macro.escape(d)))
+      unquote(invoker(d))
+      unquote_splicing(infer_type_helpers)
     end
   end
 
   # if it is single block with no terminator, add a return
-  defp append_missing_return(func) do
+  defp complete_function_termination(func) do
     with [r] <- Beaver.Walker.regions(func) |> Enum.to_list(),
          [b] <- Beaver.Walker.blocks(r) |> Enum.to_list(),
          last_op = %MLIR.Operation{} <-
@@ -260,21 +230,98 @@ defmodule Charms.Definition do
     |> then(fn {_, acc} -> MapSet.to_list(acc) end)
   end
 
-  def do_compile(ctx, definitions, defmstruct_definition) do
+  defp infer_argument_type(ast_map, fa, index, state) do
+    ast = ast_map[{fa, index}]
+
+    if ast do
+      {t_ast, env_ast} = ast
+
+      {t, _, _} =
+        Charms.Defm.Expander.expand(
+          t_ast,
+          state,
+          env_ast
+        )
+
+      t
+    end
+  end
+
+  defp infer_return_type(ast_map, fa, state) do
+    ast = ast_map[fa]
+
+    if ast do
+      {t_ast, env_ast} = ast
+
+      {t, _, _} =
+        Charms.Defm.Expander.expand(
+          t_ast,
+          state,
+          env_ast
+        )
+
+      t
+    end
+  end
+
+  defp extract_exports(m, definitions) do
+    m
+    |> MLIR.Operation.from_module()
+    |> MLIR.Operation.with_symbol_table(fn s_table ->
+      for %__MODULE__{name: name, env: env} <- definitions, reduce: [] do
+        acc ->
+          func_name = Charms.Defm.mangling(env.module, name)
+
+          func =
+            MLIR.CAPI.mlirSymbolTableLookup(
+              s_table,
+              MLIR.StringRef.create(func_name)
+            )
+
+          if !MLIR.null?(func) and !MLIR.Dialect.Func.external?(func) do
+            args_types =
+              Beaver.Walker.regions(func)
+              |> Enum.at(0)
+              |> Beaver.Walker.blocks()
+              |> Enum.at(0)
+              |> Beaver.Walker.arguments()
+              |> Enum.map(&MLIR.Value.type/1)
+
+            with [env_type | args_types] <- args_types,
+                 true <- Enum.all?(args_types, &MLIR.equal?(&1, Beaver.ENIF.Type.term())),
+                 true <- MLIR.equal?(env_type, Beaver.ENIF.Type.env()),
+                 function_type = func[:function_type] |> MLIR.Attribute.unwrap(),
+                 1 <-
+                   function_type
+                   |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
+                   |> Beaver.Native.to_term(),
+                 result_type <- MLIR.CAPI.mlirFunctionTypeGetResult(function_type, 0),
+                 true <- MLIR.equal?(result_type, Beaver.ENIF.Type.term()) do
+              [{name, length(args_types), func_name} | acc]
+            else
+              _ ->
+                acc
+            end
+          else
+            acc
+          end
+      end
+    end)
+  end
+
+  defp compile_to_mlir_module(ctx, definitions, defmstruct_definition) do
     # this function might be called at compile time, so we need to ensure the application is started
     :ok = Application.ensure_started(:kinda)
     :ok = Application.ensure_started(:beaver)
     m = MLIR.Module.create!("", ctx: ctx)
 
     mlir ctx: ctx, blk: MLIR.Module.body(m) do
-      mlir_expander = %Charms.Defm.Expander{
-        ctx: ctx,
-        blk: Beaver.Env.block(),
-        available_ops: MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx)),
-        vars: Map.new(),
-        region: nil,
-        enif_env: nil,
-        mod: m
+      mlir_importer = Charms.Defm.Expander.MLIRImporter.new(:strict_typing, ctx)
+
+      mlir_importer = %Charms.Defm.Expander.MLIRImporter{
+        mlir_importer
+        | mod: m,
+          blk: Beaver.Env.block()
       }
 
       if defmstruct_definition do
@@ -284,32 +331,36 @@ defmodule Charms.Definition do
         } = defmstruct_definition
 
         quote(do: defmstruct(unquote(fields)))
-        |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
+        |> Charms.Defm.Expander.expand_to_mlir(env, mlir_importer)
       end
 
-      # at this moment, we wrap it in the simplest way, before we decide what expander state to use.
-      return_types =
-        for %__MODULE__{name: name, env: env, ret_types: ret_types} <- definitions do
-          {name,
-           fn ->
-             {m, _, _} =
-               quote do
-                 unquote(ret_types)
-               end
-               |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
+      ast_map =
+        for %__MODULE__{name: name, env: env, ret_types: ret_types, args: args} <- definitions do
+          fa = {name, length(args)}
 
-             m
-           end}
+          [
+            {fa, {ret_types, env}}
+            | for {arg, index} <- Enum.with_index(args) do
+                {:"::", _, [_variable, t]} = arg
+                {{fa, index}, {t, env}}
+              end
+          ]
         end
+        |> List.flatten()
         |> Map.new()
 
-      mlir_expander = %Charms.Defm.Expander{mlir_expander | return_types: return_types}
+      mlir_importer = %Charms.Defm.Expander.MLIRImporter{
+        mlir_importer
+        | infer_argument_type: &infer_argument_type(ast_map, &1, &2, &3),
+          infer_return_type: &infer_return_type(ast_map, &1, &2)
+      }
 
       required_intrinsic_modules =
         for %__MODULE__{
               convention: convention,
               env: env,
-              call: call,
+              name: name,
+              args: args,
               ret_types: ret_types,
               body: body
             } <-
@@ -317,70 +368,24 @@ defmodule Charms.Definition do
             reduce: MapSet.new() do
           required_intrinsic_modules ->
             {_, state, _} =
-              quote(do: unquote(call) :: unquote(ret_types))
+              quote(do: unquote(name)(unquote_splicing(args)) :: unquote(ret_types))
               |> then(&quote(do: unquote(convention)(unquote(&1), unquote(body))))
-              |> Charms.Defm.Expander.expand_to_mlir(env, mlir_expander)
+              |> Charms.Defm.Expander.expand_to_mlir(env, mlir_importer)
 
             MapSet.union(state.mlir.required_intrinsic_modules, required_intrinsic_modules)
         end
     end
 
-    exports =
-      m
-      |> MLIR.Operation.from_module()
-      |> MLIR.Operation.with_symbol_table(fn s_table ->
-        for %__MODULE__{name: name, env: env} <- definitions, reduce: [] do
-          acc ->
-            func_name = Charms.Defm.mangling(env.module, name)
-
-            func =
-              MLIR.CAPI.mlirSymbolTableLookup(
-                s_table,
-                MLIR.StringRef.create(func_name)
-              )
-
-            if !MLIR.null?(func) and !MLIR.Dialect.Func.external?(func) do
-              args_types =
-                Beaver.Walker.regions(func)
-                |> Enum.at(0)
-                |> Beaver.Walker.blocks()
-                |> Enum.at(0)
-                |> Beaver.Walker.arguments()
-                |> Enum.map(&MLIR.Value.type/1)
-
-              with [env_type | args_types] <- args_types,
-                   true <- Enum.all?(args_types, &MLIR.equal?(&1, Beaver.ENIF.Type.term())),
-                   true <- MLIR.equal?(env_type, Beaver.ENIF.Type.env()),
-                   function_type = func[:function_type] |> MLIR.Attribute.unwrap(),
-                   1 <-
-                     function_type
-                     |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
-                     |> Beaver.Native.to_term(),
-                   result_type <- MLIR.CAPI.mlirFunctionTypeGetResult(function_type, 0),
-                   true <- MLIR.equal?(result_type, Beaver.ENIF.Type.term()) do
-                [{name, length(args_types), func_name} | acc]
-              else
-                _ ->
-                  acc
-              end
-            else
-              acc
-            end
-        end
-      end)
+    exports = extract_exports(m, definitions)
 
     m
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested(
       "func.func",
-      {"append_missing_return", "func.func", &append_missing_return/1}
+      {"complete_function_termination", "func.func", &complete_function_termination/1}
     )
     |> Beaver.Composer.append(Charms.Defm.Pass.CreateAbsentFunc)
     |> Charms.Debug.print_ir_pass()
-    |> Beaver.Composer.append(
-      {"declared-required-enif", "builtin.module", &declared_required_enif/1}
-    )
-    |> Beaver.Composer.append({"check-poison", "builtin.module", &check_poison!/1})
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?(), verifier: false)
     |> MLIR.Transform.canonicalize()
     |> run_composer_with_diagnostics()
@@ -405,7 +410,6 @@ defmodule Charms.Definition do
   end
 
   @doc """
-  Compile definitions into MLIR module.
   Compile definitions into an MLIR module.
 
   ## Partial and lazy compilation
@@ -417,7 +421,7 @@ defmodule Charms.Definition do
     ctx = MLIR.Context.create()
 
     try do
-      do_compile(ctx, definitions, defmstruct_definition)
+      compile_to_mlir_module(ctx, definitions, defmstruct_definition)
     after
       MLIR.Context.destroy(ctx)
     end

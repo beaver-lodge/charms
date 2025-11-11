@@ -18,8 +18,8 @@ defmodule ReferrerMod do
   alias Charms.Term
 
   defm term_roundtrip(env, i) :: Term.t() do
-    i = call RefereeMod.term_roundtrip0(env, i) :: Term.t()
-    i = call RefereeMod.term_roundtrip1(i) :: Term.t()
+    i = RefereeMod.term_roundtrip0(env, i)
+    i = RefereeMod.term_roundtrip1(i)
     func.return(i)
   end
 end

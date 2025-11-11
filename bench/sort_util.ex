@@ -82,5 +82,8 @@ defmodule SortUtil do
       set! j_ptr[0], j + 1
       set! k_ptr[0], k + 1
     end
+
+    free! left_temp
+    free! right_temp
   end
 end

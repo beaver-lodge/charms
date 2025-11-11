@@ -2,7 +2,6 @@
 locals_without_parens = [
   op: 1,
   value: 1,
-  call: 1,
   const: 1,
   defm: 2,
   defk: 2,
@@ -10,7 +9,6 @@ locals_without_parens = [
   set!: 2,
   ptr!: 1,
   ptr!: 2,
-  defmstruct: 1,
   launch!: 3,
   defer: 1,
   free!: 1,

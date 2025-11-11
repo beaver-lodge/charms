@@ -27,7 +27,7 @@ defmodule Charms do
 
   ## Caveats and limitations
 
-  - We need a explicit `call` in function call because the `::` special form has a parser priority  that is too low so a `call` macro is introduced to ensure proper scope.
+  - We need explicit `value` or `op` macro, because the `::` special form has a parser priority that is too low so an extra macro is introduced to ensure proper scope.
 
   ## Glossary of modules
 
@@ -41,15 +41,13 @@ defmodule Charms do
     quote do
       import Charms
       use Beaver
-      import Beaver.MLIR.Type
       import Charms.Prelude
       import Charms.GPU
       @doc false
       def __use_ir__, do: nil
       @before_compile Charms
-      Module.register_attribute(__MODULE__, :defm, accumulate: true)
-      Module.register_attribute(__MODULE__, :defk, accumulate: true)
-      Module.register_attribute(__MODULE__, :defmstruct, accumulate: false)
+      Module.register_attribute(__MODULE__, :__charm_function__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__charm_struct__, accumulate: false)
       Module.register_attribute(__MODULE__, :init_at_fun_call, persist: true)
       @init_at_fun_call Keyword.get(unquote(opts), :init, true)
 
@@ -58,20 +56,25 @@ defmodule Charms do
         []
       end
 
-      defoverridable dynamic_libraries: 0
+      @doc false
+      def expand_struct(_mlir_expander) do
+        nil
+      end
+
+      defoverridable dynamic_libraries: 0, expand_struct: 1
     end
   end
 
+  defp compile_module_attributes(env) do
+    defm_definitions =
+      (Module.get_attribute(env.module, :__charm_function__) || []) |> Enum.reverse()
+
+    defmstruct_definition = Module.get_attribute(env.module, :__charm_struct__)
+    Charms.Definition.compile(defm_definitions, defmstruct_definition)
+  end
+
   defmacro __before_compile__(env) do
-    defm_definitions = Module.get_attribute(env.module, :defm) || []
-    defk_definitions = Module.get_attribute(env.module, :defk) || []
-    defmstruct_definition = Module.get_attribute(env.module, :defmstruct)
-
-    {ir, referenced_modules, required_intrinsic_modules, exports} =
-      (defm_definitions ++ defk_definitions)
-      |> Enum.reverse()
-      |> Charms.Definition.compile(defmstruct_definition)
-
+    {ir, referenced_modules, required_intrinsic_modules, exports} = compile_module_attributes(env)
     use_ir = generate_use_ir_quotes(referenced_modules, env.module)
     intrinsic = generate_use_intrinsic_quotes(required_intrinsic_modules, env.module)
     ir_exports = generate_ir_exports_quotes()
@@ -84,8 +87,10 @@ defmodule Charms do
       @all_exports unquote(Macro.escape(exports))
       unquote(ir_exports)
       def __ir_exports__(_, _), do: nil
-      unquote(generate_ir_hash_quotes())
       unquote(generate_helper_functions())
+      @doc false
+      def infer_argument_type(_fa, _index, _state), do: nil
+      def infer_return_type(_fa, _state), do: nil
     end
   end
 
@@ -115,18 +120,6 @@ defmodule Charms do
     end
   end
 
-  defp generate_ir_hash_quotes() do
-    quote do
-      @ir_hash [
-                 :erlang.phash2(@ir)
-                 | for r <- @referenced_modules, r != __MODULE__ do
-                     r.__ir_digest__()
-                   end
-               ]
-               |> List.flatten()
-    end
-  end
-
   defp generate_helper_functions() do
     quote do
       @doc false
@@ -134,6 +127,13 @@ defmodule Charms do
         @ir
       end
 
+      @ir_hash [
+                 :erlang.phash2(@ir)
+                 | for r <- @referenced_modules, r != __MODULE__ do
+                     r.__ir_digest__()
+                   end
+               ]
+               |> List.flatten()
       @doc false
       def __ir_digest__ do
         @ir_hash
@@ -186,7 +186,29 @@ defmodule Charms do
   """
   defmacro defmstruct(fields) do
     quote do
-      @defmstruct unquote(Macro.escape(Charms.Defmstruct.Definition.new(__CALLER__, fields)))
+      @__charm_struct__ unquote(
+                          Macro.escape(Charms.Defmstruct.Definition.new(__CALLER__, fields))
+                        )
+      use Charms.Intrinsic
+      alias Charms.Intrinsic.Opts
+
+      defintr t() do
+        %Opts{ctx: ctx} = __IR__
+
+        %Charms.Defmstruct.Definition{
+          fields: fields,
+          env: env
+        } = @__charm_struct__
+
+        # Expands to defmstruct/2, which is then handled by
+        # Charms.Defm.Expander.expand_macro
+        {quote(do: defmstruct_impl(unquote(__MODULE__), unquote(fields))), []}
+      end
     end
+  end
+
+  @doc false
+  defmacro defmstruct_impl(_mod, _fields) do
+    raise "should only use inside 'defm'"
   end
 end
