@@ -169,10 +169,8 @@ defmodule Charms.Definition do
 
     quote do
       Module.put_attribute(__MODULE__, :__charm_function__, unquote(Macro.escape(d)))
-
       unquote(invoker(d))
-
-      unquote(infer_type_helpers)
+      unquote_splicing(infer_type_helpers)
     end
   end
 

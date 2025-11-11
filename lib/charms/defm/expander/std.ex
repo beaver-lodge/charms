@@ -78,8 +78,8 @@ defmodule Charms.Defm.Expander.Std do
     {while, state, env}
   end
 
-  def expand(String, :length, args, state, env) do
-    {string, state, env} = Expander.expand(args, state, env)
+  def expand(String, :length, [string], state, env) do
+    {string, state, env} = Expander.expand(string, state, env)
 
     len =
       mlir ctx: state.mlir.ctx, blk: state.mlir.blk do
