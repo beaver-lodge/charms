@@ -43,8 +43,6 @@ Note the type annotations here. The first argument, `env`, represents the BEAM e
 
 ## Calling Other Functions
 
-To call other functions defined with `defm`, use the `call` macro:
-
 ```elixir
 defmodule CallingAnother do
   use Charms
@@ -55,17 +53,15 @@ defmodule CallingAnother do
   end
 
   defm caller_function(env, arg :: Term.t()) :: Term.t() do
-    fun = call callee_function(arg) :: Term.t()
     fun = callee_function(arg)
-    fun = call HaveFun.my_fun(env, fun, fun) :: Term.t()
+    fun = callee_function(arg)
+    fun = HaveFun.my_fun(env, fun, fun)
     HaveFun.my_fun(env, fun, fun)
   end
 end
 
 CallingAnother.caller_function("hello")
 ```
-
-The `call` macro is essential when you want to declare the return type of an expression.
 
 ## Using Pointers and Memory Operations
 

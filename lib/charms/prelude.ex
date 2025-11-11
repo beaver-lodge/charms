@@ -171,4 +171,32 @@ defmodule Charms.Prelude do
   def intrinsics() do
     @enif_functions ++ [:result_at]
   end
+
+  defintr i32() do
+    MLIR.Type.i32(ctx: __IR__.ctx)
+  end
+
+  defintr i64() do
+    MLIR.Type.i64(ctx: __IR__.ctx)
+  end
+
+  defintr f32() do
+    MLIR.Type.f32(ctx: __IR__.ctx)
+  end
+
+  defintr f64() do
+    MLIR.Type.f64(ctx: __IR__.ctx)
+  end
+
+  defintr index() do
+    MLIR.Type.index(ctx: __IR__.ctx)
+  end
+
+  defintr bool() do
+    MLIR.Type.i1(ctx: __IR__.ctx)
+  end
+
+  defintr unranked_tensor(elem_t) do
+    MLIR.Type.unranked_tensor!(elem_t)
+  end
 end

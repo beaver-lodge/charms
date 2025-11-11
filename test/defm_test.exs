@@ -2,37 +2,68 @@ defmodule DefmTest do
   import ExUnit.CaptureIO
   use ExUnit.Case, async: true
 
-  test "referenced modules" do
-    assert [RefereeMod] = ReferrerMod.referenced_modules()
-  end
-
-  test "invalid return of absent alias" do
+  test "undefined variable" do
     assert_raise CompileError,
-                 ~r"test/defm_test.exs:#{__ENV__.line + 5}: invalid return type",
+                 ~r"undefined variable \"xx\"",
                  fn ->
-                   defmodule InvalidRet do
-                     use Charms
-
-                     defm my_function(env, arg1, arg2) :: Invalid.t() do
-                       func.return(arg2)
-                     end
-                   end
-                 end
-  end
-
-  test "invalid arg of absent alias" do
-    assert_raise CompileError,
-                 ~r"test/defm_test.exs:#{__ENV__.line + 6}: invalid argument type #2",
-                 fn ->
-                   defmodule InvalidArgType do
+                   defmodule UndefinedVariable do
                      use Charms
                      alias Charms.Term
 
-                     defm my_function(env, arg1 :: Invalid.t(), arg2) :: Term.t() do
-                       func.return(arg2)
+                     defm my_function(env, arg1, arg2) :: Term.t() do
+                       func.return(xx)
                      end
                    end
                  end
+  end
+
+  describe "type inference" do
+    test "mismatched local call" do
+      assert_raise CompileError,
+                   ~r"Incompatible type for argument #0 in call to DefmTest.MissMatchedLocalCall.foo/1: expected i64, but got f32",
+                   fn ->
+                     defmodule MissMatchedLocalCall do
+                       use Charms
+                       alias Charms.Term
+
+                       defm foo(arg1) :: Term.t() do
+                         func.return(arg1)
+                       end
+
+                       defm bar() :: Term.t() do
+                         foo(const 1.0 :: f32())
+                       end
+                     end
+                   end
+    end
+
+    test "mismatched remove call" do
+      assert_raise CompileError,
+                   ~r"Incompatible type for argument #0 in call to DefmTest.MissMatchedRemoteCall.foo/1: expected i64, but got f32",
+                   fn ->
+                     defmodule MissMatchedRemoteCall do
+                       use Charms
+                       alias Charms.Term
+
+                       defm foo(arg1) :: Term.t() do
+                         func.return(arg1)
+                       end
+                     end
+
+                     defmodule MissMatchedRemoteCaller do
+                       use Charms
+                       alias Charms.Term
+
+                       defm bar() :: Term.t() do
+                         MissMatchedRemoteCall.foo(const 1.0 :: f32())
+                       end
+                     end
+                   end
+    end
+  end
+
+  test "referenced modules" do
+    assert [RefereeMod] = ReferrerMod.referenced_modules()
   end
 
   test "only env defm is exported" do
@@ -122,46 +153,6 @@ defmodule DefmTest do
     end
   end
 
-  describe "different calls" do
-    test "call with return type" do
-      assert :with == DifferentCalls.return_type_annotation(:with)
-    end
-
-    test "call without return type" do
-      assert :without == DifferentCalls.no_return_type_annotation(:without)
-    end
-
-    test "undefined remote function" do
-      line = __ENV__.line
-
-      assert_raise CompileError,
-                   ~r"function something not found in module DifferentCalls",
-                   fn ->
-                     defmodule Undefined do
-                       use Charms
-
-                       defm without_call_macro(env, i) do
-                         DifferentCalls.something(i)
-                       end
-                     end
-                   end
-    end
-
-    test "wrong return type remote function" do
-      assert_raise CompileError,
-                   ~r"mismatch type in invocation: f32 vs. i64",
-                   fn ->
-                     defmodule WrongReturnType do
-                       use Charms
-
-                       defm without_call_macro(env, i) do
-                         call DifferentCalls.no_return_type_annotation(env, i) :: f32()
-                       end
-                     end
-                   end
-    end
-  end
-
   describe "diagnostic" do
     test "doesn't match function result type" do
       assert_raise CompileError, ~r/type of return operand 0.+/, fn ->
@@ -242,6 +233,7 @@ defmodule DefmTest do
 
       defm foo(env) :: Term.t() do
         dst_arr = ptr! f64(), 2
+        defer free! dst_arr
         val = const 1.1 :: f64()
         src_arr = ptr! f64()
         set! src_arr[0], val
@@ -274,7 +266,7 @@ defmodule DefmTest do
     assert 1 = LastExpression.bar(1)
   end
 
-  describe "ptr tests" do
+  describe "pointer operations" do
     test "alloc with value" do
       defmodule AllocWithValueAsSize do
         use Charms

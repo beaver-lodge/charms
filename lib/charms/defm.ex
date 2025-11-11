@@ -14,52 +14,42 @@ defmodule Charms.Defm do
   @doc """
   create an MLIR operation
   """
-  defmacro op(_), do: :implemented_in_expander
+  defmacro op(_), do: raise("should only use inside 'defm'")
 
   @doc """
   create an MLIR operation and return the result value(s)
   """
-  defmacro value(_expr), do: :implemented_in_expander
-
-  @doc """
-  call a local function with return
-  """
-  defmacro call({:"::", _, [_call, _types]}), do: :implemented_in_expander
-
-  @doc """
-  call a function defined in another `Charms` module with return
-  """
-  defmacro call(_mod, {:"::", _, [_call, _types]}), do: :implemented_in_expander
+  defmacro value(_expr), do: raise("should only use inside 'defm'")
 
   @doc """
   for loop
   """
-  defmacro for_loop(_expr, do: _body), do: :implemented_in_expander
+  defmacro for_loop(_expr, do: _body), do: raise("should only use inside 'defm'")
 
   @doc """
   while loop
   """
-  defmacro while(_expr, do: _body), do: :implemented_in_expander
+  defmacro while(_expr, do: _body), do: raise("should only use inside 'defm'")
 
   @doc """
   `cond` expression requires identical types for both branches
   """
-  defmacro cond_br(_condition, _clauses), do: :implemented_in_expander
+  defmacro cond_br(_condition, _clauses), do: raise("should only use inside 'defm'")
 
   @doc """
   setting value with a index expression
   """
-  defmacro set!(_index_expression, _value), do: :implemented_in_expander
+  defmacro set!(_index_expression, _value), do: raise("should only use inside 'defm'")
 
   @doc """
   launch a GPU kernel and wait for its completion
   """
-  defmacro launch!(_kernel_call, _blocks, _threads), do: :implemented_in_expander
+  defmacro launch!(_kernel_call, _blocks, _threads), do: raise("should only use inside 'defm'")
 
   @doc """
   Executes an expression unconditionally at do-block exit.
   """
-  defmacro defer(_expression), do: :implemented_in_expander
+  defmacro defer(_expression), do: raise("should only use inside 'defm'")
 
   @doc false
   def mangling(mod, func) do

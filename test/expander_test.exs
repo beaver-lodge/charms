@@ -129,7 +129,7 @@ defmodule POCTest do
           defm foo(a :: Term.t()) :: Term.t(), do: func.return(a)
 
           defm bar(env :: Env.t(), a :: Term.t()) :: Term.t() do
-            b = call foo(a) :: Term.t()
+            b = foo(a)
             func.return(b)
           end
         end
@@ -145,54 +145,19 @@ defmodule POCTest do
       end)
     end
 
-    test "intrinsic not found" do
-      quote do
-        defmodule InvalidRemoteCall do
-          import Charms
-          import Charms.Defm
-          alias Charms.Term
-
-          defm foo(a :: Term.t()) :: Term.t() do
-            Foo.bar(a)
-            func.return(a)
-          end
-        end
-      end
-      |> compile()
-      |> tap(fn m ->
-        assert to_string(m) =~ "Unknown invocation: Foo.bar/1"
-      end)
-      |> MLIR.verify!()
-    end
-
     test "op not found" do
       assert_raise CompileError,
                    ~r"example.exs: Unknown MLIR operation to create: cf.ar, did you mean: cf.br",
                    fn ->
                      quote do
                        defmodule ReturnPassedArg do
+                         import Charms
                          import Charms.Defm
                          alias Charms.Term
                          defm foo(a :: Term.t()) :: Term.t(), do: cf.ar(a)
                        end
                      end
                      |> compile()
-                   end
-    end
-
-    test "no return" do
-      assert_raise CompileError,
-                   ~r"example.exs: Function call @Elixir.InvalidLocalCall.dummy does not return a value",
-                   fn ->
-                     quote do
-                       defmodule InvalidLocalCall do
-                         import Charms
-                         import Charms.Defm
-                         alias Charms.Term
-                         defm foo(a :: Term.t()) :: Term.t(), do: func.return(dummy(a))
-                       end
-                     end
-                     |> compile
                    end
     end
   end

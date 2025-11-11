@@ -20,6 +20,7 @@ defmodule Charms.Defm.Expander do
   use Beaver
   alias MLIR.Attribute
   alias MLIR.Dialect.{Func, CF, SCF, MemRef, Index, Arith, GPU}
+  alias Charms.Defm.Expander.MLIRImporter
   alias Charms.Defm.Expander.Call
   require Beaver.MLIR.Dialect.Func
   require GPU
@@ -27,18 +28,6 @@ defmodule Charms.Defm.Expander do
   # Define the environment we will use for expansion.
   # We reset the fields below but we will need to set
   # them accordingly later on.
-
-  defstruct ctx: nil,
-            mod: nil,
-            blk: nil,
-            available_ops: MapSet.new(),
-            vars: Map.new(),
-            region: nil,
-            enif_env: nil,
-            dependence_modules: Map.new(),
-            required_intrinsic_modules: MapSet.new(),
-            deferrals: [],
-            return_types: Map.new()
 
   @env %{
     Macro.Env.prune_compile_info(__ENV__)
@@ -71,16 +60,7 @@ defmodule Charms.Defm.Expander do
   """
   def expand(ast, file) do
     NimblePool.checkout!(Charms.ContextPool, :checkout, fn _, ctx ->
-      available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
-
-      mlir = %__MODULE__{
-        ctx: ctx,
-        blk: MLIR.Block.create(),
-        available_ops: available_ops,
-        vars: Map.new(),
-        region: nil,
-        enif_env: nil
-      }
+      mlir = __MODULE__.MLIRImporter.new(:best_effort, ctx)
 
       {expand(
          ast,
@@ -93,7 +73,7 @@ defmodule Charms.Defm.Expander do
   @doc """
   Expand an AST into MLIR.
   """
-  def expand_to_mlir(ast, env, %__MODULE__{ctx: ctx} = mlir_expander) do
+  def expand_to_mlir(ast, env, %__MODULE__.MLIRImporter{ctx: ctx} = mlir_expander) do
     available_ops = MapSet.new(MLIR.Dialect.Registry.ops(:all, ctx: ctx))
     mlir_expander = mlir_expander |> Map.put(:available_ops, available_ops)
 
@@ -116,7 +96,9 @@ defmodule Charms.Defm.Expander do
 
           state =
             Enum.zip(args, arg_values)
-            |> Enum.reduce(state, fn {k, v}, state -> put_mlir_var(state, k, v) end)
+            |> Enum.reduce(state, fn {k, v}, state ->
+              update_in(state.mlir, &MLIRImporter.put_var(&1, k, v))
+            end)
 
           state =
             with [head_arg_type | _] <- arg_types,
@@ -158,7 +140,7 @@ defmodule Charms.Defm.Expander do
   def expand_with_bindings(ast, state, env, bindings) do
     state_with_bindings =
       for {var, val} <- bindings, reduce: state do
-        state -> put_mlir_var(state, var, val)
+        state -> update_in(state.mlir, &MLIRImporter.put_var(&1, var, val))
       end
 
     {v, _state, _env} = expand(ast, state_with_bindings, env)
@@ -352,7 +334,7 @@ defmodule Charms.Defm.Expander do
         raise_compile_error(env, "intrinsic implementation not found for #{fun}/#{length(args)}")
       end
 
-      Call.expand_intrinsics(loc, Charms.Kernel, intrinsic_impl, args, state, env)
+      Charms.Defm.Expander.Intrinsic.expand(loc, Charms.Kernel, intrinsic_impl, args, state, env)
       |> then(fn {v, _, _} ->
         if is_list(v) do
           List.last(v)
@@ -384,7 +366,7 @@ defmodule Charms.Defm.Expander do
   def expand({:=, _meta, [left, right]}, state, env) do
     {left, state, env} = expand_pattern(left, state, env)
     {right, state, env} = expand(right, state, env)
-    state = put_mlir_var(state, left, right)
+    state = update_in(state.mlir, &MLIRImporter.put_var(&1, left, right))
     {right, state, env}
   end
 
@@ -507,7 +489,16 @@ defmodule Charms.Defm.Expander do
   end
 
   def expand(ast, state, env) do
-    {get_mlir_var(state, ast) || ast, state, env}
+    case MLIRImporter.get_var(state.mlir, ast) do
+      {:ok, val} ->
+        {val, state, env}
+
+      {:undefined_variable, _name} = uv ->
+        {uv, state, env}
+
+      {:skip, ast} ->
+        {ast, state, env}
+    end
   end
 
   # Expands a nil clause body in an if statement, yielding no value.
@@ -659,12 +650,13 @@ defmodule Charms.Defm.Expander do
     end
   end
 
-  def expand_macro(_meta, Charms, :defmstruct, [fields], _callback, state, env) do
-    {field_names, field_types} = Enum.unzip(fields)
-    {field_types, state, env} = expand(field_types, state, env)
+  def expand_macro(_meta, Charms, :defmstruct_impl, [module, fields], _callback, state, env) do
+    {struct_t, _field_names} = Charms.Defmstruct.Definition.expand(module, fields, state, env)
+    {struct_t, state, env}
+  end
 
-    struct_t =
-      Charms.Struct.llvm_struct_type_identified!(env.module, field_types, ctx: state.mlir.ctx)
+  def expand_macro(_meta, Charms, :defmstruct, [fields], _callback, state, env) do
+    {struct_t, field_names} = Charms.Defmstruct.Definition.expand(env.module, fields, state, env)
 
     Charms.Struct.save_as_module_attribute(state.mlir.ctx, state.mlir.mod, struct_t, field_names)
     {nil, state, env}
@@ -852,8 +844,8 @@ defmodule Charms.Defm.Expander do
           region do
             block _body(index_val >>> Type.index()) do
               element_val = MemRef.load(ptr, index_val, loc: loc) >>> t
-              state = put_mlir_var(state, element, element_val)
-              state = put_mlir_var(state, index, index_val)
+              state = update_in(state.mlir, &MLIRImporter.put_var(&1, element, element_val))
+              state = update_in(state.mlir, &MLIRImporter.put_var(&1, index, index_val))
               expand(body, put_in(state.mlir.blk, Beaver.Env.block()), env)
               SCF.yield() >>> []
             end
@@ -890,40 +882,16 @@ defmodule Charms.Defm.Expander do
 
   def expand_macro(_meta, Charms.Defm, :defer, expression, _callback, state, env) do
     state = update_in(state.mlir.deferrals, &[{expression, state, env} | &1])
-    {[], state, env}
+    {:defer, state, env}
   end
 
   def expand_macro(_meta, Charms.Defm, :op, [call], _callback, state, env) do
-    {call, return_types} = decompose_call_signature(call)
+    {call, return_types} = Charms.Definition.Call.decompose_return_signature(call)
     {{dialect, _, _}, op, args} = Macro.decompose_call(call)
     dialect = normalize_dot_op_name(dialect)
-    op = "#{dialect}.#{op}"
-    {args, state, env} = expand(args, state, env)
-    {return_types, state, env} = expand(return_types, state, env)
-
-    return_types =
-      case return_types do
-        [] ->
-          [:infer]
-
-        _ ->
-          List.flatten(return_types)
-      end
-
-    state = expand_deferrals_before_terminator(op, state)
-
-    op =
-      %Beaver.SSA{
-        op: op,
-        arguments: args,
-        ctx: state.mlir.ctx,
-        blk: state.mlir.blk,
-        loc: MLIR.Location.from_env(env)
-      }
-      |> Beaver.SSA.put_results(return_types)
-      |> MLIR.Operation.create()
-
-    {op, state, env}
+    {args, state, env} = expand_list(args, state, env)
+    {return_types, state, env} = expand_list(return_types, state, env)
+    Charms.Defm.Expander.Dialect.expand(dialect, op, args, return_types, state, env)
   end
 
   def expand_macro(meta, Charms.Defm, :value, [call], callback, state, env) do
@@ -931,14 +899,6 @@ defmodule Charms.Defm.Expander do
       expand_macro(meta, Charms.Defm, :op, [call], callback, state, env)
 
     {MLIR.Operation.results(op), state, env}
-  end
-
-  def expand_macro(_, Charms.Defm, :call, [{:"::", _, [call, types]}], _callback, state, env) do
-    Call.expand_call_of_types(call, types, state, env)
-  end
-
-  def expand_macro(_meta, Charms.Defm, :call, [call], _callback, state, env) do
-    Call.expand_call_of_types(call, [], state, env)
   end
 
   def expand_macro(meta, module, fun, args, callback, state, env) do
@@ -1031,32 +991,5 @@ defmodule Charms.Defm.Expander do
       end)
 
     {ast, state, env}
-  end
-
-  def put_mlir_var(state, name, val) when is_atom(name) do
-    update_in(state.mlir.vars, &Map.put(&1, name, val))
-  end
-
-  def put_mlir_var(state, {name, _meta, _ctx}, val) do
-    put_mlir_var(state, name, val)
-  end
-
-  defp get_mlir_var(state, {name, _meta, ctx}) when is_atom(ctx) do
-    Map.get(state.mlir.vars, name)
-  end
-
-  defp get_mlir_var(_state, _ast) do
-    nil
-  end
-
-  @doc """
-  Decomposes a call into the call part and return type.
-  """
-  def decompose_call_signature({:"::", _, [call, ret_type]}) do
-    {call, [ret_type]}
-  end
-
-  def decompose_call_signature(call) do
-    {call, []}
   end
 end

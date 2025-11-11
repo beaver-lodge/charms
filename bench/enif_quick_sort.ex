@@ -49,6 +49,7 @@ defmodule ENIFQuickSort do
       SortUtil.copy_terms(env, movable_list_ptr, arr)
       zero = const 0 :: i32()
       do_sort(arr, zero, len - 1)
+      defer free! arr
       enif_make_list_from_array(env, arr, len)
     else
       enif_raise_exception(env, @err)

@@ -68,7 +68,7 @@ defmodule Charms.Intrinsic do
         def unquote(mark_generated(call)) do
           {name, arity} = __ENV__.function
 
-          raise "Intrinsic #{Exception.format_mfa(__MODULE__, name, arity)} cannot be called outside of a defm body"
+          raise "Intrinsic #{Exception.format_mfa(__MODULE__, name, arity)} cannot be called outside of a defm"
         end
       end
 

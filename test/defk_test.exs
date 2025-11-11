@@ -21,39 +21,37 @@ defmodule VecAddKernel do
     size = Term.to_i64!(env, @size)
 
     # allocate
-    a_alloc = GPU.allocate(f32(), size)
-    b_alloc = GPU.allocate(f32(), size)
-    c_alloc = GPU.allocate(f32(), size)
-    buffer_alloc = GPU.allocate(f32(), size, host_shared: true)
+    a = GPU.allocate(f32(), size)
+    b = GPU.allocate(f32(), size)
+    c = GPU.allocate(f32(), size)
+    buffer = GPU.allocate(f32(), size, host_shared: true)
 
     # free
     defer GPU.await([
-            GPU.dealloc(a_alloc),
-            GPU.dealloc(b_alloc),
-            GPU.dealloc(c_alloc),
-            GPU.dealloc(buffer_alloc)
+            GPU.dealloc(a),
+            GPU.dealloc(b),
+            GPU.dealloc(c),
+            GPU.dealloc(buffer)
           ])
 
-    buffer = Pointer.to_offset(buffer_alloc)
+    buffer = Pointer.to_offset(buffer)
     # copy input data to GPU
     movable_list_ptr = ptr! Term.t()
     set! movable_list_ptr[0], l_a
     copy_terms_as_floats(env, movable_list_ptr, buffer)
-    GPU.memcpy(a_alloc, buffer_alloc) |> GPU.await()
+    GPU.memcpy(a, buffer) |> GPU.await()
     set! movable_list_ptr[0], l_b
     copy_terms_as_floats(env, movable_list_ptr, buffer)
-    GPU.memcpy(b_alloc, buffer_alloc) |> GPU.await()
+    GPU.memcpy(b, buffer) |> GPU.await()
 
-    a = Pointer.to_offset(a_alloc)
-    b = Pointer.to_offset(b_alloc)
-    c = Pointer.to_offset(c_alloc)
     # launch kernel
     launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
     launch! noop(), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
 
     # copy output data back to CPU
-    GPU.memcpy(buffer_alloc, c_alloc) |> GPU.await()
+    GPU.memcpy(buffer, c) |> GPU.await()
     arr = ptr! Term.t(), size
+    defer free! arr
 
     for_loop {element, i} <- {buffer, size} do
       element = value arith.extf(element) :: f64()

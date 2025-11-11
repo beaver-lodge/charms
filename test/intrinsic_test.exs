@@ -21,7 +21,7 @@ defmodule Charms.IntrinsicTest do
   describe "defintr with default values" do
     test "must be called in defm" do
       assert_raise RuntimeError,
-                   ~r"Intrinsic Charms.IntrinsicTest.TestIntrinsic.test_default/2 cannot be called outside of a defm body",
+                   ~r"Intrinsic Charms.IntrinsicTest.TestIntrinsic.test_default/2 cannot be called outside of a defm",
                    fn ->
                      TestIntrinsic.test_default(:value1)
                    end
