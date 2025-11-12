@@ -318,12 +318,4 @@ defmodule Charms.Pointer do
       LLVM.mlir_zero(loc: loc) >>> ~t{!llvm.ptr}
     end
   end
-
-  defintr to_offset(ptr) do
-    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
-
-    mlir ctx: ctx, blk: blk do
-      unify_layout(ptr, ctx, blk, loc)
-    end
-  end
 end
