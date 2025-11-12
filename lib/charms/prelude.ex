@@ -145,6 +145,9 @@ defmodule Charms.Prelude do
     arity = Beaver.ENIF.signature(signature_ctx, name) |> elem(0) |> length()
     args = Macro.generate_arguments(arity, __MODULE__)
 
+    @doc """
+    Intrinsic for the NIF function `#{name}/#{arity}`.
+    """
     defintr unquote(name)(unquote_splicing(args)) do
       call_enif(unquote(name), unquote(args), __IR__)
     end

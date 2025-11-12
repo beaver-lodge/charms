@@ -34,7 +34,6 @@ defmodule VecAddKernel do
             GPU.dealloc(buffer)
           ])
 
-    buffer = Pointer.to_offset(buffer)
     # copy input data to GPU
     movable_list_ptr = ptr! Term.t()
     set! movable_list_ptr[0], l_a

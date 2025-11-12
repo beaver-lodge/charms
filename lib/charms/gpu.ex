@@ -25,8 +25,7 @@ defmodule Charms.GPU do
 
   defp to_index(size, %Opts{ctx: ctx, blk: blk, loc: loc}) when is_integer(size) do
     mlir ctx: ctx, blk: blk do
-      Arith.constant(value: Attribute.integer(MLIR.Type.index(ctx: ctx), size), loc: loc) >>>
-        MLIR.Type.index(ctx: ctx)
+      Arith.constant(value: Attribute.integer(Type.index(), size), loc: loc) >>> Type.index()
     end
   end
 
