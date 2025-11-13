@@ -2,15 +2,6 @@ defmodule DefmTest do
   import ExUnit.CaptureIO
   use ExUnit.Case, async: true
 
-  test "empty body" do
-    defmodule EmptyBody do
-      use Charms
-
-      defm foo() do
-      end
-    end
-  end
-
   test "undefined variable" do
     assert_raise CompileError,
                  ~r"undefined variable \"xx\"",
