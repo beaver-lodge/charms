@@ -36,7 +36,7 @@ defmodule Charms.Definition do
 
   require Beaver.Env
   use Beaver
-  alias MLIR.Dialect.Func
+  alias MLIR.Dialect.{Func, GPU}
   require Func
   require Logger
   import Charms.Diagnostic
@@ -175,20 +175,26 @@ defmodule Charms.Definition do
   end
 
   # if it is single block with no terminator, add a return
-  defp complete_function_termination(func) do
+  defp complete_function_termination(func, terminator) do
     with [r] <- Beaver.Walker.regions(func) |> Enum.to_list(),
          [b] <- Beaver.Walker.blocks(r) |> Enum.to_list(),
          last_op = %MLIR.Operation{} <-
            Beaver.Walker.operations(b) |> Enum.to_list() |> List.last(),
          last_op_name <- MLIR.Operation.name(last_op),
-         false <- last_op_name == "func.return" do
+         false <- last_op_name == terminator do
       case func[:function_type]
            |> MLIR.Attribute.unwrap()
            |> MLIR.CAPI.mlirFunctionTypeGetNumResults()
            |> Beaver.Native.to_term() do
         0 ->
           mlir ctx: MLIR.context(func), blk: b do
-            Func.return(loc: MLIR.Operation.location(func)) >>> []
+            case terminator do
+              "func.return" ->
+                Func.return(loc: MLIR.Operation.location(func)) >>> []
+
+              "gpu.return" ->
+                GPU.return(loc: MLIR.Operation.location(func)) >>> []
+            end
           end
 
         1 ->
@@ -382,7 +388,18 @@ defmodule Charms.Definition do
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.nested(
       "func.func",
-      {"complete_function_termination", "func.func", &complete_function_termination/1}
+      {"complete_function_termination", "func.func",
+       &complete_function_termination(&1, "func.return")}
+    )
+    |> Beaver.Composer.nested(
+      "gpu.module",
+      [
+        {"gpu.func",
+         [
+           {"complete_function_termination_gpu", "gpu.func",
+            &complete_function_termination(&1, "gpu.return")}
+         ]}
+      ]
     )
     |> Beaver.Composer.append(Charms.Defm.Pass.CreateAbsentFunc)
     |> Charms.Debug.print_ir_pass()
