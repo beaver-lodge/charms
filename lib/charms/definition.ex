@@ -37,7 +37,6 @@ defmodule Charms.Definition do
   require Beaver.Env
   use Beaver
   alias MLIR.Dialect.{Func, GPU}
-  require Func
   require Logger
   import Charms.Diagnostic
 
