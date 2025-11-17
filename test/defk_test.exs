@@ -7,7 +7,6 @@ defmodule VecAddKernel do
   defk vec_add(a :: Pointer.t(f32()), b :: Pointer.t(f32()), c :: Pointer.t(f32())) do
     i = GPU.block_id() * @block_size + GPU.thread_id()
     set! c[i], a[i] + b[i]
-    GPU.return()
   end
 
   # kernel that does nothing, used to validate
