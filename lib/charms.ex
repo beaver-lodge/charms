@@ -42,7 +42,6 @@ defmodule Charms do
       import Charms
       use Beaver
       import Charms.Prelude
-      import Charms.GPU
       @doc false
       def __use_ir__, do: nil
       @before_compile Charms
