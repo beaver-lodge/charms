@@ -18,7 +18,7 @@ defmodule VecAddKernel do
   end
 
   @size 10_000
-  @grid_size ceil(@size / @block_size) |> round() |> trunc()
+  @grid_size ceil(@size / @block_size)
   defm main(env, l_a :: Term.t(), l_b :: Term.t()) :: Term.t() do
     size = Term.to_i64!(env, @size)
 
