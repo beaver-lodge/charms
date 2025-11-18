@@ -9,13 +9,16 @@ defmodule VecAddKernel do
     set! c[i], a[i] + b[i]
   end
 
-  # kernel that does nothing, used to validate
   defk noop() do
     GPU.return()
   end
 
+  defk barrier() do
+    GPU.barrier()
+  end
+
   @size 10_000
-  @grid_size Float.ceil(@size / @block_size) |> Float.round() |> trunc()
+  @grid_size ceil(@size / @block_size)
   defm main(env, l_a :: Term.t(), l_b :: Term.t()) :: Term.t() do
     size = Term.to_i64!(env, @size)
 
@@ -45,6 +48,7 @@ defmodule VecAddKernel do
     # launch kernel
     launch! vec_add(a, b, c), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
     launch! noop(), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
+    launch! barrier(), Term.to_i64!(env, @grid_size), Term.to_i64!(env, @block_size)
 
     # copy output data back to CPU
     GPU.memcpy(buffer, c) |> GPU.await()

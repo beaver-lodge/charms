@@ -44,7 +44,7 @@ defmodule Charms.GPU do
 
   defintr launch(kernel, grid_size, block_size) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
-    callee = kernel[:callee]
+    callee = kernel[:callee] || raise "kernel callee not found"
     gpu_kernels = gpu_module_name()
     callee = MLIR.Attribute.symbol_ref(gpu_kernels, [callee], ctx: ctx)
     kernel_args = Beaver.Walker.operands(kernel) |> Enum.to_list()
@@ -171,6 +171,14 @@ defmodule Charms.GPU do
 
     mlir ctx: ctx, blk: blk do
       GPU.wait(asyncDependencies: dependencies, loc: loc) >>> []
+    end
+  end
+
+  defintr barrier() do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    mlir ctx: ctx, blk: blk do
+      GPU.barrier(loc: loc) >>> []
     end
   end
 end
