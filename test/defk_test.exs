@@ -2,11 +2,14 @@ defmodule VecAddKernel do
   use Charms
   alias Charms.{Term, Pointer}
   alias Charms.GPU
-
+  @size 200_000
   @block_size 1024
   defk vec_add(a :: Pointer.t(f32()), b :: Pointer.t(f32()), c :: Pointer.t(f32())) do
     i = GPU.block_id() * @block_size + GPU.thread_id()
-    set! c[i], a[i] + b[i]
+
+    if i < @size do
+      set! c[i], a[i] + b[i]
+    end
   end
 
   defk noop() do
@@ -17,7 +20,6 @@ defmodule VecAddKernel do
     GPU.barrier()
   end
 
-  @size 10_000
   @grid_size ceil(@size / @block_size)
   defm main(env, l_a :: Term.t(), l_b :: Term.t()) :: Term.t() do
     size = Term.to_i64!(env, @size)
@@ -37,7 +39,7 @@ defmodule VecAddKernel do
           ])
 
     # copy input data to GPU
-    movable_list_ptr = ptr! Term.t()
+    movable_list_ptr = tmp! Term.t()
     set! movable_list_ptr[0], l_a
     copy_terms_as_floats(env, movable_list_ptr, buffer)
     GPU.memcpy(a, buffer) |> GPU.await()
@@ -52,7 +54,7 @@ defmodule VecAddKernel do
 
     # copy output data back to CPU
     GPU.memcpy(buffer, c) |> GPU.await()
-    arr = ptr! Term.t(), size
+    arr = new! Term.t(), size
     defer free! arr
 
     for_loop {element, i} <- {buffer, size} do
@@ -66,10 +68,9 @@ defmodule VecAddKernel do
   end
 
   defm copy_terms_as_floats(env, tail :: Pointer.t(Term.t()), arr :: Pointer.t(f32())) do
-    head = ptr! Term.t()
-    zero = const 0 :: i32()
-    i_ptr = ptr! i32()
-    set! i_ptr[0], zero
+    head = tmp! Term.t()
+    i_ptr = tmp! i32()
+    set! i_ptr[0], 0
 
     while(
       enif_get_list_cell(
@@ -79,7 +80,7 @@ defmodule VecAddKernel do
         tail
       ) > 0
     ) do
-      double_ptr = ptr! f64()
+      double_ptr = tmp! f64()
       enif_get_double(env, head[0], double_ptr)
       i = i_ptr[0]
       set! arr[i], value(arith.truncf(double_ptr[0]) :: f32())
@@ -102,8 +103,8 @@ defmodule DefkTest do
     if Charms.JIT.cuda_available?() do
       res = VecAddKernel.main(a, b)
 
-      for {x, y, z} <- Enum.zip([a, b, res]) do
-        assert_in_delta x + y, z, 0.0001
+      for {{x, y, z}, i} <- Enum.zip([a, b, res]) |> Enum.with_index() do
+        assert_in_delta x + y, z, 0.0001, "z[#{i}] #{x} + #{y} != #{z}"
       end
     else
       case :os.type() do

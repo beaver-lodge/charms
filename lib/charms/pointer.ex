@@ -8,29 +8,11 @@ defmodule Charms.Pointer do
   alias Beaver.MLIR.{Type}
   alias Beaver.MLIR.Dialect.{MemRef, Index, Arith, LLVM}
 
-  @doc """
-  Allocates a single element of the given `elem_type`, returning a pointer to it.
-  """
-  defintr allocate(elem_type) do
-    {quote do
-       Charms.Pointer.allocate(elem_type, 1)
-     end, elem_type: elem_type}
-  end
-
-  @doc """
-  Allocates an array of `size` elements of the given `elem_type`, returning a pointer to it.
-  """
-  defintr allocate(elem_type, size) do
-    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
-
+  defp do_allocate(allocator, ctx, blk, loc, elem_type, size) do
     mlir ctx: ctx, blk: blk do
       case size do
-        1 ->
-          MemRef.alloca(loc: loc, operand_segment_sizes: :infer) >>>
-            Type.memref!([], elem_type)
-
         i when is_integer(i) ->
-          MemRef.alloc(loc: loc, operand_segment_sizes: :infer) >>>
+          allocator.(loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([i], elem_type)
 
         %MLIR.Value{} ->
@@ -41,10 +23,28 @@ defmodule Charms.Pointer do
               Index.casts(size, loc: loc) >>> Type.index()
             end
 
-          MemRef.alloc(dynamicSizes: size, loc: loc, operand_segment_sizes: :infer) >>>
+          allocator.(dynamicSizes: size, loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([:dynamic], elem_type)
       end
     end
+  end
+
+  @doc """
+  Allocates an array of `size` elements of the given `elem_type`, returning a pointer to it.
+  """
+  defintr allocate(elem_type, size \\ 1) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+    do_allocate(&MemRef.alloc/1, ctx, blk, loc, elem_type, size)
+  end
+
+  @doc """
+  Use `alloca` to allocate memory on the stack and hoist it
+  to the entry block to prevent stack overflow.
+  """
+  defintr allocate_local(elem_type, size \\ 1) do
+    %Opts{ctx: ctx, loc: loc, entry_blk: blk} = __IR__
+    if is_nil(blk), do: raise(ArgumentError, "allocate_local/2 requires an entry block")
+    do_allocate(&MemRef.alloca/1, ctx, blk, loc, elem_type, size)
   end
 
   @doc false

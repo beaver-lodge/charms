@@ -4,7 +4,7 @@ defmodule Charms.Kernel do
   """
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
-  alias Beaver.MLIR.Dialect.Arith
+  alias Beaver.MLIR.Dialect.{Arith, Index}
   @binary_ops [:!=, :-, :+, :<, :>, :<=, :>=, :==, :*, :/]
   @unary_ops [:!]
   @binary_macro_ops [:&&, :||]
@@ -81,11 +81,23 @@ defmodule Charms.Kernel do
   end
 
   defp create_binary(op, left, right, ctx, blk, loc) do
-    {type, operands} = validate_operands(left, right, ctx, blk, loc)
+    {type, operands} = cast_and_validate(left, right, ctx, blk, loc)
     dispatch_binary_op(type, op, operands, ctx, blk, loc)
   end
 
-  defp validate_operands(left, right, ctx, blk, loc) do
+  defp promote_integer_to_index(%MLIR.Value{} = val, ctx, blk, loc) do
+    t = MLIR.Value.type(val)
+
+    if MLIR.Type.index?(t) do
+      val
+    else
+      mlir ctx: ctx, blk: blk do
+        Index.casts(val, loc: loc) >>> Type.index()
+      end
+    end
+  end
+
+  defp cast_and_validate(left, right, ctx, blk, loc) do
     operands =
       case {left, right} do
         {%MLIR.Value{} = v, i} when is_integer(i) or is_float(i) ->
@@ -98,7 +110,14 @@ defmodule Charms.Kernel do
           if MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) do
             [left, right]
           else
-            raise "args of binary op must be same type"
+            if MLIR.Type.index?(MLIR.Value.type(left)) or MLIR.Type.index?(MLIR.Value.type(right)) do
+              [
+                promote_integer_to_index(left, ctx, blk, loc),
+                promote_integer_to_index(right, ctx, blk, loc)
+              ]
+            else
+              raise "operands of binary op must be same type, got #{MLIR.to_string(MLIR.Value.type(left))} and #{MLIR.to_string(MLIR.Value.type(right))}"
+            end
           end
 
         _ ->
@@ -160,11 +179,21 @@ defmodule Charms.Kernel do
 
   @doc false
   def intrinsics() do
-    @binary_ops
+    [:rem | @binary_ops]
   end
 
   @doc false
   def macro_intrinsics() do
     @binary_macro_ops ++ @unary_ops
+  end
+
+  defintr rem(dividend, divisor) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    {type, operands} = cast_and_validate(dividend, divisor, ctx, blk, loc)
+
+    mlir ctx: ctx, blk: blk do
+      Arith.remsi(operands, loc: loc) >>> type
+    end
   end
 end
