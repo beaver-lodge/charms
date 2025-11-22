@@ -53,9 +53,33 @@ defmodule Charms.Prelude do
   end
 
   @doc """
+  Syntactic sugar for `Charms.Pointer.allocate_local/1`.
+  """
+  defintr tmp!(t) do
+    {
+      quote do
+        Charms.Pointer.allocate_local(t)
+      end,
+      t: t
+    }
+  end
+
+  @doc """
+  Syntactic sugar for `Charms.Pointer.allocate_local/2`.
+  """
+  defintr tmp!(t, n) do
+    {
+      quote do
+        Charms.Pointer.allocate_local(t, n)
+      end,
+      t: t, n: n
+    }
+  end
+
+  @doc """
   Syntactic sugar for `Charms.Pointer.allocate/1`.
   """
-  defintr ptr!(t) do
+  defintr new!(t) do
     {
       quote do
         Charms.Pointer.allocate(t)
@@ -67,7 +91,7 @@ defmodule Charms.Prelude do
   @doc """
   Syntactic sugar for `Charms.Pointer.allocate/2`.
   """
-  defintr ptr!(t, n) do
+  defintr new!(t, n) do
     {
       quote do
         Charms.Pointer.allocate(t, n)

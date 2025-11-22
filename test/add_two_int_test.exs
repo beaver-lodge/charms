@@ -7,8 +7,8 @@ defmodule AddTwoIntTest do
       alias Charms.Term
 
       defm add_or_error_with_cond_br(env, a, b, error) :: Term.t() do
-        ptr_a = ptr! i32()
-        ptr_b = ptr! i32()
+        ptr_a = tmp! i32()
+        ptr_b = tmp! i32()
 
         arg_err =
           block do
@@ -33,8 +33,8 @@ defmodule AddTwoIntTest do
       end
 
       defm add(env, a, b) :: Term.t() do
-        ptr_a = ptr! i32()
-        ptr_b = ptr! i32()
+        ptr_a = tmp! i32()
+        ptr_b = tmp! i32()
 
         if !enif_get_int(env, a, ptr_a) || !enif_get_int(env, b, ptr_b) do
           enif_make_badarg(env)

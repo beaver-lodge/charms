@@ -15,6 +15,7 @@ defmodule Charms.Defm.Expander.Intrinsic do
         apply(module, intrinsic_impl, args).(%Charms.Intrinsic.Opts{
           ctx: state.mlir.ctx,
           blk: state.mlir.blk,
+          entry_blk: state.mlir.entry_blk,
           loc: loc
         })
 

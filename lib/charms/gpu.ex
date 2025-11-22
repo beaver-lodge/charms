@@ -5,7 +5,6 @@ defmodule Charms.GPU do
   use Charms.Intrinsic
   alias Charms.Intrinsic.Opts
   alias Beaver.MLIR.Dialect.{Index, GPU, Arith}
-  alias MLIR.Type
 
   defintr block_id(dimension \\ :x) do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
@@ -79,50 +78,46 @@ defmodule Charms.GPU do
     %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
 
     mlir ctx: ctx, blk: blk do
-      host_shared =
+      # 1. Prepare Async/Host configuration
+      {base_alloc_args, token_types} =
         if opts[:host_shared] do
-          [hostShared: MLIR.Attribute.unit()]
+          {[hostShared: MLIR.Attribute.unit()], []}
         else
           token = GPU.wait(loc: loc) >>> ~t{!gpu.async.token}
-          [asyncDependencies: token]
+          {[asyncDependencies: token], [~t{!gpu.async.token}]}
         end
 
-      token_t =
-        if opts[:host_shared] do
-          []
-        else
-          [~t{!gpu.async.token}]
+      # 2. Normalize Size (Shape vs. Dynamic Operands)
+      # Returns: {memref_shape, extra_alloc_args}
+      {shape, size_args} =
+        case size do
+          i when is_integer(i) ->
+            {[i], []}
+
+          %MLIR.Value{} ->
+            # Ensure the size value is an Index type
+            idx =
+              if Type.index?(MLIR.Value.type(size)) do
+                size
+              else
+                Index.casts(size, loc: loc) >>> Type.index()
+              end
+
+            {[:dynamic], [dynamicSizes: idx]}
         end
 
-      case size do
-        i when is_integer(i) ->
-          GPU.alloc(
-            [loc: loc, operand_segment_sizes: :infer] ++
-              host_shared
-          ) >>> ([Type.memref!([i], elem_type)] ++ token_t)
-
-        %MLIR.Value{} ->
-          size =
-            if Type.index?(MLIR.Value.type(size)) do
-              size
-            else
-              Index.casts(size, loc: loc) >>> Type.index()
-            end
-
-          GPU.alloc(
-            [
-              dynamicSizes: size,
-              loc: loc,
-              operand_segment_sizes: :infer
-            ] ++ host_shared
-          ) >>> ([Type.memref!([:dynamic], elem_type)] ++ token_t)
-      end
+      # 3. Single Operation Call
+      # Merge base args (async/host) with size args (dynamic sizes)
+      (GPU.alloc(base_alloc_args, size_args, loc: loc, operand_segment_sizes: :infer) >>>
+         [Type.memref!(shape, elem_type) | token_types])
       |> then(
         &case &1 do
           %MLIR.Value{} = ptr ->
             ptr
 
           [ptr, token] ->
+            # If we created an async token, we wait on it immediately
+            # (assuming that is the desired behavior for this specific abstraction)
             GPU.wait(token, loc: loc) >>> []
             ptr
         end

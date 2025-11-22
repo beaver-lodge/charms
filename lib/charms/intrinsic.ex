@@ -3,7 +3,7 @@ defmodule Charms.Intrinsic do
     @moduledoc """
     Options for intrinsic functions.
     """
-    defstruct [:ctx, :blk, :loc]
+    defstruct [:ctx, :blk, :entry_blk, :loc]
   end
 
   @moduledoc """
