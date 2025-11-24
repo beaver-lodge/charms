@@ -5,6 +5,7 @@ defmodule Charms.Defm.Expander.MLIRImporter do
   defstruct ctx: nil,
             mod: nil,
             blk: nil,
+            entry_blk: nil,
             available_ops: MapSet.new(),
             vars: Map.new(),
             region: nil,

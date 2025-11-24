@@ -11,7 +11,7 @@ defmodule ENIFTimSort do
     for_loop {temp, i} <- {start, n} do
       i = value index.casts(i) :: i32()
       i = i + start_i
-      j_ptr = ptr! i32()
+      j_ptr = tmp! i32()
       set! j_ptr[0], i - 1
 
       while(j_ptr[0] >= left && arr[j_ptr[0]] > temp) do
@@ -27,9 +27,8 @@ defmodule ENIFTimSort do
 
   defm tim_sort(arr :: Pointer.t(Term.t()), n :: i32()) do
     run = const 32 :: i32()
-    i_ptr = ptr! i32()
-    zero = const 0 :: i32()
-    set! i_ptr[0], zero
+    i_ptr = tmp! i32()
+    set! i_ptr[0], 0
 
     while i_ptr[0] < n do
       i = i_ptr[0]
@@ -38,14 +37,14 @@ defmodule ENIFTimSort do
       set! i_ptr[0], i + run
     end
 
-    size_ptr = ptr! i32()
+    size_ptr = tmp! i32()
     set! size_ptr[0], run
 
     while size_ptr[0] < n do
       size = size_ptr[0]
 
-      left_ptr = ptr! i32()
-      set! left_ptr[0], zero
+      left_ptr = tmp! i32()
+      set! left_ptr[0], 0
 
       while left_ptr[0] < n do
         left = left_ptr[0]
@@ -66,13 +65,13 @@ defmodule ENIFTimSort do
 
   @err %ArgumentError{message: "list expected"}
   defm sort(env, list) :: Term.t() do
-    len_ptr = ptr! i32()
+    len_ptr = tmp! i32()
 
     if enif_get_list_length(env, list, len_ptr) != 0 do
-      movable_list_ptr = ptr! Term.t()
+      movable_list_ptr = tmp! Term.t()
       set! movable_list_ptr[0], list
       len = len_ptr[0]
-      arr = ptr! Term.t(), len
+      arr = new! Term.t(), len
       SortUtil.copy_terms(env, movable_list_ptr, arr)
       tim_sort(arr, len)
       defer free! arr
