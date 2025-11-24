@@ -188,7 +188,7 @@ defmodule DefmTest do
 
       defm foo(env, a) :: Term.t() do
         b = const 1 :: i32()
-        i_ptr = ptr! type_of(b)
+        i_ptr = tmp! type_of(b)
         if enif_get_int(env, a, i_ptr) == 0, do: unreachable!()
         sum = Pointer.load(type_of(b), i_ptr) + b
         enif_make_int(env, sum)
@@ -232,10 +232,10 @@ defmodule DefmTest do
       alias Charms.Term
 
       defm foo(env) :: Term.t() do
-        dst_arr = ptr! f64(), 2
+        dst_arr = new! f64(), 2
         defer free! dst_arr
         val = const 1.1 :: f64()
-        src_arr = ptr! f64()
+        src_arr = tmp! f64()
         set! src_arr[0], val
         set! dst_arr[1], src_arr[0]
         enif_make_double(env, dst_arr[1])
@@ -275,8 +275,8 @@ defmodule DefmTest do
         defm foo(env) :: Term.t() do
           size2 = const 2 :: i64()
           size1 = const 1 :: index()
-          dst_arr = ptr! f64(), size2
-          src_arr = ptr! f64(), size1
+          dst_arr = new! f64(), size2
+          src_arr = new! f64(), size1
 
           defer do
             free! dst_arr
@@ -300,7 +300,7 @@ defmodule DefmTest do
         alias Charms.Pointer
 
         defm foo(env) :: Term.t() do
-          arr = ptr! f64()
+          arr = tmp! f64()
           val = const 1.1 :: f64()
           set! arr[0], val
           llvm_arr = Pointer.raw(arr)

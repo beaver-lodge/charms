@@ -81,11 +81,34 @@ defmodule Charms.Kernel do
   end
 
   defp create_binary(op, left, right, ctx, blk, loc) do
-    {type, operands} = validate_operands(left, right, ctx, blk, loc)
+    {type, operands} = cast_and_validate(left, right, ctx, blk, loc)
     dispatch_binary_op(type, op, operands, ctx, blk, loc)
   end
 
-  defp validate_operands(left, right, ctx, blk, loc) do
+  defp index_and_integer?(left, right) do
+    tl = MLIR.Value.type(left)
+    tr = MLIR.Value.type(right)
+
+    (MLIR.Type.index?(tl) and MLIR.Type.integer?(tr)) or
+      (MLIR.Type.index?(tr) and MLIR.Type.integer?(tl))
+  end
+
+  defp ensure_same_type(left, right, ctx, blk, loc) do
+    cond do
+      MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) ->
+        [left, right]
+
+      index_and_integer?(left, right) ->
+        for val <- [left, right] do
+          Charms.Coercion.cast_argument(val, MLIR.Type.index(ctx: ctx), ctx, blk, loc)
+        end
+
+      true ->
+        raise "operands of binary op must be same type, got #{MLIR.to_string(MLIR.Value.type(left))} and #{MLIR.to_string(MLIR.Value.type(right))}"
+    end
+  end
+
+  defp cast_and_validate(left, right, ctx, blk, loc) do
     operands =
       case {left, right} do
         {%MLIR.Value{} = v, i} when is_integer(i) or is_float(i) ->
@@ -95,11 +118,7 @@ defmodule Charms.Kernel do
           [Charms.Constant.from_literal(i, v, ctx, blk, loc), v]
 
         {%MLIR.Value{}, %MLIR.Value{}} ->
-          if MLIR.equal?(MLIR.Value.type(left), MLIR.Value.type(right)) do
-            [left, right]
-          else
-            raise "args of binary op must be same type"
-          end
+          ensure_same_type(left, right, ctx, blk, loc)
 
         _ ->
           raise ArgumentError,
@@ -160,11 +179,26 @@ defmodule Charms.Kernel do
 
   @doc false
   def intrinsics() do
-    @binary_ops
+    [:rem | @binary_ops]
   end
 
   @doc false
   def macro_intrinsics() do
     @binary_macro_ops ++ @unary_ops
+  end
+
+  defintr rem(dividend, divisor) do
+    %Opts{ctx: ctx, blk: blk, loc: loc} = __IR__
+
+    {type, operands} = cast_and_validate(dividend, divisor, ctx, blk, loc)
+
+    unless MLIR.Type.integer?(type) or MLIR.Type.index?(type) do
+      raise ArgumentError,
+            "rem/2 only supports integer or index types, got #{MLIR.to_string(type)}"
+    end
+
+    mlir ctx: ctx, blk: blk do
+      Arith.remsi(operands, loc: loc) >>> type
+    end
   end
 end

@@ -4,7 +4,7 @@ defmodule AddTwoIntVec do
   alias Charms.{SIMD, Term, Pointer}
 
   defm load_list(env, l :: Term.t()) :: SIMD.t(i32(), 8) do
-    i_ptr = ptr! i32()
+    i_ptr = tmp! i32()
     zero = const 0 :: Pointer.element_type(i_ptr)
     set! i_ptr[0], zero
     vec = SIMD.new(SIMD.t(i32(), 8), [0, 0, 0, 0, 0, 0, 0, 0])
@@ -19,7 +19,7 @@ defmodule AddTwoIntVec do
     vec = SIMD.insert(vec, 7, zero + 10000)
 
     Enum.reduce(l, vec, fn x, acc ->
-      v_ptr = ptr! i32()
+      v_ptr = tmp! i32()
       enif_get_int(env, x, v_ptr)
       i = i_ptr[0]
       set! i_ptr[0], i + 1

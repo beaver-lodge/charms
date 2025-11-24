@@ -15,7 +15,7 @@ defmodule Charms.Term do
 
   defintr to_i32!(env, term) do
     {quote do
-       ptr = ptr! i32()
+       ptr = tmp! i32()
        enif_get_int!(env, term, ptr)
        ptr[0]
      end, env: env, term: term}
@@ -23,7 +23,7 @@ defmodule Charms.Term do
 
   defintr to_i64!(env, term) do
     {quote do
-       ptr = ptr! i64()
+       ptr = tmp! i64()
        enif_get_int64!(env, term, ptr)
        ptr[0]
      end, env: env, term: term}
@@ -31,7 +31,7 @@ defmodule Charms.Term do
 
   defintr to_f64!(env, term) do
     {quote do
-       ptr = ptr! f64()
+       ptr = tmp! f64()
        enif_get_double!(env, term, ptr)
        ptr[0]
      end, env: env, term: term}
@@ -39,7 +39,7 @@ defmodule Charms.Term do
 
   defintr to_pid!(env, term) do
     {quote do
-       ptr = ptr! i64()
+       ptr = tmp! i64()
        enif_get_local_pid!(env, term, ptr)
        ptr
      end, env: env, term: term}

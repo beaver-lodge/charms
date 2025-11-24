@@ -89,6 +89,7 @@ defmodule Charms.Defm.Expander do
       b =
         block do
           MLIR.Block.add_args!(Beaver.Env.block(), arg_types, ctx: Beaver.Env.context())
+          state = put_in(state.mlir.entry_blk, Beaver.Env.block())
 
           arg_values =
             Range.new(0, length(args) - 1, 1)
@@ -873,6 +874,27 @@ defmodule Charms.Defm.Expander do
     {value, state, env} = expand(value, state, env)
     {i, state, env} = expand(i, state, env)
     {arr, state, env} = expand(arr, state, env)
+
+    value =
+      case value do
+        %MLIR.Value{} = v ->
+          v
+
+        v when is_float(v) or is_integer(v) ->
+          t = MLIR.Value.type(arr)
+          elem_t = MLIR.ShapedType.element_type(t)
+
+          Charms.Constant.from_literal(
+            v,
+            elem_t,
+            state.mlir.ctx,
+            state.mlir.blk,
+            MLIR.Location.from_env(env)
+          )
+
+        _ ->
+          raise_compile_error(env, "Unsupported value type for 'set!': #{inspect(value)}")
+      end
 
     quote do
       Charms.Pointer.store(value, Charms.Pointer.element_ptr(arr, i))
