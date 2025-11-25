@@ -86,12 +86,12 @@ defmodule MatMulKernel do
 
     # Copy A
     set! movable_list_ptr[0], l_a
-    copy_terms_as_floats(env, movable_list_ptr, buffer_a)
+    KernelUtil.copy_terms_as_floats(env, movable_list_ptr, buffer_a)
     GPU.memcpy(a, buffer_a) |> GPU.await()
 
     # Copy B
     set! movable_list_ptr[0], l_b
-    copy_terms_as_floats(env, movable_list_ptr, buffer_b)
+    KernelUtil.copy_terms_as_floats(env, movable_list_ptr, buffer_b)
     GPU.memcpy(b, buffer_b) |> GPU.await()
 
     # 5. Launch Kernel
@@ -111,21 +111,6 @@ defmodule MatMulKernel do
 
     size_c_i32 = value arith.trunci(size_c) :: i32()
     enif_make_list_from_array(env, arr, size_c_i32)
-  end
-
-  defm copy_terms_as_floats(env, tail :: Pointer.t(Term.t()), arr :: Pointer.t(f32())) do
-    head = tmp! Term.t()
-    zero = const 0 :: i32()
-    i_ptr = tmp! i32()
-    set! i_ptr[0], zero
-
-    while(enif_get_list_cell(env, tail[0], head, tail) > 0) do
-      double_ptr = tmp! f64()
-      enif_get_double(env, head[0], double_ptr)
-      i = i_ptr[0]
-      set! arr[i], value(arith.truncf(double_ptr[0]) :: f32())
-      set! i_ptr[0], i + 1
-    end
   end
 
   def random_list(size) do
@@ -208,12 +193,12 @@ defmodule SquareMatMulKernel do
 
     # Copy A
     set! movable_list_ptr[0], l_a
-    copy_terms_as_floats(env, movable_list_ptr, buffer)
+    KernelUtil.copy_terms_as_floats(env, movable_list_ptr, buffer)
     GPU.memcpy(a, buffer) |> GPU.await()
 
     # Copy B
     set! movable_list_ptr[0], l_b
-    copy_terms_as_floats(env, movable_list_ptr, buffer)
+    KernelUtil.copy_terms_as_floats(env, movable_list_ptr, buffer)
     GPU.memcpy(b, buffer) |> GPU.await()
 
     # 4. Launch Kernel
@@ -234,21 +219,6 @@ defmodule SquareMatMulKernel do
 
     size_i32 = value arith.trunci(size) :: i32()
     enif_make_list_from_array(env, arr, size_i32)
-  end
-
-  defm copy_terms_as_floats(env, tail :: Pointer.t(Term.t()), arr :: Pointer.t(f32())) do
-    head = tmp! Term.t()
-    zero = const 0 :: i32()
-    i_ptr = tmp! i32()
-    set! i_ptr[0], zero
-
-    while(enif_get_list_cell(env, tail[0], head, tail) > 0) do
-      double_ptr = tmp! f64()
-      enif_get_double(env, head[0], double_ptr)
-      i = i_ptr[0]
-      set! arr[i], value(arith.truncf(double_ptr[0]) :: f32())
-      set! i_ptr[0], i + 1
-    end
   end
 
   # Helper to generate data for the test

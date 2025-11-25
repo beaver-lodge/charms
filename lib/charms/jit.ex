@@ -70,8 +70,13 @@ defmodule Charms.JIT do
   defp clone_ops(to, from) do
     ops = MLIR.Module.body(from) |> Beaver.Walker.operations()
     s_table = to |> MLIR.Operation.from_module() |> MLIR.CAPI.mlirSymbolTableCreate()
+    container_module_unit = MLIR.Operation.from_module(from)["gpu.container_module"]
 
-    for op <- ops, MLIR.Operation.name(op) in ~w{func.func memref.global} do
+    if container_module_unit do
+      _ = put_in(MLIR.Operation.from_module(to)["gpu.container_module"], container_module_unit)
+    end
+
+    for op <- ops, MLIR.Operation.name(op) in ~w{func.func memref.global gpu.module} do
       sym = op[MLIR.CAPI.mlirSymbolTableGetSymbolAttributeName()]
       found = MLIR.CAPI.mlirSymbolTableLookup(s_table, MLIR.Attribute.unwrap(sym))
       body = MLIR.Module.body(to)
