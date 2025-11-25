@@ -29,11 +29,11 @@ defmodule MatMulKernel.Index1D do
 
     if idx < @size_c do
       # Accumulator for the dot product
-      sum_ptr = tmp!(f32())
+      sum_ptr = tmp! f32()
       set! sum_ptr[0], 0.0
 
       # Iterator k
-      k_ptr = tmp!(i32())
+      k_ptr = tmp! i32()
       set! k_ptr[0], 0
 
       # Loop over the shared dimension K
@@ -82,7 +82,7 @@ defmodule MatMulKernel.Index1D do
           ])
 
     # 4. Copy Input (Host -> Buffer -> Device)
-    movable_list_ptr = tmp!(Term.t())
+    movable_list_ptr = tmp! Term.t()
 
     # Copy A
     set! movable_list_ptr[0], l_a
@@ -101,7 +101,7 @@ defmodule MatMulKernel.Index1D do
     GPU.memcpy(buffer_c, c) |> GPU.await()
 
     # 7. Construct Elixir List from Buffer C
-    arr = new!(Term.t(), size_c)
+    arr = new! Term.t(), size_c
     defer free! arr
 
     for_loop {element, i} <- {buffer_c, size_c} do
@@ -145,11 +145,11 @@ defmodule MatMulKernel.Square.Index1D do
 
     if idx < @size do
       # Accumulator for the dot product
-      sum_ptr = tmp!(f32())
+      sum_ptr = tmp! f32()
       set! sum_ptr[0], 0.0
 
       # Iterator k
-      k_ptr = tmp!(i32())
+      k_ptr = tmp! i32()
       set! k_ptr[0], 0
 
       while k_ptr[0] < @width do
@@ -189,7 +189,7 @@ defmodule MatMulKernel.Square.Index1D do
           ])
 
     # 3. Copy Input (Host -> Device)
-    movable_list_ptr = tmp!(Term.t())
+    movable_list_ptr = tmp! Term.t()
 
     # Copy A
     set! movable_list_ptr[0], l_a
@@ -209,7 +209,7 @@ defmodule MatMulKernel.Square.Index1D do
     GPU.memcpy(buffer, c) |> GPU.await()
 
     # 6. Construct Elixir List from Buffer
-    arr = new!(Term.t(), size)
+    arr = new! Term.t(), size
     defer free! arr
 
     for_loop {element, i} <- {buffer, size} do
@@ -269,11 +269,11 @@ defmodule MatMulKernel.Index2D do
 
     if row < @m && col < @n do
       # Accumulator for the dot product
-      sum_ptr = tmp!(f32())
+      sum_ptr = tmp! f32()
       set! sum_ptr[0], 0.0
 
       # Iterator k
-      k_ptr = tmp!(i32())
+      k_ptr = tmp! i32()
       set! k_ptr[0], 0
 
       # Loop over the shared dimension K
@@ -321,7 +321,7 @@ defmodule MatMulKernel.Index2D do
           ])
 
     # 4. Copy Input (Host -> Buffer -> Device)
-    movable_list_ptr = tmp!(Term.t())
+    movable_list_ptr = tmp! Term.t()
 
     # Copy A
     set! movable_list_ptr[0], l_a
@@ -343,7 +343,7 @@ defmodule MatMulKernel.Index2D do
     GPU.memcpy(buffer_c, c) |> GPU.await()
 
     # 7. Construct Elixir List from Buffer C
-    arr = new!(Term.t(), size_c)
+    arr = new! Term.t(), size_c
     defer free! arr
 
     for_loop {element, i} <- {buffer_c, size_c} do
