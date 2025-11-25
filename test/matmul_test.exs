@@ -2,7 +2,7 @@ defmodule MatMulTest do
   use ExUnit.Case, async: true
   import CUDATestHelper
 
-  @width SquareMatMulKernel.width()
+  @width MatMulKernel.Square.Index1D.width()
 
   # Simple CPU Matrix Multiplication for verification
   defp cpu_matmul(a_flat, b_flat, width) do
@@ -23,16 +23,16 @@ defmodule MatMulTest do
   end
 
   test "compiling and running naive matmul kernel" do
-    a = SquareMatMulKernel.random_matrix()
-    b = SquareMatMulKernel.random_matrix()
+    a = MatMulKernel.Square.Index1D.random_matrix()
+    b = MatMulKernel.Square.Index1D.random_matrix()
 
     run_cuda_test(
-      fn -> SquareMatMulKernel.main(a, b) end,
+      fn -> MatMulKernel.Square.Index1D.main(a, b) end,
       ref_impl: fn -> cpu_matmul(a, b, @width) end
     )
   end
 
-  {m, k, n} = MatMulKernel.dims()
+  {m, k, n} = MatMulKernel.Index1D.dims()
   @m m
   @k k
   @n n
@@ -60,12 +60,28 @@ defmodule MatMulTest do
   end
 
   test "compiling and running MxN matmul kernel" do
-    a = MatMulKernel.random_list(@m * @k)
-    b = MatMulKernel.random_list(@k * @n)
+    a = MatMulKernel.Index1D.random_list(@m * @k)
+    b = MatMulKernel.Index1D.random_list(@k * @n)
 
     run_cuda_test(
-      fn -> MatMulKernel.main(a, b) end,
+      fn -> MatMulKernel.Index1D.main(a, b) end,
       ref_impl: fn -> cpu_matmul(a, b, @m, @k, @n) end,
+      tole: 0.01
+    )
+  end
+
+  {m_2d, k_2d, n_2d} = MatMulKernel.Index2D.dims()
+  @m_2d m_2d
+  @k_2d k_2d
+  @n_2d n_2d
+
+  test "compiling and running 2D indexing matmul kernel" do
+    a = MatMulKernel.Index2D.random_list(@m_2d * @k_2d)
+    b = MatMulKernel.Index2D.random_list(@k_2d * @n_2d)
+
+    run_cuda_test(
+      fn -> MatMulKernel.Index2D.main(a, b) end,
+      ref_impl: fn -> cpu_matmul(a, b, @m_2d, @k_2d, @n_2d) end,
       tole: 0.01
     )
   end

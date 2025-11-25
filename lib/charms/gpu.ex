@@ -38,6 +38,23 @@ defmodule Charms.GPU do
     end
   end
 
+  # --- Refactored Helper ---
+  defp normalize_dims(dims, ir) do
+    # Standardize input (Scalar, Tuple, or List) into a 3-element tuple
+    {x, y, z} =
+      case dims do
+        {x, y, z} -> {x, y, z}
+        [x, y, z] -> {x, y, z}
+        {x, y} -> {x, y, 1}
+        [x, y] -> {x, y, 1}
+        [x] -> {x, 1, 1}
+        val -> {val, 1, 1}
+      end
+
+    # Apply to_index conversion to all elements
+    {to_index(x, ir), to_index(y, ir), to_index(z, ir)}
+  end
+
   @doc false
   def gpu_module_name, do: "Charms.GPU.Kernels"
 
@@ -49,15 +66,11 @@ defmodule Charms.GPU do
     kernel_args = Beaver.Walker.operands(kernel) |> Enum.to_list()
     MLIR.Operation.destroy(kernel)
 
+    # Refactored: Use the helper to normalize both dimensions
+    {grid_x, grid_y, grid_z} = normalize_dims(grid_size, __IR__)
+    {block_x, block_y, block_z} = normalize_dims(block_size, __IR__)
+
     mlir ctx: ctx, blk: blk do
-      # Handle grid dimensions
-      {grid_x, grid_y, grid_z} =
-        {to_index(grid_size, __IR__), to_index(1, __IR__), to_index(1, __IR__)}
-
-      # Handle block dimensions
-      {block_x, block_y, block_z} =
-        {to_index(block_size, __IR__), to_index(1, __IR__), to_index(1, __IR__)}
-
       GPU.launch_func(
         asyncDependencies: [],
         gridSizeX: grid_x,
