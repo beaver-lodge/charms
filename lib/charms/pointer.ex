@@ -8,11 +8,11 @@ defmodule Charms.Pointer do
   alias Beaver.MLIR.{Type}
   alias Beaver.MLIR.Dialect.{MemRef, Index, Arith, LLVM}
 
-  defp do_allocate(allocator, ctx, blk, loc, elem_type, size) do
+  defp do_allocate(allocator, ctx, blk, loc, elem_type, size, extra_arguments \\ []) do
     mlir ctx: ctx, blk: blk do
       case size do
         i when is_integer(i) ->
-          allocator.(loc: loc, operand_segment_sizes: :infer) >>>
+          allocator.(extra_arguments, loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([i], elem_type)
 
         %MLIR.Value{} ->
@@ -23,7 +23,7 @@ defmodule Charms.Pointer do
               Index.casts(size, loc: loc) >>> Type.index()
             end
 
-          allocator.(dynamicSizes: size, loc: loc, operand_segment_sizes: :infer) >>>
+          allocator.(extra_arguments, dynamicSizes: size, loc: loc, operand_segment_sizes: :infer) >>>
             Type.memref!([:dynamic], elem_type)
       end
     end
