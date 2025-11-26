@@ -404,6 +404,7 @@ defmodule Charms.Definition do
     |> Charms.Debug.print_ir_pass()
     |> Beaver.Composer.run!(print: Charms.Debug.step_print?(), verifier: false)
     |> MLIR.Transform.canonicalize()
+    |> Beaver.Composer.nested("func.func", "promote-buffers-to-stack")
     |> run_composer_with_diagnostics()
     |> then(
       &{MLIR.to_string(&1, bytecode: true), referenced_modules(&1), required_intrinsic_modules,
