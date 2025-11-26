@@ -6,7 +6,7 @@ defmodule AddTwoIntVec do
   defm load_list(env, l :: Term.t()) :: SIMD.t(i32(), 8) do
     i_ptr = tmp! i32()
     zero = const 0 :: Pointer.element_type(i_ptr)
-    set! i_ptr[0], zero
+    set! i_ptr[0], 0
     vec = SIMD.new(SIMD.t(i32(), 8), [0, 0, 0, 0, 0, 0, 0, 0])
 
     vec = SIMD.insert(vec, 0, zero + 10000)

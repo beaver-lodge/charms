@@ -5,9 +5,8 @@ defmodule SortUtil do
 
   defm copy_terms(env, movable_list_ptr :: Pointer.t(Term.t()), arr :: Pointer.t(Term.t())) do
     head = tmp! Term.t()
-    zero = const 0 :: i32()
     i_ptr = tmp! i32()
-    set! i_ptr[0], zero
+    set! i_ptr[0], 0
 
     while(
       enif_get_list_cell(
@@ -44,7 +43,7 @@ defmodule SortUtil do
     k_ptr = tmp! i32()
 
     zero = const 0 :: i32()
-    set! i_ptr[0], zero
+    set! i_ptr[0], 0
     set! j_ptr[0], zero
     set! k_ptr[0], l
 

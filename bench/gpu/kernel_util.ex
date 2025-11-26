@@ -5,9 +5,8 @@ defmodule KernelUtil do
 
   defm copy_terms_as_floats(env, tail :: Pointer.t(Term.t()), arr :: Pointer.t(f32())) do
     head = tmp! Term.t()
-    zero = const 0 :: i32()
     i_ptr = tmp! i32()
-    set! i_ptr[0], zero
+    set! i_ptr[0], 0
 
     while(enif_get_list_cell(env, tail[0], head, tail) > 0) do
       i = i_ptr[0]
