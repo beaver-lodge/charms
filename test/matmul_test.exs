@@ -10,15 +10,10 @@ defmodule MatMulTest do
     b_rows = Enum.chunk_every(b_flat, width)
 
     # Transpose B for easier dot product calculation
-    b_cols =
-      b_rows
-      |> Enum.zip()
-      |> Enum.map(&Tuple.to_list/1)
+    b_cols = b_rows |> Enum.zip() |> Enum.map(&Tuple.to_list/1)
 
     for row <- a_rows, col <- b_cols do
-      Enum.zip(row, col)
-      |> Enum.map(fn {x, y} -> x * y end)
-      |> Enum.sum()
+      Enum.zip_reduce(row, col, 0, fn x, y, acc -> x * y + acc end)
     end
   end
 
