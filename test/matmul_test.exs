@@ -48,9 +48,7 @@ defmodule MatMulTest do
 
     # Result is M rows x N columns
     for row <- a_rows, col <- b_cols do
-      Enum.zip(row, col)
-      |> Enum.map(fn {x, y} -> x * y end)
-      |> Enum.sum()
+      Enum.zip_reduce(row, col, 0, fn x, y, acc -> x * y + acc end)
     end
   end
 
